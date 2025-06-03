@@ -25,7 +25,6 @@ import {
   Plus,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { DescriptionEditor } from "../../_components/RichTextEditor"
 import { ImageGallery } from "../../_components/ImageGallery"
 import Image from "next/image"
 import { getImageUrl } from "@/lib/imageUtils"
@@ -41,6 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { uploadImage } from "@/app/actions/upload-file"
+import { RichTextEditor } from "@/components/RichTextEditor"
 
 interface VariantCombination {
   id: string
@@ -380,7 +380,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             ),
           )
         } else {
-          setFormData((prev) => ({ ...prev, imageUrls: [...prev.imageUrls || [], fileUrl] }))
+          setFormData((prev) => ({ ...prev, imageUrls: [...(prev.imageUrls || []), fileUrl] }))
         }
 
         toast({
@@ -646,8 +646,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
             <div className="space-y-3">
               <Label>Descripción</Label>
-              <DescriptionEditor
-                initialContent={formData.description || ""}
+              <RichTextEditor
+                content={formData.description || ""}
                 onChange={(content) => setFormData((prev) => ({ ...prev, description: content }))}
               />
             </div>
@@ -914,7 +914,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   )
 
   // Simple debug panel to show raw data
- 
 
   return (
     <div className="text-foreground">
@@ -978,7 +977,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       </header>
       <ScrollArea className="h-[calc(100vh-3.6em)]">
         <div className="p-6">
- 
           {currentStep === 1 ? renderStep1() : currentStep === 2 ? renderStep2() : renderStep3()}
         </div>
       </ScrollArea>

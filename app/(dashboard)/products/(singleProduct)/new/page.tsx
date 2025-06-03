@@ -11,9 +11,8 @@ import type { CreateProductDto, ProductOption } from "@/types/product"
 import { ProductStatus } from "@/types/common"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, ImagePlus, Info, X, Calendar, Plus } from "lucide-react"
+import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, ImagePlus, Info, X, Calendar, Plus } from 'lucide-react'
 import { cn } from "@/lib/utils"
-import { DescriptionEditor } from "../_components/RichTextEditor"
 import { ImageGallery } from "../_components/ImageGallery"
 import { VariantOptions } from "../_components/VariantOptions"
 import Image from "next/image"
@@ -30,6 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import type { CreateProductVariantDto } from "@/types/productVariant"
+import { RichTextEditor } from "@/components/RichTextEditor"
 
 interface VariantCombination {
   id: string
@@ -526,8 +526,8 @@ export default function NewProductPage() {
 
           <div className="space-y-3">
             <Label>Descripción</Label>
-            <DescriptionEditor
-              initialContent={formData.description}
+            <RichTextEditor
+              content={formData.description}
               onChange={(content) => setFormData((prev) => ({ ...prev, description: content }))}
             />
           </div>

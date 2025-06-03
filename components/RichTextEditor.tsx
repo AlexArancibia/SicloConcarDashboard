@@ -22,7 +22,34 @@ import Blockquote from "@tiptap/extension-blockquote"
 import HorizontalRule from "@tiptap/extension-horizontal-rule"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
-import { Heading1, Heading2, Heading3, Pilcrow, Bold, Italic, List, ListOrdered, LinkIcon, Undo, Redo, TableIcon, AlignLeft, AlignCenter, AlignRight, Code, Quote, Minus, Palette, Highlighter, ImageIcon, UnderlineIcon, AlignJustify, ChevronDown, FileCode, Wand2, Maximize2 } from 'lucide-react'
+import {
+  Heading1,
+  Heading2,
+  Heading3,
+  Pilcrow,
+  Bold,
+  Italic,
+  List,
+  ListOrdered,
+  LinkIcon,
+  Undo,
+  Redo,
+  TableIcon,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Code,
+  Quote,
+  Minus,
+  Palette,
+  Highlighter,
+  ImageIcon,
+  UnderlineIcon,
+  AlignJustify,
+  ChevronDown,
+  FileCode,
+  Wand2,
+} from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ColorPicker } from "@/components/ui/color-picker"
 import {
@@ -41,7 +68,7 @@ import apiClient from "@/lib/axiosConfig"
 import { getImageUrl } from "@/lib/imageUtils"
 
 interface RichTextEditorProps {
-  content: string
+  content?: string
   onChange: (content: string) => void
 }
 
@@ -334,19 +361,22 @@ const CustomImage = Image.extend({
       ...this.parent?.(),
       width: {
         default: null,
-        parseHTML: (element) => element.getAttribute('width') || element.style.width || null,
+        parseHTML: (element) => element.getAttribute("width") || element.style.width || null,
         renderHTML: (attributes) => {
           if (!attributes.width) {
             return {}
           }
-          return { width: attributes.width, style: `width: ${attributes.width}${attributes.width.includes('%') || attributes.width.includes('px') ? '' : 'px'}` }
+          return {
+            width: attributes.width,
+            style: `width: ${attributes.width}${attributes.width.includes("%") || attributes.width.includes("px") ? "" : "px"}`,
+          }
         },
       },
       href: {
         default: null,
         parseHTML: (element) => {
-          const link = element.closest('a')
-          return link ? link.getAttribute('href') : null
+          const link = element.closest("a")
+          return link ? link.getAttribute("href") : null
         },
         renderHTML: (attributes) => {
           return {}
@@ -354,20 +384,24 @@ const CustomImage = Image.extend({
       },
     }
   },
-  
+
   renderHTML({ HTMLAttributes, node }) {
-    const img: [string, Record<string, any>] = ['img', HTMLAttributes]
-    
+    const img: [string, Record<string, any>] = ["img", HTMLAttributes]
+
     if (node.attrs.href) {
-      return ['a', { 
-        href: node.attrs.href, 
-        target: '_blank', 
-        rel: 'noopener noreferrer',
-        onclick: 'return false;', // Bloquea la redirección en modo edición
-        style: 'pointer-events: none;' // Desactiva eventos de puntero
-      }, img]
+      return [
+        "a",
+        {
+          href: node.attrs.href,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          onclick: "return false;", // Bloquea la redirección en modo edición
+          style: "pointer-events: none;", // Desactiva eventos de puntero
+        },
+        img,
+      ]
     }
-    
+
     return img
   },
 })
@@ -424,7 +458,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
       Blockquote,
       HorizontalRule,
     ],
-    content: content,
+    content: content || "",
     editorProps: {
       attributes: {
         class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none min-h-[300px] max-w-none p-4",
@@ -449,7 +483,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
   })
 
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
+    if (editor && (content || "") !== editor.getHTML()) {
       editor.commands.setContent(content || "")
       setHtmlContent(content || "")
     }
@@ -530,17 +564,17 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
           headers: { "Content-Type": "multipart/form-data" },
         })
         const imageUrl = response.data.filename
-        
+
         const imageAttributes: any = { src: getImageUrl(imageUrl) }
-        
+
         if (options?.width) {
           imageAttributes.width = options.width
         }
-        
+
         if (options?.href) {
           imageAttributes.href = options.href
         }
-        
+
         editor.chain().focus().setImage(imageAttributes).run()
         toast({ title: "Éxito", description: "Imagen subida correctamente" })
       } catch (error) {
@@ -571,25 +605,25 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
 
   const updateSelectedImage = () => {
     if (!editor) return
-    
+
     const { width, href } = imageDialogData
     const attributes: any = {}
-    
+
     if (width) attributes.width = width
     if (href !== undefined) attributes.href = href || null
-    
-    editor.chain().focus().updateAttributes('image', attributes).run()
+
+    editor.chain().focus().updateAttributes("image", attributes).run()
     setIsImageDialogOpen(false)
     setImageDialogData({})
   }
 
   const openImageConfigForSelected = () => {
     if (!editor) return
-    
-    const attrs = editor.getAttributes('image')
+
+    const attrs = editor.getAttributes("image")
     setImageDialogData({
-      width: attrs.width || '',
-      href: attrs.href || ''
+      width: attrs.width || "",
+      href: attrs.href || "",
     })
     setIsImageDialogOpen(true)
   }
@@ -935,15 +969,15 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
             />
             <EditorButton
               onMouseDown={() => {
-                if (editor?.isActive('image')) {
+                if (editor?.isActive("image")) {
                   openImageConfigForSelected()
                 } else {
                   fileInputRef.current?.click()
                 }
               }}
               icon={<ImageIcon className="h-4 w-4" />}
-              tooltip={editor?.isActive('image') ? "Configurar imagen" : "Insertar imagen"}
-              isActive={editor?.isActive('image')}
+              tooltip={editor?.isActive("image") ? "Configurar imagen" : "Insertar imagen"}
+              isActive={editor?.isActive("image")}
             />
             <div className="w-px h-4 bg-border mx-1" />
             <TooltipProvider>
@@ -1197,9 +1231,9 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
               <h3 className="text-lg font-semibold mb-4">
-                {imageDialogData.file ? 'Configurar nueva imagen' : 'Configurar imagen'}
+                {imageDialogData.file ? "Configurar nueva imagen" : "Configurar imagen"}
               </h3>
-              
+
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="image-width" className="text-sm font-medium">
@@ -1209,12 +1243,12 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
                     id="image-width"
                     type="text"
                     placeholder="ej: 300px, 50%, auto"
-                    value={imageDialogData.width || ''}
-                    onChange={(e) => setImageDialogData(prev => ({ ...prev, width: e.target.value }))}
+                    value={imageDialogData.width || ""}
+                    onChange={(e) => setImageDialogData((prev) => ({ ...prev, width: e.target.value }))}
                     className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-                
+
                 <div>
                   <Label htmlFor="image-link" className="text-sm font-medium">
                     Enlace (opcional)
@@ -1223,13 +1257,13 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
                     id="image-link"
                     type="url"
                     placeholder="https://ejemplo.com"
-                    value={imageDialogData.href || ''}
-                    onChange={(e) => setImageDialogData(prev => ({ ...prev, href: e.target.value }))}
+                    value={imageDialogData.href || ""}
+                    onChange={(e) => setImageDialogData((prev) => ({ ...prev, href: e.target.value }))}
                     className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
-              
+
               <div className="flex justify-end gap-2 mt-6">
                 <Button
                   variant="outline"
@@ -1240,10 +1274,8 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
                 >
                   Cancelar
                 </Button>
-                <Button
-                  onClick={imageDialogData.file ? handleImageUpload : updateSelectedImage}
-                >
-                  {imageDialogData.file ? 'Subir imagen' : 'Actualizar'}
+                <Button onClick={imageDialogData.file ? handleImageUpload : updateSelectedImage}>
+                  {imageDialogData.file ? "Subir imagen" : "Actualizar"}
                 </Button>
               </div>
             </div>
