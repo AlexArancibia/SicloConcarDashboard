@@ -5,7 +5,6 @@ import { DM_Sans } from 'next/font/google';
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useAuthInitializer } from "@/hooks/useAuthInitializer";
 import { Toaster } from "@/components/ui/toaster";
-import { useStoreInit } from "@/hooks/use-store-init";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/sidebar";
  
