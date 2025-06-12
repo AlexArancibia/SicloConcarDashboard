@@ -2,173 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
-
-@layer components{
-  .container-section {
-    @apply px-6 lg:px-8 xl:px-6 py-4 lg:py-6 xl:py-6;
-  }
-  
-  .content-section {
-    @apply   w-full mx-auto 
-
-
-    
-  }
-  .box-container {
-    @apply   bg-background border border-border shadow-lg shadow-slate-100 dark:shadow-zinc-900 rounded-lg
-  }
-
-  .box-section {
-    @apply   px-6 py-3 flex  items-center border-b border-border 
-  }
-
-  .content-font {
-    @apply   font-normal text-[14px] text-gray-600 dark:text-gray-300
-  }
-
-  .tablecell-style {
-    @apply bg-blue-100/80 dark:bg-blue-800/30 border border-blue-500 dark:border-sky-300/50
-  }
-
-  .input-style {
-    @apply   pr-10 bg-muted/20 border text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all;
-
-  }
-}
-
 @layer base {
   :root {
-    --background: 120 33% 99%;
-    --foreground: 228 9% 16%;
+    /* Light theme variables */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
-    --card-foreground: 228 9% 16%;
+    --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 228 9% 16%;
-    --primary: 180 1% 30%;
-    --primary-foreground: 120 33% 98%;
-    --secondary: 228 6% 90%;
-    --secondary-foreground: 228 9% 16%;
-    --muted: 228 6% 90%;
-    --muted-foreground: 228 4% 40%;
-    --accent: 120 3% 93%;
-    --accent-foreground: 228 9% 16%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 120 33% 98%;
-    --border: 240 0% 85%;
-    --input: 228 6% 90%;
-    --ring: 228 9% 16%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 160 84% 31%;
+    --primary-foreground: 355.7 100% 97.3%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 142.1 76.2% 36.3%;
     --radius: 0.5rem;
-
-    /* Chart colors */
-    --chart-1: 228 59% 48%;
-    --chart-2: 155 54% 50%;
-    --chart-3: 43 96% 56%;
-    --chart-4: 283 39% 57%;
-    --chart-5: 338 84% 46%;
-
-    /* Sidebar colors */
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 228 9% 16%;
-    --sidebar-primary: 228 9% 16%;
-    --sidebar-primary-foreground: 120 33% 98%;
-    --sidebar-accent: 0 0% 100%;
-    --sidebar-accent-foreground: 228 9% 16%;
-    --sidebar-border:240 0% 85%;
-    --sidebar-ring: 228 9% 16%;
-    --sidebar-hover: 0 0% 100%;
-    --sidebar-active: 180 1% 30%;
-    --sidebar-active-foreground: 120 33% 98%;
   }
 
   .dark {
-    --background: 228 9% 12%;
-    --foreground: 120 33% 98%;
-    --card: 228 9% 16%;
-    --card-foreground: 120 33% 98%;
-    --popover: 228 9% 16%;
-    --popover-foreground: 120 33% 98%;
-    --primary: 120 33% 98%;
-    --primary-foreground: 228 9% 16%;
-    --secondary: 228 9% 26%;
-    --secondary-foreground: 120 33% 98%;
-    --muted: 228 9% 26%;
-    --muted-foreground: 228 4% 70%;
-    --accent: 228 9% 17%;
-    --accent-foreground: 120 33% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 120 33% 98%;
-    --border: 228 9% 26%;
-    --input: 228 9% 26%;
-    --ring: 228 9% 26%;
-
-    /* Chart colors */
-    --chart-1: 228 59% 68%;
-    --chart-2: 155 54% 60%;
-    --chart-3: 43 96% 66%;
-    --chart-4: 283 39% 67%;
-    --chart-5: 338 84% 66%;
-
-    /* Sidebar colors */
-    --sidebar-background: 228 9% 12%;
-    --sidebar-foreground: 120 33% 98%;
-    --sidebar-primary: 120 33% 98%;
-    --sidebar-primary-foreground: 228 9% 16%;
-    --sidebar-accent: 228 9% 18%;
-    --sidebar-accent-foreground: 120 33% 98%;
-    --sidebar-border: 228 9% 26%;
-    --sidebar-ring: 228 9% 26%;
-    --sidebar-hover: 228 9% 20%;
-    --sidebar-active: 180 1% 70%;
-    --sidebar-active-foreground: 228 9% 16%;
+    /* Dark theme variables */
+    --background: 230 18% 5.3%;
+    --foreground: 0 0% 98%;
+    --card: 230 18% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 230 18% 7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 160 84% 32%;
+    --primary-foreground: 355.7 100% 97.3%;
+    --secondary: 230 18% 13%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 230 18% 13%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 230 18% 13%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 230 18% 13%;
+    --input: 230 18% 13%;
+    --ring: 142.1 76.2% 36.3%;
   }
 }
-
 
 @layer base {
   * {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans antialiased;
-  }
-  h1 { @apply text-[16px] md:text-[20px] lg:text-[26px] font-medium; }
-  
-  h2 { @apply text-[14px] md:text-[18px] lg:text-[22px] font-medium; }
-
-  h3 { @apply text-[12px] md:text-[16px] lg:text-[18px] font-medium; }
-  
-  h4 { @apply text-[10px] md:text-[14px] lg:text-[16px] font-medium; }
-  
-  h5 { @apply text-[10px] md:text-[14px] lg:text-[16px] font-medium; }
-  p {
-    @apply text-sm leading-relaxed;
-  }
-
-  .texto {
-    @apply text-sm;
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
-@layer components {
-  .container {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
-  }
-  .create-button {
-    @apply bg-gradient-to-tr from-sky-800 to-sky-600 dark:text-white;
-  }
-
-  
-
-
+/* Custom scrollbar styling for both themes */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-  .text-pretty {
-    text-wrap: pretty;
-  }
+::-webkit-scrollbar-track {
+  @apply bg-muted;
 }
 
+::-webkit-scrollbar-thumb {
+  @apply bg-border rounded;
+}
 
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/30;
+}
+
+/* Enhanced focus states */
+*:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Light theme specific styles */
+:root {
+  color-scheme: light;
+}
+
+/* Dark theme specific styles */
+.dark {
+  color-scheme: dark;
+}

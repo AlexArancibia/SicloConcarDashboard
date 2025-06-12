@@ -1,114 +1,96 @@
-// Common enums
-export enum AuthProvider {
-  EMAIL = "EMAIL",
-  GOOGLE = "GOOGLE",
-  FACEBOOK = "FACEBOOK",
-  TWITTER = "TWITTER",
-  APPLE = "APPLE",
-  GITHUB = "GITHUB",
-  CUSTOM = "CUSTOM"
+/**
+ * Tipos comunes utilizados en toda la aplicación
+ */
+
+// Tipos de paginación
+export interface PaginationParams {
+  page: number
+  limit: number
+  sortBy?: string
+  sortOrder?: "asc" | "desc"
 }
 
-
-export enum CurrencyPosition {
-  BEFORE = 'BEFORE',
-  AFTER = 'AFTER'
+export interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  hasNext: boolean
+  hasPrev: boolean
 }
 
-export enum OrderFinancialStatus {
-  PENDING = 'PENDING',
-  AUTHORIZED = 'AUTHORIZED',
-  PARTIALLY_PAID = 'PARTIALLY_PAID',
-  PAID = 'PAID',
-  PARTIALLY_REFUNDED = 'PARTIALLY_REFUNDED',
-  REFUNDED = 'REFUNDED',
-  VOIDED = 'VOIDED'
+// Tipos de filtros
+export interface FilterParams {
+  search?: string
+  dateFrom?: string
+  dateTo?: string
+  status?: string[]
+  type?: string[]
+  [key: string]: any
 }
 
- 
-export enum PaymentStatus {
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED'
+// Respuesta API estándar
+export interface ApiResponse<T> {
+  success: boolean
+  data?: T
+  message?: string
+  errors?: string[]
+  meta?: {
+    pagination?: PaginatedResponse<any>
+    filters?: FilterParams
+    timestamp: string
+  }
 }
 
-export enum OrderFulfillmentStatus {
-  UNFULFILLED = 'UNFULFILLED',
-  PARTIALLY_FULFILLED = 'PARTIALLY_FULFILLED',
-  FULFILLED = 'FULFILLED',
-  RESTOCKED = 'RESTOCKED',
-  PENDING_FULFILLMENT = 'PENDING_FULFILLMENT',
-  OPEN = 'OPEN',
-  IN_PROGRESS = 'IN_PROGRESS',
-  ON_HOLD = 'ON_HOLD',
-  SCHEDULED = 'SCHEDULED'
+// Resultado de subida de archivos
+export interface UploadResult {
+  success: boolean
+  fileName: string
+  filePath: string
+  fileSize: number
+  recordsProcessed: number
+  recordsSuccess: number
+  recordsError: number
+  errors: string[]
+  warnings: string[]
 }
 
-export enum ProductStatus {
-  DRAFT = 'DRAFT',
-  ACTIVE = 'ACTIVE',
-  ARCHIVED = 'ARCHIVED'
+// Notificaciones
+export interface Notification {
+  id: string
+  userId: string
+  title: string
+  message: string
+  type: "info" | "success" | "warning" | "error"
+  isRead: boolean
+  actionUrl?: string
+  createdAt: string
+  readAt?: string
 }
 
-export enum DiscountType {
-  PERCENTAGE = 'PERCENTAGE',
-  FIXED_AMOUNT = 'FIXED_AMOUNT',
-  BUY_X_GET_Y = 'BUY_X_GET_Y',
-  FREE_SHIPPING = 'FREE_SHIPPING'
+// Tipos de moneda
+export type Currency = "PEN" | "USD" | "EUR"
+
+// Tipos de estado genéricos
+export type Status = "active" | "inactive" | "pending" | "blocked"
+
+// Tipos para formularios
+export interface FormState {
+  isLoading: boolean
+  error: string | null
+  success: boolean
 }
 
-export enum FulfillmentStatus {
-  PENDING = 'PENDING',
-  OPEN = 'OPEN',
-  SUCCESS = 'SUCCESS',
-  CANCELLED = 'CANCELLED',
-  ERROR = 'ERROR',
-  FAILURE = 'FAILURE'
+// Tipos para modales
+export interface ModalState {
+  isOpen: boolean
+  data?: any
 }
 
-export enum PaymentProviderType {
-  CREDIT_CARD = 'CREDIT_CARD',
-  PAYPAL = 'PAYPAL',
-  STRIPE = 'STRIPE',
-  BANK_TRANSFER = 'BANK_TRANSFER',
-  CASH_ON_DELIVERY = 'CASH_ON_DELIVERY',
-  OTHER = 'OTHER'
+// Entidad base con campos comunes
+export interface BaseEntity {
+  id: string
+  createdAt: string
+  updatedAt: string
 }
-
-export enum ShippingMethodType {
-  STANDARD = 'STANDARD',
-  EXPRESS = 'EXPRESS',
-  OVERNIGHT = 'OVERNIGHT',
-  FREE = 'FREE',
-  PICKUP = 'PICKUP',
-  CUSTOM = 'CUSTOM'
-}
-export enum ShippingStatus {
-  PENDING = "PENDING",
-  PROCESSING = "PROCESSING",
-  SHIPPED = "SHIPPED",
-  DELIVERED = "DELIVERED",
-  RETURNED = "RETURNED",
-}
-
-export enum ContentType {
-  ARTICLE = "ARTICLE",
-  BLOG = "BLOG",
-  PAGE = "PAGE",
-  NEWS = "NEWS",
-}
-
-
-export enum UserRole {
-  ADMIN = 'ADMIN',
-  MANAGER = 'MANAGER',
-  EDITOR = 'EDITOR',
-  CUSTOMER_SERVICE = 'CUSTOMER_SERVICE'
-}
-
-// Common interfaces
-export interface Timestamps {
-  createdAt: string;
-  updatedAt: string;
-}
-
