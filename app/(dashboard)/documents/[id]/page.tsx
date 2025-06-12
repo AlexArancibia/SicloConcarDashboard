@@ -1,11 +1,11 @@
+import { use } from "react"
 import DocumentDetailPage from "@/components/financial/document-detail-page"
 
 interface DocumentDetailProps {
-  params: {
-    id: string
-  }
+  params: Promise<{ id: string }>
 }
 
 export default function DocumentDetail({ params }: DocumentDetailProps) {
-  return <DocumentDetailPage documentId={params.id} />
+  const resolvedParams = use(params)
+  return <DocumentDetailPage documentId={resolvedParams.id} />
 }

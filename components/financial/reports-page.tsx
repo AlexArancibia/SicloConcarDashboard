@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import Layout from "./layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -521,7 +520,6 @@ export default function ReportsPage() {
   )
 
   return (
-    <Layout>
       <div className="space-y-4">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -746,6 +744,5 @@ export default function ReportsPage() {
           </TabsContent>
         </Tabs>
       </div>
-    </Layout>
   )
 }

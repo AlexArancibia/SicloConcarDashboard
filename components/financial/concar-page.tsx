@@ -3,7 +3,6 @@
 import type React from "react"
 
 import { useState } from "react"
-import Layout from "../financial/layout"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -2237,7 +2236,6 @@ export default function ConcarPage() {
   }
 
   return (
-    <Layout>
       <div className="flex flex-col space-y-4 p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -2782,6 +2780,5 @@ export default function ConcarPage() {
           </TabsContent>
         </Tabs>
       </div>
-    </Layout>
   )
 }

@@ -6,7 +6,6 @@ export * from "./bank-accounts"
 export * from "./transactions"
 export * from "./conciliation"
 export * from "./expenses"
-export * from "./audit"
 export * from "./reports"
 export * from "./common"
 
