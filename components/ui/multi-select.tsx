@@ -2,8 +2,19 @@ import * as React from "react"
 import { Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger
+} from "@/components/ui/popover"
 
 export interface Option {
   label: string
@@ -15,9 +26,16 @@ interface MultiSelectProps {
   selected: string[] | undefined
   onChange: (selected: string[]) => void
   className?: string
+  placeholder?: string // <-- Aquí agregas el placeholder opcional
 }
 
-export function MultiSelect({ options, selected = [], onChange, className }: MultiSelectProps) {
+export function MultiSelect({
+  options,
+  selected = [],
+  onChange,
+  className,
+  placeholder = "Selecciona..." // <-- Valor por defecto
+}: MultiSelectProps) {
   const [open, setOpen] = React.useState(false)
 
   return (
@@ -27,9 +45,9 @@ export function MultiSelect({ options, selected = [], onChange, className }: Mul
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full justify-between bg-muted/20 shadow-none text-primary ", className)}
+          className={cn("w-full justify-between bg-muted/20 shadow-none text-primary", className)}
         >
-          {selected.length > 0 ? `${selected.length} seleccionado(s)` : "Selecciona..."}
+          {selected.length > 0 ? `${selected.length} seleccionado(s)` : placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -46,7 +64,7 @@ export function MultiSelect({ options, selected = [], onChange, className }: Mul
                     onChange(
                       selected.includes(option.value)
                         ? selected.filter((item) => item !== option.value)
-                        : [...selected, option.value],
+                        : [...selected, option.value]
                     )
                     setOpen(true)
                   }}
@@ -64,4 +82,3 @@ export function MultiSelect({ options, selected = [], onChange, className }: Mul
     </Popover>
   )
 }
-
