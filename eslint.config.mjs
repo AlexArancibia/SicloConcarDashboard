@@ -15,13 +15,14 @@ const eslintConfig = [
     rules: {
       "@typescript-eslint/no-unused-vars": "off",
       "react-hooks/exhaustive-deps": "off",
-    "@typescript-eslint/no-explicit-any": "off",
-    "@typescript-eslint/no-unused-expressions": "off",
-    "@typescript-eslint/no-namespace": "off",
-    "@next/next/no-img-element": "off",
-    "@typescript-eslint/no-empty-object-type": "off",
-    "@typescript-eslint/no-unescaped-entities": "off",
-    "react/no-unescaped-entities": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-expressions": "off",
+      "@typescript-eslint/no-namespace": "off",
+      "@next/next/no-img-element": "off",
+      "@typescript-eslint/no-empty-object-type": "off",
+      "@typescript-eslint/no-unescaped-entities": "off",
+      "react/no-unescaped-entities": "off",
+      "prefer-const": "off", // 👈 Agregar esta línea
     },
   },
 ];

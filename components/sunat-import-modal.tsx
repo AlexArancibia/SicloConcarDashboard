@@ -12,7 +12,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Upload, FileText, AlertCircle, CheckCircle, X, Eye, EyeOff, Loader2, Code, Database } from "lucide-react"
+import {
+  Upload,
+  FileText,
+  AlertCircle,
+  CheckCircle,
+  X,
+  Eye,
+  EyeOff,
+  Loader2,
+  Code,
+  Database,
+  Clock,
+  XCircle,
+} from "lucide-react"
 import { useSunatStore } from "@/stores/sunat-store"
 import { useAuthStore } from "@/stores/authStore"
 
@@ -35,6 +48,15 @@ interface ImportResult {
   errorDetails: Array<{ row: number; error: string }>
 }
 
+interface RowImportStatus {
+  rowNumber: number
+  status: "pending" | "processing" | "success" | "error"
+  payload: string
+  response?: any
+  error?: string
+  timestamp?: Date
+}
+
 export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [dragActive, setDragActive] = useState(false)
@@ -44,6 +66,8 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [rowStatuses, setRowStatuses] = useState<RowImportStatus[]>([])
+  const [showImportDetails, setShowImportDetails] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { user } = useAuthStore()
@@ -308,21 +332,33 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
     })
   }
 
+  const updateRowStatus = (rowNumber: number, updates: Partial<RowImportStatus>) => {
+    setRowStatuses((prev) =>
+      prev.map((row) => (row.rowNumber === rowNumber ? { ...row, ...updates, timestamp: new Date() } : row)),
+    )
+  }
+
   const handleImport = async () => {
     if (!parsedData || !user?.companyId || !user?.id) return
 
     console.log("🚀 Starting import process...")
-    console.log("📊 Import details:", {
-      type,
-      totalRows: parsedData.rows.length,
-      headers: parsedData.headers,
-      companyId: user.companyId,
-      userId: user.id,
-      fileName: selectedFile?.name,
-    })
-
     setImporting(true)
     setImportProgress(0)
+    setShowImportDetails(true)
+
+    // Initialize row statuses
+    const initialStatuses: RowImportStatus[] = parsedData.rows.map((row, index) => {
+      const payload =
+        type === "rhe" ? mapRowToRheDto(row, parsedData.headers) : mapRowToInvoiceDto(row, parsedData.headers)
+
+      return {
+        rowNumber: index + 1,
+        status: "pending",
+        payload: JSON.stringify(payload, null, 2),
+      }
+    })
+
+    setRowStatuses(initialStatuses)
 
     const result: ImportResult = {
       success: 0,
@@ -334,45 +370,57 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
 
     for (let i = 0; i < totalRows; i++) {
       const row = parsedData.rows[i]
-      console.log(`\n📝 Processing row ${i + 1}/${totalRows}:`, row)
+      const rowNumber = i + 1
+
+      // Update status to processing
+      updateRowStatus(rowNumber, { status: "processing" })
 
       try {
+        let response
         if (type === "rhe") {
           const dto = mapRowToRheDto(row, parsedData.headers)
-          console.log("✅ Sending RHE request...")
-          const response = await createSunatRhe(dto)
-          console.log("✅ RHE created successfully:", response)
+          response = await createSunatRhe(dto)
         } else {
           const dto = mapRowToInvoiceDto(row, parsedData.headers)
-          console.log("✅ Sending Invoice request...")
-          const response = await createSunatInvoice(dto)
-          console.log("✅ Invoice created successfully:", response)
+          response = await createSunatInvoice(dto)
         }
 
+        // Update status to success
+        updateRowStatus(rowNumber, {
+          status: "success",
+          response: response,
+        })
+
         result.success++
-        console.log(`✅ Row ${i + 1} processed successfully`)
+        console.log(`✅ Row ${rowNumber} processed successfully`)
       } catch (error) {
-        console.error(`❌ Error processing row ${i + 1}:`, error)
+        const errorMessage = error instanceof Error ? error.message : "Error desconocido"
+
+        // Update status to error
+        updateRowStatus(rowNumber, {
+          status: "error",
+          error: errorMessage,
+        })
+
+        console.error(`❌ Error processing row ${rowNumber}:`, error)
         result.errors++
         result.errorDetails.push({
-          row: i + 1,
-          error: error instanceof Error ? error.message : "Error desconocido",
+          row: rowNumber,
+          error: errorMessage,
         })
       }
 
       // Update progress
       const progress = Math.round(((i + 1) / totalRows) * 100)
       setImportProgress(progress)
-      console.log(`📈 Progress: ${progress}%`)
 
       // Small delay to prevent overwhelming the API
-      if (i % 10 === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 100))
+      if (i % 5 === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 200))
       }
     }
 
     console.log("🏁 Import process completed!")
-    console.log("📊 Final results:", result)
     setImportResult(result)
     setImporting(false)
   }
@@ -386,6 +434,8 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
     setImporting(false)
     setImportProgress(0)
     setImportResult(null)
+    setRowStatuses([])
+    setShowImportDetails(false)
     onOpenChange(false)
   }
 
@@ -395,6 +445,8 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
     setShowPreview(false)
     setParseError(null)
     setImportResult(null)
+    setRowStatuses([])
+    setShowImportDetails(false)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -444,6 +496,36 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
     }
   }
 
+  const getStatusIcon = (status: RowImportStatus["status"]) => {
+    switch (status) {
+      case "pending":
+        return <Clock className="h-4 w-4 text-gray-400" />
+      case "processing":
+        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+      case "success":
+        return <CheckCircle className="h-4 w-4 text-green-500" />
+      case "error":
+        return <XCircle className="h-4 w-4 text-red-500" />
+    }
+  }
+
+  const getStatusBadge = (status: RowImportStatus["status"]) => {
+    switch (status) {
+      case "pending":
+        return <Badge variant="secondary">Pendiente</Badge>
+      case "processing":
+        return <Badge variant="default">Procesando...</Badge>
+      case "success":
+        return (
+          <Badge variant="default" className="bg-green-500">
+            Exitoso
+          </Badge>
+        )
+      case "error":
+        return <Badge variant="destructive">Error</Badge>
+    }
+  }
+
   const title = type === "rhe" ? "Importar Archivo RHE" : "Importar Archivo de Facturas"
   const description =
     type === "rhe"
@@ -467,7 +549,7 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
             <div className="space-y-6">
               <p className="text-sm text-muted-foreground">{description}</p>
 
-              {!showPreview && !isComplete && (
+              {!showPreview && !showImportDetails && !isComplete && (
                 <>
                   {/* File Upload Area */}
                   <Card>
@@ -713,36 +795,83 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
                 </Card>
               )}
 
-              {/* Progress */}
-              {importing && (
+              {/* Import Details - Real-time progress */}
+              {showImportDetails && (
                 <Card>
-                  <CardContent className="p-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        <div className="flex-1">
-                          <div className="flex justify-between text-sm mb-2">
-                            <span>Procesando archivo...</span>
-                            <span>{importProgress}%</span>
-                          </div>
-                          <Progress value={importProgress} className="h-2" />
-                        </div>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          {importing ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                          )}
+                          {importing ? "Importando Registros..." : "Importación Completada"}
+                        </CardTitle>
+                        <CardDescription>Progreso detallado fila por fila</CardDescription>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        Creando registros en la base de datos. Este proceso puede tomar varios minutos.
-                      </p>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold">{importProgress}%</div>
+                        <Progress value={importProgress} className="w-32 h-2" />
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                      {rowStatuses.map((rowStatus) => (
+                        <Card key={rowStatus.rowNumber} className="border-l-4 border-l-muted">
+                          <CardContent className="p-4">
+                            <div className="flex items-start gap-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {getStatusIcon(rowStatus.status)}
+                                <span className="font-mono text-sm font-medium">Fila {rowStatus.rowNumber}</span>
+                                {getStatusBadge(rowStatus.status)}
+                                {rowStatus.timestamp && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {rowStatus.timestamp.toLocaleTimeString()}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {rowStatus.error && (
+                              <Alert variant="destructive" className="mt-3">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertDescription className="text-sm">{rowStatus.error}</AlertDescription>
+                              </Alert>
+                            )}
+
+                            {rowStatus.response && (
+                              <Alert className="mt-3">
+                                <CheckCircle className="h-4 w-4" />
+                                <AlertDescription className="text-sm">Registro creado exitosamente</AlertDescription>
+                              </Alert>
+                            )}
+
+                            <details className="mt-3">
+                              <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+                                Ver payload enviado
+                              </summary>
+                              <div className="mt-2 bg-muted/30 rounded-lg p-3 overflow-x-auto">
+                                <pre className="text-xs font-mono whitespace-pre-wrap">{rowStatus.payload}</pre>
+                              </div>
+                            </details>
+                          </CardContent>
+                        </Card>
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
               )}
 
-              {/* Import Results */}
+              {/* Import Results Summary */}
               {importResult && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <CheckCircle className="h-5 w-5 text-green-600" />
-                      Importación Completada
+                      Resumen de Importación
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -756,24 +885,6 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
                         <div className="text-sm text-red-700">Errores</div>
                       </div>
                     </div>
-
-                    {importResult.errorDetails.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm">Detalles de errores:</h4>
-                        <div className="max-h-32 overflow-y-auto space-y-1">
-                          {importResult.errorDetails.slice(0, 10).map((error, index) => (
-                            <div key={index} className="text-xs p-2 bg-red-50 rounded border border-red-200">
-                              <span className="font-medium">Fila {error.row}:</span> {error.error}
-                            </div>
-                          ))}
-                          {importResult.errorDetails.length > 10 && (
-                            <p className="text-xs text-muted-foreground">
-                              ... y {importResult.errorDetails.length - 10} errores más
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               )}
@@ -794,7 +905,7 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
           <Button variant="outline" onClick={handleClose}>
             {isComplete ? "Cerrar" : "Cancelar"}
           </Button>
-          {!isComplete && parsedData && !importing && (
+          {!isComplete && parsedData && !importing && !showImportDetails && (
             <Button
               onClick={handleImport}
               disabled={!selectedFile || importing || !!parseError || !user?.companyId || !user?.id}
