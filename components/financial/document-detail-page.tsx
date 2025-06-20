@@ -22,64 +22,62 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 import { useDocumentsStore } from "@/stores/documents-store"
-import type { DocumentStatus, DocumentType, Document } from "@/types/documents"
+import type { DocumentStatus, DocumentType, Document } from "@/types"
 import { useAuthStore } from "@/stores/authStore"
 
 interface DocumentDetailPageProps {
-  documentId: string
+  params: {
+    id: string
+  }
 }
 
 const documentTypeLabels: Record<DocumentType, string> = {
-  FACTURA: "Factura",
-  BOLETA: "Boleta",
-  NOTA_CREDITO: "Nota de Crédito",
-  NOTA_DEBITO: "Nota de Débito",
-  RECIBO_HONORARIOS: "Recibo por Honorarios",
-  LIQUIDACION: "Liquidación de Compra",
-  OTROS: "Otros",
+  INVOICE: "Factura",
+  CREDIT_NOTE: "Nota de Crédito",
+  DEBIT_NOTE: "Nota de Débito",
+  RECEIPT: "Recibo por Honorarios",
+  PURCHASE_ORDER: "Orden de Compra",
+  CONTRACT: "Contrato",
 }
 
 const statusLabels: Record<DocumentStatus, string> = {
+  DRAFT: "Borrador",
   PENDING: "Pendiente",
-  VALIDATED: "Validado",
+  APPROVED: "Aprobado",
   REJECTED: "Rechazado",
-  CONCILIATED: "Conciliado",
-  PARTIALLY_CONCILIATED: "Parcialmente Conciliado",
   PAID: "Pagado",
-  OVERDUE: "Vencido",
-  CANCELLED: "Anulado",
+  CANCELLED: "Cancelado",
 }
 
 const statusColors: Record<DocumentStatus, string> = {
+  DRAFT: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300",
   PENDING: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-  VALIDATED: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  APPROVED: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
   REJECTED: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  CONCILIATED: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  PARTIALLY_CONCILIATED: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-  PAID: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  OVERDUE: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  CANCELLED: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300",
+  PAID: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  CANCELLED: "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300",
 }
 
-export default function DocumentDetailPage({ documentId }: DocumentDetailPageProps) {
+export default function DocumentDetailPage({ params }: DocumentDetailPageProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const { user } = useAuthStore()
-  const { loading, error, getDocumentById, validateWithSunat, generateCdr, clearError } = useDocumentsStore()
+  const { company } = useAuthStore()
+  const { loading, error, getDocumentById, clearError } = useDocumentsStore()
 
   const [document, setDocument] = useState<Document | null>(null)
   const [isValidating, setIsValidating] = useState(false)
-  const [isGeneratingCdr, setIsGeneratingCdr] = useState(false)
 
   useEffect(() => {
     const loadDocument = async () => {
-      if (documentId) {
-        const doc = await getDocumentById(documentId)
+      if (params.id) {
+        console.log("🔍 Cargando documento con ID:", params.id)
+        const doc = await getDocumentById(params.id)
+        console.log("📄 Documento cargado:", doc)
         setDocument(doc)
       }
     }
     loadDocument()
-  }, [documentId, getDocumentById])
+  }, [params.id, getDocumentById])
 
   useEffect(() => {
     if (error) {
@@ -97,22 +95,12 @@ export default function DocumentDetailPage({ documentId }: DocumentDetailPagePro
 
     setIsValidating(true)
     try {
-      const success = await validateWithSunat(document.id)
-      if (success) {
-        toast({
-          title: "Validación exitosa",
-          description: "El documento ha sido validado con SUNAT correctamente.",
-        })
-        // Recargar el documento
-        const updatedDoc = await getDocumentById(document.id)
-        setDocument(updatedDoc)
-      } else {
-        toast({
-          title: "Error en validación",
-          description: "No se pudo validar el documento con SUNAT",
-          variant: "destructive",
-        })
-      }
+      // Esta funcionalidad se implementará más adelante
+      toast({
+        title: "Funcionalidad en desarrollo",
+        description: "La validación con SUNAT estará disponible próximamente.",
+        variant: "default",
+      })
     } catch (error) {
       toast({
         title: "Error",
@@ -124,51 +112,28 @@ export default function DocumentDetailPage({ documentId }: DocumentDetailPagePro
     }
   }
 
-  const handleGenerateCdr = async () => {
-    if (!document) return
-
-    setIsGeneratingCdr(true)
-    try {
-      const cdrPath = await generateCdr(document.id)
-      if (cdrPath) {
-        toast({
-          title: "CDR generado",
-          description: `CDR generado exitosamente: ${cdrPath}`,
-        })
-      } else {
-        toast({
-          title: "Error",
-          description: "No se pudo generar el CDR",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "No se pudo generar el CDR",
-        variant: "destructive",
-      })
-    } finally {
-      setIsGeneratingCdr(false)
-    }
+  const formatCurrency = (amount: string | number | null, currency = "PEN") => {
+    if (amount === null || amount === undefined) return "-"
+    const numAmount = typeof amount === "string" ? Number.parseFloat(amount) : amount
+    const symbol = currency === "USD" ? "$" : "S/"
+    return `${symbol} ${numAmount.toLocaleString("es-PE", { minimumFractionDigits: 2 })}`
   }
 
-  const formatCurrency = (amount: number | null, currency = "PEN") => {
-    if (amount === null) return "-"
-    return new Intl.NumberFormat("es-PE", {
-      style: "currency",
-      currency: currency,
-      minimumFractionDigits: 2,
-    }).format(amount)
-  }
-
-  const formatDate = (date: string | null) => {
+  const formatDate = (date: string | Date | null) => {
     if (!date) return "-"
-    return new Intl.DateTimeFormat("es-PE", {
+    return new Date(date).toLocaleDateString("es-PE", {
       year: "numeric",
       month: "long",
       day: "numeric",
-    }).format(new Date(date))
+    })
+  }
+
+  const formatPercentage = (percentage: string | number | null) => {
+    if (percentage === null || percentage === undefined) return "-"
+    const numPercentage = typeof percentage === "string" ? Number.parseFloat(percentage) : percentage
+    // Si el porcentaje está en formato 0-1, multiplicar por 100
+    const displayPercentage = numPercentage < 1 ? numPercentage * 100 : numPercentage
+    return `${displayPercentage.toFixed(2)}%`
   }
 
   if (loading) {
@@ -248,15 +213,9 @@ export default function DocumentDetailPage({ documentId }: DocumentDetailPagePro
             {isValidating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
             Validar SUNAT
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleGenerateCdr}
-            disabled={isGeneratingCdr}
-            className="flex items-center gap-2"
-          >
-            {isGeneratingCdr ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Generar CDR
+          <Button variant="outline" size="sm" className="flex items-center gap-2">
+            <Download className="h-4 w-4" />
+            Descargar PDF
           </Button>
         </div>
       </div>
@@ -328,24 +287,13 @@ export default function DocumentDetailPage({ documentId }: DocumentDetailPagePro
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Razón Social</label>
-                  <p className="font-medium">{document.supplier?.businessName}</p>
+                  <p className="font-medium">{document.supplier?.businessName || "Sin información"}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">RUC/DNI</label>
-                  <p className="font-medium">{document.supplier?.documentNumber}</p>
+                  <p className="font-medium">{document.supplier?.documentNumber || "Sin información"}</p>
                 </div>
-                {document.supplier?.email && (
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Email</label>
-                    <p className="font-medium">{document.supplier.email}</p>
-                  </div>
-                )}
-                {document.supplier?.phone && (
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Teléfono</label>
-                    <p className="font-medium">{document.supplier.phone}</p>
-                  </div>
-                )}
+
               </div>
             </CardContent>
           </Card>
@@ -417,7 +365,7 @@ export default function DocumentDetailPage({ documentId }: DocumentDetailPagePro
                   <span className="text-muted-foreground">IGV:</span>
                   <span className="font-medium">{formatCurrency(document.igv, document.currency)}</span>
                 </div>
-                {document.otherTaxes && document.otherTaxes > 0 && (
+                {document.otherTaxes && Number.parseFloat(document.otherTaxes) > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Otros Impuestos:</span>
                     <span className="font-medium">{formatCurrency(document.otherTaxes, document.currency)}</span>
@@ -429,11 +377,11 @@ export default function DocumentDetailPage({ documentId }: DocumentDetailPagePro
                   <span>{formatCurrency(document.total, document.currency)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold text-green-600">
-                  <span>Monto Neto a Pagar:</span>
+                  <span>Neto a Pagar:</span>
                   <span>{formatCurrency(document.netPayableAmount, document.currency)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold text-orange-600">
-                  <span>Monto Pendiente:</span>
+                  <span>Pendiente:</span>
                   <span>{formatCurrency(document.pendingAmount, document.currency)}</span>
                 </div>
               </div>
@@ -441,7 +389,7 @@ export default function DocumentDetailPage({ documentId }: DocumentDetailPagePro
           </Card>
 
           {/* Retention & Detraction */}
-          {(document.hasRetention || document.hasDetraction) && (
+          {(document.hasRetention || document.detraction?.hasDetraction) && (
             <Card>
               <CardHeader>
                 <CardTitle>Retenciones y Detracciones</CardTitle>
@@ -450,23 +398,27 @@ export default function DocumentDetailPage({ documentId }: DocumentDetailPagePro
                 {document.hasRetention && (
                   <div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Retención ({document.retentionPercentage}%):</span>
+                      <span className="text-muted-foreground">
+                        Retención ({formatPercentage(document.retentionPercentage)}):
+                      </span>
                       <span className="font-medium text-red-600">
                         -{formatCurrency(document.retentionAmount, document.currency)}
                       </span>
                     </div>
                   </div>
                 )}
-                {document.hasDetraction && (
+                {document.detraction?.hasDetraction && (
                   <div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Detracción ({document.detractionPercentage}%):</span>
+                      <span className="text-muted-foreground">
+                        Detracción ({formatPercentage(document.detraction.percentage)}):
+                      </span>
                       <span className="font-medium text-red-600">
-                        -{formatCurrency(document.detractionAmount, document.currency)}
+                        -{formatCurrency(document.detraction.amount, document.currency)}
                       </span>
                     </div>
-                    {document.detractionCode && (
-                      <p className="text-sm text-muted-foreground">Código: {document.detractionCode}</p>
+                    {document.detraction.code && (
+                      <p className="text-sm text-muted-foreground">Código: {document.detraction.code}</p>
                     )}
                   </div>
                 )}
@@ -488,19 +440,19 @@ export default function DocumentDetailPage({ documentId }: DocumentDetailPagePro
                   <label className="text-sm font-medium text-muted-foreground">Fecha de Recepción</label>
                   <p className="font-medium">{formatDate(document.receptionDate)}</p>
                 </div>
-                {document.xmlFileName && (
+                {document.xmlData?.xmlFileName && (
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">Archivo XML</label>
-                    <p className="font-medium">{document.xmlFileName}</p>
+                    <p className="font-medium">{document.xmlData.xmlFileName}</p>
                   </div>
                 )}
-                {document.tags && document.tags.length > 0 && (
+                {document.tags && (
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">Etiquetas</label>
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {document.tags.map((tag, index) => (
+                      {document.tags.split(",").map((tag, index) => (
                         <Badge key={index} variant="secondary" className="text-xs">
-                          {tag}
+                          {tag.trim()}
                         </Badge>
                       ))}
                     </div>

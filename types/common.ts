@@ -10,15 +10,7 @@ export interface PaginationParams {
   sortOrder?: "asc" | "desc"
 }
 
-export interface PaginatedResponse<T> {
-  data: T[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-  hasNext: boolean
-  hasPrev: boolean
-}
+ 
 
 // Tipos de filtros
 export interface FilterParams {
@@ -31,17 +23,7 @@ export interface FilterParams {
 }
 
 // Respuesta API estándar
-export interface ApiResponse<T> {
-  success: boolean
-  data?: T
-  message?: string
-  errors?: string[]
-  meta?: {
-    pagination?: PaginatedResponse<any>
-    filters?: FilterParams
-    timestamp: string
-  }
-}
+ 
 
 // Resultado de subida de archivos
 export interface UploadResult {
@@ -94,3 +76,9 @@ export interface BaseEntity {
   createdAt: string
   updatedAt: string
 }
+
+export interface PaginationDto {
+  page?: number
+  limit?: number
+}
+ 

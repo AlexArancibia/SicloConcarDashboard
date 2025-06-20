@@ -1,185 +1,344 @@
 import type { BaseEntity } from "./common"
 import type { Company } from "./auth"
-import type { BankAccount } from "./bank-accounts"
-import type { User } from "./auth"
-import type { Transaction } from "./transactions"
-import type { Document } from "./documents"
 
-// Tipos de conciliación basados en el schema de Prisma
-export type ConciliationStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "REVIEWED" | "APPROVED"
-export type ConciliationItemType = "DOCUMENT_TRANSACTION" | "TRANSACTION_ONLY" | "DOCUMENT_ONLY" | "ADJUSTMENT"
-export type ConciliationItemStatus = "MATCHED" | "PARTIAL_MATCH" | "UNMATCHED" | "PENDING" | "DISPUTED" | "EXCLUDED"
+// Enums basados en el schema de Prisma
+export type ConciliationType = "DOCUMENTS" | "DETRACTIONS" 
+export type ConciliationStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
+export type ConciliationItemType = "DOCUMENT" | "TRANSACTION" | "ADJUSTMENT" | "FEE" | "OTHER"
+export type ConciliationItemStatus = "PENDING" | "MATCHED" | "PARTIAL" | "REJECTED"
+export type ExpenseType = "OPERATIONAL" | "ADMINISTRATIVE" | "FINANCIAL" | "TAX" | "OTHER"
+
+// ============================================================================
+// INTERFACES PRINCIPALES
+// ============================================================================
 
 export interface Conciliation extends BaseEntity {
   companyId: string
-  company?: Company
-
-  // Información de la conciliación
   bankAccountId: string
-  bankAccount?: BankAccount
-
-  // Relación directa con la transacción (1:1)
-  transactionId: string
-  transaction?: Transaction
-
-  // Período de conciliación
-  periodStart: string // Fecha inicio del período
-  periodEnd: string // Fecha fin del período
-
-  // Resumen de la conciliación
-  totalDocuments: number // Total de documentos en el período
-  conciliatedItems: number // Items conciliados
-  pendingItems: number // Items pendientes
-
-  // Saldos
-  bankBalance: number // Saldo según banco
-  bookBalance: number // Saldo según libros
-  difference: number // Diferencia
-  toleranceAmount: number // Monto de tolerancia para conciliación automática
-
-  // Estado y proceso
+  transactionId: string | null
+  type: ConciliationType
+  reference: string | null
+  periodStart: Date
+  periodEnd: Date
+  totalDocuments: number
+  conciliatedItems: number
+  pendingItems: number
+  bankBalance: string // Decimal en schema
+  bookBalance: string // Decimal en schema
+  difference: string // Decimal en schema
+  toleranceAmount: string // Decimal en schema
   status: ConciliationStatus
-
-  // Información de auditoría
+  additionalExpensesTotal: string // Decimal en schema
+  totalAmount: string | null // Decimal en schema
+  paymentDate: Date | null
+  paymentAmount: string | null // Decimal en schema
+  notes: string | null
   createdById: string
-  createdBy?: User
+  approvedById: string | null
+  completedAt: Date | null
 
-  // Fecha de finalización
-  completedAt?: string | null
-
-  // Relaciones
+  // Relaciones expandidas
+  company?: Company
+  bankAccount?: {
+    id: string
+    accountNumber: string
+    alias: string | null
+    bank: {
+      name: string
+      code: string
+    }
+  }
+  transaction?: {
+    id: string
+    description: string
+    amount: string
+    transactionDate: Date
+  } | null
+  createdBy?: {
+    id: string
+    firstName: string | null
+    lastName: string | null
+    email: string
+  }
+  approvedBy?: {
+    id: string
+    firstName: string | null
+    lastName: string | null
+    email: string
+  } | null
   items?: ConciliationItem[]
+  expenses?: ConciliationExpense[]
+  _count?: {
+    items: number
+    expenses: number
+  }
 }
 
 export interface ConciliationItem extends BaseEntity {
   conciliationId: string
-  conciliation?: Conciliation
-
-  // Tipo de conciliación
   itemType: ConciliationItemType
-
-  // Referencias a documento (la transacción está en la conciliación)
-  documentId: string
-  document?: Document
-
-  // Información del item
-  documentAmount: number // Monto del documento
-  conciliatedAmount: number // Monto conciliado
-  difference: number // Diferencia
-
-  // Distribución porcentual (para conciliaciones parciales)
-  distributionPercentage: number | null
-
-  // Información de detracciones y retenciones aplicadas
-  detractionAmount: number | null
-  retentionAmount: number | null
-
-  // Estado de conciliación
+  documentId: string | null
+  documentAmount: string // Decimal en schema
+  conciliatedAmount: string // Decimal en schema
+  difference: string // Decimal en schema
+  distributionPercentage: string // Decimal en schema
+  detractionAmount: string // Decimal en schema
+  retentionAmount: string // Decimal en schema
   status: ConciliationItemStatus
-
-  // Observaciones y notas
   notes: string | null
-  systemNotes: string | null // Notas generadas automáticamente
-
-  // Información de auditoría
-  conciliatedAt: string | null
+  systemNotes: string | null
   conciliatedBy: string | null
+
+  // Relaciones expandidas
+  conciliation?: {
+    id: string
+    reference: string | null
+    status: ConciliationStatus
+  }
+  document?: {
+    id: string
+    fullNumber: string
+    documentType: string
+    issueDate: Date
+    total: string
+    supplier: {
+      businessName: string
+      documentNumber: string
+    }
+  } | null
 }
 
-// DTOs para crear y actualizar conciliaciones
+export interface ConciliationExpense extends BaseEntity {
+  conciliationId: string
+  description: string
+  amount: string // Decimal en schema
+  expenseType: ExpenseType
+  accountId: string | null
+  notes: string | null
+  isTaxDeductible: boolean
+  supportingDocument: string | null
+  expenseDate: Date
+
+  // Relaciones expandidas
+  conciliation?: {
+    id: string
+    reference: string | null
+    status: ConciliationStatus
+  }
+  account?: {
+    accountCode: string
+    accountName: string
+  } | null
+}
+
+// ============================================================================
+// DTOs (Data Transfer Objects)
+// ============================================================================
+
+export interface PaginationDto {
+  page?: number
+  limit?: number
+}
+
+export interface ConciliationPaginatedResponse {
+  data: Conciliation[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface CreateConciliationExpenseDto {
+  description: string
+  amount: number
+  expenseType: ExpenseType
+  accountId?: string
+  notes?: string
+  isTaxDeductible?: boolean
+  supportingDocument?: string
+  expenseDate: string | Date
+}
+
 export interface CreateConciliationDto {
   companyId: string
   bankAccountId: string
-  transactionId: string
-  periodStart: string
-  periodEnd: string
+  transactionId?: string
+  type?: ConciliationType
+  reference?: string
+  periodStart: string | Date
+  periodEnd: string | Date
+  totalDocuments?: number
+  conciliatedItems?: number
+  pendingItems?: number
   bankBalance: number
   bookBalance: number
   difference: number
   toleranceAmount?: number
   status?: ConciliationStatus
+  additionalExpensesTotal?: number
+  totalAmount?: number
+  paymentDate?: string | Date
+  paymentAmount?: number
+  notes?: string
   createdById: string
-  totalDocuments?: number
-  conciliatedItems?: number
-  pendingItems?: number
+  approvedById?: string
+  expenses?: CreateConciliationExpenseDto[]
 }
 
 export interface UpdateConciliationDto {
-  periodStart?: string
-  periodEnd?: string
+  reference?: string
+  periodStart?: string | Date
+  periodEnd?: string | Date
+  totalDocuments?: number
+  conciliatedItems?: number
+  pendingItems?: number
   bankBalance?: number
   bookBalance?: number
   difference?: number
   toleranceAmount?: number
   status?: ConciliationStatus
-  totalDocuments?: number
-  conciliatedItems?: number
-  pendingItems?: number
-  completedAt?: string | null
+  additionalExpensesTotal?: number
+  totalAmount?: number
+  paymentDate?: string | Date
+  paymentAmount?: number
+  notes?: string
+  approvedById?: string
+  completedAt?: string | Date
 }
 
-// DTOs para crear y actualizar items de conciliación
 export interface CreateConciliationItemDto {
   conciliationId: string
   itemType: ConciliationItemType
-  documentId: string
+  documentId?: string
   documentAmount: number
   conciliatedAmount: number
-  difference?: number
-  distributionPercentage?: number | null
-  detractionAmount?: number | null
-  retentionAmount?: number | null
+  difference: number
+  distributionPercentage?: number
+  detractionAmount?: number
+  retentionAmount?: number
   status?: ConciliationItemStatus
-  notes: string | null
-  systemNotes?: string | null
-  conciliatedBy: string
+  notes?: string
+  systemNotes?: string
+  conciliatedBy?: string
 }
 
 export interface UpdateConciliationItemDto {
+  itemType?: ConciliationItemType
+  documentId?: string
   documentAmount?: number
   conciliatedAmount?: number
   difference?: number
-  distributionPercentage?: number | null
-  detractionAmount?: number | null
-  retentionAmount?: number | null
+  distributionPercentage?: number
+  detractionAmount?: number
+  retentionAmount?: number
   status?: ConciliationItemStatus
-  notes?: string | null
-  systemNotes?: string | null
-  conciliatedAt?: string | null
-  conciliatedBy?: string | null
+  notes?: string
+  systemNotes?: string
+  conciliatedBy?: string
 }
 
-// Tipos para la interfaz de conciliación
-export interface ReconciliationDocument extends Document {
-  amountToReconcile: number
-  reconciledAmount: number
-  pendingAmount: number
+export interface UpdateConciliationExpenseDto {
+  description?: string
+  amount?: number
+  expenseType?: ExpenseType
+  accountId?: string
+  notes?: string
+  isTaxDeductible?: boolean
+  supportingDocument?: string
+  expenseDate?: string | Date
 }
 
-export interface ConciliationSummary {
-  totalTransactions: number
-  totalDocuments: number
-  conciliatedItems: number
-  pendingItems: number
-  bankBalance: number
-  bookBalance: number
-  difference: number
-  withinTolerance: boolean
+export interface ConciliationFiltersDto extends PaginationDto {
+  type?: ConciliationType
+  status?: ConciliationStatus
+  bankAccountId?: string
+  startDate?: string
+  endDate?: string
+  createdById?: string
+  search?: string
 }
 
-// Tipo para la respuesta de validación
-export interface ValidateConciliationResponse {
-  isValid: boolean
-  transactionAmount: number
-  totalDocuments: number
-  difference: number
-  withinTolerance: boolean
-  errors: string[]
+export interface ValidateConciliationDto {
+  transactionId: string
+  documentIds: string[]
+  tolerance?: number
 }
 
-// Tipo para la respuesta de conciliación automática
-export interface AutoConciliationResponse {
-  matched: number
-  partialMatches: number
-  unmatched: number
+export interface ConciliationValidationResult {
+  transaction: {
+    id: string
+    amount: number
+    description: string
+    date: Date
+  }
+  documents: Array<{
+    id: string
+    fullNumber: string
+    amount: number
+    supplier: string
+    issueDate: Date
+  }>
+  summary: {
+    transactionAmount: number
+    documentsTotal: number
+    difference: number
+    tolerance: number
+    isWithinTolerance: boolean
+    canConciliate: boolean
+  }
+}
+
+export interface AutoConciliationResult {
+  matchedDocuments: number
+  totalAmount: number
+  items: ConciliationItem[]
+}
+
+export interface ConciliationStatistics {
+  total: number
+  completed: number
+  inProgress: number
+  pending: number
+  completionRate: number
+  totalConciliatedAmount: number
+}
+
+export interface BulkOperationResult {
+  id: string
+  success: boolean
+  data?: any
+  error?: string
+}
+
+export interface ExportConciliationsResult {
+  format: "csv" | "excel"
+  data: Conciliation[]
+  filename: string
+  totalRecords: number
+}
+
+export interface PendingDocument {
+  id: string
+  fullNumber: string
+  documentType: string
+  issueDate: Date
+  total: string
+  supplier: {
+    businessName: string
+    documentNumber: string
+  }
+}
+
+export interface UnmatchedTransaction {
+  id: string
+  description: string
+  amount: string
+  transactionDate: Date
+  bankAccount: {
+    accountNumber: string
+    alias: string | null
+    bank: {
+      name: string
+    }
+  }
 }

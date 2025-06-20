@@ -1,14 +1,25 @@
 import { create } from "zustand"
-import type { Document, DocumentStatus, DocumentType } from "@/types"
+import type {
+  Document,
+  DocumentStatus,
+  DocumentQueryDto,
+  CreateDocumentDto,
+  UpdateDocumentDto,
+  ConciliateDocumentDto,
+  DocumentResponseDto,
+  DocumentSummaryResponseDto,
+  BulkUpdateStatusDto,
+  BulkDeleteDocumentsDto,
+  DocumentXmlData,
+  DocumentDigitalSignature,
+  DocumentDetraction,
+  DocumentAccountLink,
+  DocumentCostCenterLink,
+  DocumentLine,
+  DocumentPaymentTerm,
+} from "@/types"
 import apiClient from "@/lib/axiosConfig"
-
-interface PaginatedResponse<T> {
-  data: T[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
+import { PaginatedResponse } from "@/types/documents"
 
 interface DocumentsState {
   documents: Document[]
@@ -21,27 +32,35 @@ interface DocumentsState {
     totalPages: number
   }
 
-  // CRUD methods
-  fetchDocuments: (companyId: string, page?: number, limit?: number) => Promise<void>
-  createDocument: (document: Omit<Document, "id" | "createdAt" | "updatedAt">) => Promise<Document | null>
-  updateDocument: (id: string, updates: Partial<Document>) => Promise<void>
+  // Métodos que coinciden exactamente con el service/controller
+  fetchDocuments: (companyId: string, query?: DocumentQueryDto) => Promise<void>
+  createDocument: (createDocumentDto: CreateDocumentDto) => Promise<DocumentResponseDto | null>
+  getDocumentById: (id: string) => Promise<DocumentResponseDto | null>
+  updateDocument: (id: string, updateDocumentDto: UpdateDocumentDto) => Promise<void>
   deleteDocument: (id: string) => Promise<void>
-  getDocumentById: (id: string) => Promise<Document | null>
-
-  // File operations
-  uploadXmlDocument: (file: File, companyId: string, createdById: string) => Promise<Document | null>
-
-  // Utility methods
-  getDocumentsByStatus: (status: DocumentStatus) => Document[]
-  getDocumentsByType: (type: DocumentType) => Document[]
-  getDocumentsBySupplier: (supplierId: string) => Promise<Document[]>
+  getDocumentsByStatus: (companyId: string, status: DocumentStatus) => Promise<Document[]>
+  getDocumentsBySupplier: (companyId: string, supplierId: string, query?: DocumentQueryDto) => Promise<void>
   getDocumentsByDateRange: (companyId: string, startDate: string, endDate: string) => Promise<Document[]>
+  updateDocumentStatus: (id: string, status: DocumentStatus, updatedById: string) => Promise<DocumentResponseDto | null>
+  conciliateDocument: (id: string, conciliateDto: ConciliateDocumentDto) => Promise<DocumentResponseDto | null>
+  getDocumentSummary: (companyId: string) => Promise<DocumentSummaryResponseDto | null>
+  getDocumentsWithPendingDetractions: (companyId: string) => Promise<Document[]>
+  getDocumentsWithXmlData: (companyId: string) => Promise<Document[]>
 
-  // SUNAT operations
-  validateWithSunat: (documentId: string) => Promise<boolean>
-  generateCdr: (documentId: string) => Promise<string | null>
+  // Métodos específicos para partes del documento
+  getDocumentXmlData: (id: string) => Promise<DocumentXmlData | null>
+  getDocumentDigitalSignature: (id: string) => Promise<DocumentDigitalSignature | null>
+  getDocumentDetraction: (id: string) => Promise<DocumentDetraction | null>
+  getDocumentAccountLinks: (id: string) => Promise<DocumentAccountLink[]>
+  getDocumentCostCenterLinks: (id: string) => Promise<DocumentCostCenterLink[]>
+  getDocumentLines: (id: string) => Promise<DocumentLine[]>
+  getDocumentPaymentTerms: (id: string) => Promise<DocumentPaymentTerm[]>
 
-  // Clear methods
+  // Operaciones bulk
+  bulkUpdateStatus: (bulkUpdateDto: BulkUpdateStatusDto) => Promise<DocumentResponseDto[]>
+  bulkDeleteDocuments: (bulkDeleteDto: BulkDeleteDocumentsDto) => Promise<void>
+
+  // Métodos utilitarios
   clearDocuments: () => void
   clearError: () => void
 }
@@ -57,18 +76,25 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
     totalPages: 0,
   },
 
-  fetchDocuments: async (companyId: string, page = 1, limit = 10) => {
+  fetchDocuments: async (companyId: string, query: DocumentQueryDto = {}) => {
     set({ loading: true, error: null })
     try {
+      const params = new URLSearchParams()
+      Object.entries(query).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value))
+        }
+      })
+
       const response = await apiClient.get<PaginatedResponse<Document>>(
-        `/documents/company/${companyId}?page=${page}&limit=${limit}`,
+        `/documents/company/${companyId}?${params.toString()}`,
       )
 
-      const { data, total, totalPages } = response.data
+      const { data, pagination } = response.data
 
       set({
         documents: data,
-        pagination: { total, page, limit, totalPages },
+        pagination,
         loading: false,
       })
     } catch (error: any) {
@@ -79,10 +105,10 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
     }
   },
 
-  createDocument: async (documentData) => {
+  createDocument: async (createDocumentDto: CreateDocumentDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Document>("/documents", documentData)
+      const response = await apiClient.post<DocumentResponseDto>("/documents", createDocumentDto)
       const newDocument = response.data
 
       set((state) => ({
@@ -100,10 +126,25 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
     }
   },
 
-  updateDocument: async (id: string, updates: Partial<Document>) => {
+  getDocumentById: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<Document>(`/documents/${id}`, updates)
+      const response = await apiClient.get<DocumentResponseDto>(`/documents/${id}`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching document",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  updateDocument: async (id: string, updateDocumentDto: UpdateDocumentDto) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.patch<DocumentResponseDto>(`/documents/${id}`, updateDocumentDto)
       const updatedDocument = response.data
 
       set((state) => ({
@@ -135,72 +176,47 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
     }
   },
 
-  getDocumentById: async (id: string) => {
+  getDocumentsByStatus: async (companyId: string, status: DocumentStatus) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Document>(`/documents/${id}`)
+      const response = await apiClient.get<Document[]>(`/documents/company/${companyId}/status/${status}`)
       set({ loading: false })
       return response.data
     } catch (error: any) {
       set({
-        error: error.response?.data?.message || "Error fetching document",
+        error: error.response?.data?.message || "Error fetching documents by status",
         loading: false,
       })
-      return null
+      return []
     }
   },
 
-  uploadXmlDocument: async (file: File, companyId: string, createdById: string) => {
+  getDocumentsBySupplier: async (companyId: string, supplierId: string, query: DocumentQueryDto = {}) => {
     set({ loading: true, error: null })
     try {
-      const formData = new FormData()
-      formData.append("xmlFile", file)
-      formData.append("companyId", companyId)
-      formData.append("createdById", createdById)
-
-      const response = await apiClient.post<Document>("/documents/upload-xml", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      const params = new URLSearchParams()
+      Object.entries(query).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value))
+        }
       })
 
-      const newDocument = response.data
+      const response = await apiClient.get<PaginatedResponse<Document>>(
+        `/documents/company/${companyId}/supplier/${supplierId}?${params.toString()}`,
+      )
 
-      set((state) => ({
-        documents: [newDocument, ...state.documents],
-        loading: false,
-      }))
+      const { data, pagination } = response.data
 
-      return newDocument
-    } catch (error: any) {
       set({
-        error: error.response?.data?.message || "Error uploading XML document",
+        documents: data,
+        pagination,
         loading: false,
       })
-      return null
-    }
-  },
-
-  getDocumentsByStatus: (status: DocumentStatus) => {
-    return get().documents.filter((doc) => doc.status === status)
-  },
-
-  getDocumentsByType: (type: DocumentType) => {
-    return get().documents.filter((doc) => doc.documentType === type)
-  },
-
-  getDocumentsBySupplier: async (supplierId: string) => {
-    set({ loading: true, error: null })
-    try {
-      const response = await apiClient.get<Document[]>(`/documents/supplier/${supplierId}`)
-      set({ loading: false })
-      return response.data
     } catch (error: any) {
       set({
         error: error.response?.data?.message || "Error fetching documents by supplier",
         loading: false,
       })
-      return []
     }
   },
 
@@ -221,33 +237,238 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
     }
   },
 
-  validateWithSunat: async (documentId: string) => {
+  updateDocumentStatus: async (id: string, status: DocumentStatus, updatedById: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.post(`/documents/${documentId}/validate-sunat`)
-      set({ loading: false })
-      return true
-    } catch (error: any) {
-      set({
-        error: error.response?.data?.message || "Error validating with SUNAT",
-        loading: false,
+      const response = await apiClient.patch<DocumentResponseDto>(`/documents/${id}/status?status=${status}`, {
+        updatedById,
       })
-      return false
-    }
-  },
+      const updatedDocument = response.data
 
-  generateCdr: async (documentId: string) => {
-    set({ loading: true, error: null })
-    try {
-      const response = await apiClient.post<{ cdrPath: string }>(`/documents/${documentId}/generate-cdr`)
-      set({ loading: false })
-      return response.data.cdrPath
+      set((state) => ({
+        documents: state.documents.map((doc) => (doc.id === id ? updatedDocument : doc)),
+        loading: false,
+      }))
+
+      return updatedDocument
     } catch (error: any) {
       set({
-        error: error.response?.data?.message || "Error generating CDR",
+        error: error.response?.data?.message || "Error updating document status",
         loading: false,
       })
       return null
+    }
+  },
+
+  conciliateDocument: async (id: string, conciliateDto: ConciliateDocumentDto) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.patch<DocumentResponseDto>(`/documents/${id}/conciliate`, conciliateDto)
+      const updatedDocument = response.data
+
+      set((state) => ({
+        documents: state.documents.map((doc) => (doc.id === id ? updatedDocument : doc)),
+        loading: false,
+      }))
+
+      return updatedDocument
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error conciliating document",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  getDocumentSummary: async (companyId: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<DocumentSummaryResponseDto>(`/documents/company/${companyId}/summary`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching document summary",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  getDocumentsWithPendingDetractions: async (companyId: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Document[]>(`/documents/company/${companyId}/pending-detractions`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching documents with pending detractions",
+        loading: false,
+      })
+      return []
+    }
+  },
+
+  getDocumentsWithXmlData: async (companyId: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Document[]>(`/documents/company/${companyId}/with-xml`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching documents with XML data",
+        loading: false,
+      })
+      return []
+    }
+  },
+
+  getDocumentXmlData: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<DocumentXmlData>(`/documents/${id}/xml`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching document XML data",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  getDocumentDigitalSignature: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<DocumentDigitalSignature>(`/documents/${id}/signature`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching document digital signature",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  getDocumentDetraction: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<DocumentDetraction>(`/documents/${id}/detraction`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching document detraction",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  getDocumentAccountLinks: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<DocumentAccountLink[]>(`/documents/${id}/account-links`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching document account links",
+        loading: false,
+      })
+      return []
+    }
+  },
+
+  getDocumentCostCenterLinks: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<DocumentCostCenterLink[]>(`/documents/${id}/cost-center-links`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching document cost center links",
+        loading: false,
+      })
+      return []
+    }
+  },
+
+  getDocumentLines: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<DocumentLine[]>(`/documents/${id}/lines`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching document lines",
+        loading: false,
+      })
+      return []
+    }
+  },
+
+  getDocumentPaymentTerms: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<DocumentPaymentTerm[]>(`/documents/${id}/payment-terms`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching document payment terms",
+        loading: false,
+      })
+      return []
+    }
+  },
+
+  bulkUpdateStatus: async (bulkUpdateDto: BulkUpdateStatusDto) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.patch<DocumentResponseDto[]>("/documents/bulk/status", bulkUpdateDto)
+      const updatedDocuments = response.data
+
+      set((state) => ({
+        documents: state.documents.map((doc) => {
+          const updated = updatedDocuments.find((updated) => updated.id === doc.id)
+          return updated || doc
+        }),
+        loading: false,
+      }))
+
+      return updatedDocuments
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error bulk updating document status",
+        loading: false,
+      })
+      return []
+    }
+  },
+
+  bulkDeleteDocuments: async (bulkDeleteDto: BulkDeleteDocumentsDto) => {
+    set({ loading: true, error: null })
+    try {
+      await apiClient.delete("/documents/bulk", { data: bulkDeleteDto })
+
+      set((state) => ({
+        documents: state.documents.filter((doc) => !bulkDeleteDto.documentIds.includes(doc.id)),
+        loading: false,
+      }))
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error bulk deleting documents",
+        loading: false,
+      })
     }
   },
 

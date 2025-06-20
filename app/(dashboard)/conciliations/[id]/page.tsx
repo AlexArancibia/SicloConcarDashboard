@@ -1,553 +1,1101 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
-import { useConciliationStore } from "@/stores/conciliation-store"
-import { useAuthStore } from "@/stores/authStore"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, FileText, Wallet, Calendar, Building2, User, Clock, Trash2, AlertTriangle } from "lucide-react"
-import { Separator } from "@/components/ui/separator"
-import { useToast } from "@/hooks/use-toast"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import type { Conciliation, ConciliationItem } from "@/types/conciliation"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
+import { AlertCircle, Download, Eye, ArrowRight, FileText, CreditCard, ChevronLeft, ChevronRight } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { FiltersBar } from "@/components/ui/filters-bar"
+import { TableSkeleton } from "@/components/ui/table-skeleton"
+import { useConciliationsStore } from "@/stores/conciliation-store"
+import { useDocumentsStore } from "@/stores/documents-store"
+import { useTransactionsStore } from "@/stores/transactions-store"
+import { useBankAccountsStore } from "@/stores/bank-accounts-store"
+import { useAuthStore } from "@/stores/authStore"
+import { ConciliationDialog } from "@/components/conciliation-dialog"
+import type { Document, Transaction, DocumentStatus, DocumentType } from "@/types"
 
-export default function ConciliationDetailPage() {
-  const params = useParams()
-  const router = useRouter()
-  const { toast } = useToast()
+const DEBUG_MODE = true
+
+const debugLog = (message: string, data?: any) => {
+  if (DEBUG_MODE) {
+    console.log(`[CONCILIATIONS DEBUG] ${message}`, data || "")
+  }
+}
+
+export default function ConciliationsPage() {
   const { user } = useAuthStore()
-  const { getConciliationById, deleteConciliation } = useConciliationStore()
-  const [conciliation, setConciliation] = useState<Conciliation | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const { conciliations, loading, error, fetchConciliations, deleteConciliation, clearError } = useConciliationsStore()
+  const { documents, fetchDocuments } = useDocumentsStore()
+  const { transactions, fetchTransactions } = useTransactionsStore()
+  const { bankAccounts, fetchBankAccounts } = useBankAccountsStore()
 
-  const id = params?.id as string
+  // State
+  const [showConciliationDialog, setShowConciliationDialog] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(25)
+  const [transactionPage, setTransactionPage] = useState(1)
+  const [documentPage, setDocumentPage] = useState(1)
+  const [transactionItemsPerPage] = useState(10)
+  const [documentItemsPerPage] = useState(10)
 
+  // Selection state
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
+  const [selectedDocuments, setSelectedDocuments] = useState<Document[]>([])
+  const [documentConciliationAmounts, setDocumentConciliationAmounts] = useState<Record<string, number>>({})
+  const [conciliationType, setConciliationType] = useState<"DOCUMENTS" | "DETRACTIONS">("DOCUMENTS")
+
+  // Filters for transactions
+  const [transactionFilters, setTransactionFilters] = useState({
+    search: "",
+    dateRange: { from: undefined as Date | undefined, to: undefined as Date | undefined },
+    bankAccount: "",
+    type: "",
+    minAmount: "",
+    maxAmount: "",
+  })
+
+  // Filters for documents
+  const [documentFilters, setDocumentFilters] = useState({
+    search: "",
+    dateRange: { from: undefined as Date | undefined, to: undefined as Date | undefined },
+    supplier: "",
+    status: "",
+    type: "",
+    minAmount: "",
+    maxAmount: "",
+  })
+
+  // Load initial data
   useEffect(() => {
-    const loadConciliation = async () => {
-      if (!id) {
-        setError("ID de conciliación no proporcionado")
-        setLoading(false)
-        return
-      }
+    if (user?.companyId) {
+      debugLog("Loading initial data for company", user.companyId)
+      Promise.all([
+        fetchConciliations(user.companyId, { page: 1, limit: 100 }),
+        fetchDocuments(user.companyId, { page: 1, limit: 1000 }),
+        fetchTransactions(user.companyId, { page: 1, limit: 1000 }),
+        fetchBankAccounts(user.companyId, { page: 1, limit: 100 }),
+      ])
+    }
+  }, [user?.companyId])
 
-      try {
-        setLoading(true)
-        const data = await getConciliationById(id)
+  // Get available documents for conciliation with filters
+  const { availableTransactions, totalTransactionPages } = useMemo(() => {
+    let filtered = transactions.filter(
+      (transaction) =>
+        transaction.status === "PENDING" &&
+        (transaction.pendingAmount === null || Number.parseFloat(transaction.pendingAmount || transaction.amount) > 0),
+    )
 
-        if (!data) {
-          setError("No se encontró la conciliación")
+    // Apply filters
+    if (transactionFilters.search) {
+      filtered = filtered.filter(
+        (transaction) =>
+          transaction.description?.toLowerCase().includes(transactionFilters.search.toLowerCase()) ||
+          transaction.operationNumber?.toLowerCase().includes(transactionFilters.search.toLowerCase()) ||
+          transaction.supplier?.businessName?.toLowerCase().includes(transactionFilters.search.toLowerCase()),
+      )
+    }
+
+    if (transactionFilters.dateRange.from) {
+      filtered = filtered.filter(
+        (transaction) => new Date(transaction.transactionDate) >= transactionFilters.dateRange.from!,
+      )
+    }
+
+    if (transactionFilters.dateRange.to) {
+      filtered = filtered.filter(
+        (transaction) => new Date(transaction.transactionDate) <= transactionFilters.dateRange.to!,
+      )
+    }
+
+    if (transactionFilters.bankAccount && transactionFilters.bankAccount !== "all") {
+      filtered = filtered.filter((transaction) => transaction.bankAccountId === transactionFilters.bankAccount)
+    }
+
+    if (transactionFilters.type && transactionFilters.type !== "all") {
+      filtered = filtered.filter((transaction) => transaction.transactionType === transactionFilters.type)
+    }
+
+    if (transactionFilters.minAmount) {
+      filtered = filtered.filter(
+        (transaction) =>
+          Math.abs(Number.parseFloat(transaction.amount)) >= Number.parseFloat(transactionFilters.minAmount),
+      )
+    }
+
+    if (transactionFilters.maxAmount) {
+      filtered = filtered.filter(
+        (transaction) =>
+          Math.abs(Number.parseFloat(transaction.amount)) <= Number.parseFloat(transactionFilters.maxAmount),
+      )
+    }
+
+    const totalPages = Math.ceil(filtered.length / transactionItemsPerPage)
+    const startIndex = (transactionPage - 1) * transactionItemsPerPage
+    const endIndex = startIndex + transactionItemsPerPage
+    const paginatedTransactions = filtered.slice(startIndex, endIndex)
+
+    debugLog("Available transactions for conciliation", { total: filtered.length, page: transactionPage })
+    return { availableTransactions: paginatedTransactions, totalTransactionPages: totalPages }
+  }, [transactions, transactionFilters, transactionPage, transactionItemsPerPage])
+
+  // Get available documents for conciliation with filters
+  const { availableDocuments, totalDocumentPages } = useMemo(() => {
+    let filtered = documents.filter(
+      (doc) => doc.status === "APPROVED" && Number.parseFloat(doc.pendingAmount || "0") > 0,
+    )
+
+    // Apply filters
+    if (documentFilters.search) {
+      filtered = filtered.filter(
+        (doc) =>
+          doc.fullNumber?.toLowerCase().includes(documentFilters.search.toLowerCase()) ||
+          doc.supplier?.businessName?.toLowerCase().includes(documentFilters.search.toLowerCase()) ||
+          doc.supplier?.documentNumber?.toLowerCase().includes(documentFilters.search.toLowerCase()),
+      )
+    }
+
+    if (documentFilters.dateRange.from) {
+      filtered = filtered.filter((doc) => new Date(doc.issueDate) >= documentFilters.dateRange.from!)
+    }
+
+    if (documentFilters.dateRange.to) {
+      filtered = filtered.filter((doc) => new Date(doc.issueDate) <= documentFilters.dateRange.to!)
+    }
+
+    if (documentFilters.supplier) {
+      filtered = filtered.filter((doc) =>
+        doc.supplier?.businessName?.toLowerCase().includes(documentFilters.supplier.toLowerCase()),
+      )
+    }
+
+    if (documentFilters.status && documentFilters.status !== "all") {
+      filtered = filtered.filter((doc) => doc.status === documentFilters.status)
+    }
+
+    if (documentFilters.type && documentFilters.type !== "all") {
+      filtered = filtered.filter((doc) => doc.documentType === documentFilters.type)
+    }
+
+    if (documentFilters.minAmount) {
+      filtered = filtered.filter((doc) => {
+        const amount =
+          conciliationType === "DETRACTIONS"
+            ? Number.parseFloat(doc.detraction?.pendingAmount || "0")
+            : Number.parseFloat(doc.pendingAmount || "0")
+        return amount >= Number.parseFloat(documentFilters.minAmount)
+      })
+    }
+
+    if (documentFilters.maxAmount) {
+      filtered = filtered.filter((doc) => {
+        const amount =
+          conciliationType === "DETRACTIONS"
+            ? Number.parseFloat(doc.detraction?.pendingAmount || "0")
+            : Number.parseFloat(doc.pendingAmount || "0")
+        return amount <= Number.parseFloat(documentFilters.maxAmount)
+      })
+    }
+
+    const totalPages = Math.ceil(filtered.length / documentItemsPerPage)
+    const startIndex = (documentPage - 1) * documentItemsPerPage
+    const endIndex = startIndex + documentItemsPerPage
+    const paginatedDocuments = filtered.slice(startIndex, endIndex)
+
+    debugLog("Available documents for conciliation", { total: filtered.length, page: documentPage })
+    return { availableDocuments: paginatedDocuments, totalDocumentPages: totalPages }
+  }, [documents, documentFilters, conciliationType, documentPage, documentItemsPerPage])
+
+  // Get available detractions with filters
+  const { availableDetractions, totalDetractionPages } = useMemo(() => {
+    let filtered = documents.filter(
+      (doc) =>
+        doc.status === "APPROVED" &&
+        doc.detraction?.hasDetraction &&
+        Number.parseFloat(doc.detraction.pendingAmount || "0") > 0,
+    )
+
+    // Apply same filters as documents
+    if (documentFilters.search) {
+      filtered = filtered.filter(
+        (doc) =>
+          doc.fullNumber?.toLowerCase().includes(documentFilters.search.toLowerCase()) ||
+          doc.supplier?.businessName?.toLowerCase().includes(documentFilters.search.toLowerCase()) ||
+          doc.supplier?.documentNumber?.toLowerCase().includes(documentFilters.search.toLowerCase()),
+      )
+    }
+
+    if (documentFilters.dateRange.from) {
+      filtered = filtered.filter((doc) => new Date(doc.issueDate) >= documentFilters.dateRange.from!)
+    }
+
+    if (documentFilters.dateRange.to) {
+      filtered = filtered.filter((doc) => new Date(doc.issueDate) <= documentFilters.dateRange.to!)
+    }
+
+    if (documentFilters.supplier) {
+      filtered = filtered.filter((doc) =>
+        doc.supplier?.businessName?.toLowerCase().includes(documentFilters.supplier.toLowerCase()),
+      )
+    }
+
+    if (documentFilters.minAmount) {
+      filtered = filtered.filter((doc) => {
+        const amount = Number.parseFloat(doc.detraction?.pendingAmount || "0")
+        return amount >= Number.parseFloat(documentFilters.minAmount)
+      })
+    }
+
+    if (documentFilters.maxAmount) {
+      filtered = filtered.filter((doc) => {
+        const amount = Number.parseFloat(doc.detraction?.pendingAmount || "0")
+        return amount <= Number.parseFloat(documentFilters.maxAmount)
+      })
+    }
+
+    const totalPages = Math.ceil(filtered.length / documentItemsPerPage)
+    const startIndex = (documentPage - 1) * documentItemsPerPage
+    const endIndex = startIndex + documentItemsPerPage
+    const paginatedDetractions = filtered.slice(startIndex, endIndex)
+
+    debugLog("Available detractions for conciliation", { total: filtered.length, page: documentPage })
+    return { availableDetractions: paginatedDetractions, totalDetractionPages: totalPages }
+  }, [documents, documentFilters, conciliationType, documentPage, documentItemsPerPage])
+
+  // Paginated conciliations
+  const paginatedConciliations = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    return conciliations.slice(startIndex, endIndex)
+  }, [conciliations, currentPage, itemsPerPage])
+
+  const totalPages = Math.ceil(conciliations.length / itemsPerPage)
+
+  const handleTransactionSelect = (transaction: Transaction) => {
+    setSelectedTransaction(transaction)
+    setSelectedDocuments([]) // Clear documents when changing transaction
+    setDocumentConciliationAmounts({}) // Clear amounts
+    debugLog("Transaction selected", { transactionId: transaction.id, amount: transaction.amount })
+  }
+
+  const handleDocumentSelect = (document: Document) => {
+    const isSelected = selectedDocuments.some((doc) => doc.id === document.id)
+    if (isSelected) {
+      setSelectedDocuments((prev) => prev.filter((doc) => doc.id !== document.id))
+      setDocumentConciliationAmounts((prev) => {
+        const newAmounts = { ...prev }
+        delete newAmounts[document.id]
+        return newAmounts
+      })
+    } else {
+      // Validate supplier compatibility
+      if (selectedDocuments.length > 0) {
+        const firstSupplier = selectedDocuments[0].supplierId
+        if (conciliationType === "DOCUMENTS" && document.supplierId !== firstSupplier) {
+          alert("Los documentos deben ser del mismo proveedor")
           return
         }
-
-        console.log("Conciliación cargada:", data)
-        setConciliation(data)
-      } catch (err: any) {
-        console.error("Error al cargar la conciliación:", err)
-        setError(err.message || "Error al cargar la conciliación")
-      } finally {
-        setLoading(false)
       }
+      setSelectedDocuments((prev) => [...prev, document])
+      // Set default conciliation amount to full pending amount
+      const defaultAmount =
+        conciliationType === "DOCUMENTS"
+          ? Number.parseFloat(document.pendingAmount || "0")
+          : Number.parseFloat(document.detraction?.pendingAmount || "0")
+      setDocumentConciliationAmounts((prev) => ({
+        ...prev,
+        [document.id]: defaultAmount,
+      }))
     }
-
-    loadConciliation()
-  }, [id, getConciliationById])
-
-  const handleDelete = async () => {
-    if (!id) return
-
-    try {
-      setIsDeleting(true)
-      await deleteConciliation(id)
-
-      toast({
-        title: "Conciliación eliminada",
-        description: "La conciliación ha sido eliminada exitosamente",
-      })
-
-      router.push("/conciliations")
-    } catch (err: any) {
-      console.error("Error al eliminar la conciliación:", err)
-
-      toast({
-        title: "Error",
-        description: `Error al eliminar la conciliación: ${err.message || "Error desconocido"}`,
-        variant: "destructive",
-      })
-    } finally {
-      setIsDeleting(false)
-      setIsDeleteDialogOpen(false)
-    }
+    debugLog("Document selection changed", { documentId: document.id, isSelected: !isSelected })
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "PENDING":
-        return (
-          <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
-            Pendiente
-          </Badge>
-        )
-      case "IN_PROGRESS":
-        return (
-          <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
-            En Progreso
-          </Badge>
-        )
-      case "COMPLETED":
-        return (
-          <Badge
-            variant="secondary"
-            className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-          >
-            Completado
-          </Badge>
-        )
-      case "REVIEWED":
-        return (
-          <Badge
-            variant="secondary"
-            className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
-          >
-            Revisado
-          </Badge>
-        )
-      case "APPROVED":
-        return (
-          <Badge variant="secondary" className="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20">
-            Aprobado
-          </Badge>
-        )
-      default:
-        return (
-          <Badge variant="secondary" className="bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20">
-            {status}
-          </Badge>
-        )
-    }
+  const handleConciliationAmountChange = (documentId: string, amount: number) => {
+    setDocumentConciliationAmounts((prev) => ({
+      ...prev,
+      [documentId]: amount,
+    }))
   }
 
-  const getItemStatusBadge = (status: string) => {
-    switch (status) {
-      case "MATCHED":
-        return (
-          <Badge
-            variant="secondary"
-            className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-          >
-            Coincidencia
-          </Badge>
-        )
-      case "PARTIAL_MATCH":
-        return (
-          <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
-            Coincidencia Parcial
-          </Badge>
-        )
-      case "UNMATCHED":
-        return (
-          <Badge variant="secondary" className="bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20">
-            Sin Coincidencia
-          </Badge>
-        )
-      case "PENDING":
-        return (
-          <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
-            Pendiente
-          </Badge>
-        )
-      case "DISPUTED":
-        return (
-          <Badge
-            variant="secondary"
-            className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20"
-          >
-            Disputado
-          </Badge>
-        )
-      case "EXCLUDED":
-        return (
-          <Badge variant="secondary" className="bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20">
-            Excluido
-          </Badge>
-        )
-      default:
-        return (
-          <Badge variant="secondary" className="bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20">
-            {status}
-          </Badge>
-        )
-    }
+  const handleConciliationTypeChange = (checked: boolean) => {
+    setConciliationType(checked ? "DETRACTIONS" : "DOCUMENTS")
+    setSelectedDocuments([]) // Clear selection when changing type
+    setDocumentConciliationAmounts({}) // Clear amounts
+    debugLog("Conciliation type changed", checked ? "DETRACTIONS" : "DOCUMENTS")
   }
 
-  if (loading) {
+  const handleCreateConciliation = () => {
+    if (!selectedTransaction) {
+      alert("Debe seleccionar una transacción")
+      return
+    }
+    if (selectedDocuments.length === 0) {
+      alert("Debe seleccionar al menos un documento")
+      return
+    }
+
+    debugLog("Opening conciliation dialog", {
+      transaction: selectedTransaction.id,
+      documents: selectedDocuments.map((d) => d.id),
+      amounts: documentConciliationAmounts,
+      type: conciliationType,
+    })
+    setShowConciliationDialog(true)
+  }
+
+  const handleTransactionFilterChange = (key: string, value: any) => {
+    setTransactionFilters((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleDocumentFilterChange = (key: string, value: any) => {
+    setDocumentFilters((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage)
+  }
+
+  const handleTransactionPageChange = (newPage: number) => {
+    setTransactionPage(newPage)
+  }
+
+  const handleDocumentPageChange = (newPage: number) => {
+    setDocumentPage(newPage)
+  }
+
+  const formatCurrency = (amount: string | number | null, currencySymbol = "S/") => {
+    if (!amount) return `${currencySymbol} 0.00`
+    const numAmount = typeof amount === "string" ? Number.parseFloat(amount) : amount
+    return `${currencySymbol} ${numAmount.toLocaleString("es-PE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`
+  }
+
+  const formatDate = (date: Date | string) => {
+    return new Date(date).toLocaleDateString("es-PE", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+  }
+
+  const getSelectedTotal = () => {
+    return selectedDocuments.reduce((sum, doc) => {
+      return sum + (documentConciliationAmounts[doc.id] || 0)
+    }, 0)
+  }
+
+  const getTransactionAmount = () => {
+    return selectedTransaction ? Math.abs(Number.parseFloat(selectedTransaction.amount)) : 0
+  }
+
+  const getDifference = () => {
+    return Math.abs(getSelectedTotal() - getTransactionAmount())
+  }
+
+  const getStatusBadge = (status: DocumentStatus) => {
+    const statusConfig = {
+      DRAFT: { class: "bg-gray-500/10 text-gray-600 border-gray-500/20", label: "Borrador" },
+      PENDING: { class: "bg-amber-500/10 text-amber-600 border-amber-500/20", label: "Pendiente" },
+      APPROVED: { class: "bg-blue-500/10 text-blue-600 border-blue-500/20", label: "Aprobado" },
+      REJECTED: { class: "bg-red-500/10 text-red-600 border-red-500/20", label: "Rechazado" },
+      PAID: { class: "bg-green-500/10 text-green-600 border-green-500/20", label: "Pagado" },
+      CANCELLED: { class: "bg-slate-500/10 text-slate-600 border-slate-500/20", label: "Cancelado" },
+    }
+
+    const config = statusConfig[status] || {
+      class: "bg-slate-500/10 text-slate-600 border-slate-500/20",
+      label: "Desconocido",
+    }
+
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Cargando conciliación...</p>
-        </div>
-      </div>
+      <Badge variant="secondary" className={config.class}>
+        {config.label}
+      </Badge>
     )
   }
+
+  const getTypeBadge = (type: DocumentType) => {
+    const typeConfig = {
+      INVOICE: { class: "bg-blue-500/10 text-blue-600 border-blue-500/20", label: "Factura" },
+      CREDIT_NOTE: { class: "bg-purple-500/10 text-purple-600 border-purple-500/20", label: "N. Crédito" },
+      DEBIT_NOTE: { class: "bg-orange-500/10 text-orange-600 border-orange-500/20", label: "N. Débito" },
+      RECEIPT: { class: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", label: "Recibo" },
+      PURCHASE_ORDER: { class: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20", label: "O. Compra" },
+      CONTRACT: { class: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20", label: "Contrato" },
+    }
+
+    const config = typeConfig[type] || {
+      class: "bg-slate-500/10 text-slate-600 border-slate-500/20",
+      label: "Otro",
+    }
+
+    return (
+      <Badge variant="outline" className={config.class}>
+        {config.label}
+      </Badge>
+    )
+  }
+
+  // Filter configurations
+  const transactionFilterConfigs = [
+    {
+      key: "search",
+      type: "search" as const,
+      placeholder: "Descripción, número, proveedor...",
+    },
+    {
+      key: "dateRange",
+      type: "daterange" as const,
+      placeholder: "Período de transacción",
+    },
+    {
+      key: "bankAccount",
+      type: "select" as const,
+      placeholder: "Cuenta bancaria",
+      options: [
+        { value: "all", label: "Todas las cuentas" },
+        ...bankAccounts.map((account) => ({
+          value: account.id,
+          label: `${account.bank?.name || "Banco"} - ${account.alias || account.accountNumber}`,
+        })),
+      ],
+      className: "min-w-48",
+    },
+    {
+      key: "type",
+      type: "select" as const,
+      placeholder: "Tipo de transacción",
+      options: [
+        { value: "all", label: "Todos los tipos" },
+        { value: "DEBIT", label: "Débito" },
+        { value: "CREDIT", label: "Crédito" },
+        { value: "TRANSFER", label: "Transferencia" },
+        { value: "FEE", label: "Comisión" },
+        { value: "INTEREST", label: "Interés" },
+        { value: "DETRACTION", label: "Detracción" },
+        { value: "ITF", label: "ITF" },
+        { value: "PAYMENT", label: "Pago" },
+        { value: "DEPOSIT", label: "Depósito" },
+        { value: "WITHDRAWAL", label: "Retiro" },
+      ],
+      className: "min-w-40",
+    },
+    {
+      key: "minAmount",
+      type: "search" as const,
+      placeholder: "Monto mínimo",
+      className: "w-32",
+    },
+    {
+      key: "maxAmount",
+      type: "search" as const,
+      placeholder: "Monto máximo",
+      className: "w-32",
+    },
+  ]
+
+  const documentFilterConfigs = [
+    {
+      key: "search",
+      type: "search" as const,
+      placeholder: "Número, RUC, proveedor...",
+    },
+    {
+      key: "dateRange",
+      type: "daterange" as const,
+      placeholder: "Período de emisión",
+    },
+    {
+      key: "type",
+      type: "select" as const,
+      placeholder: "Tipo de documento",
+      options: [
+        { value: "all", label: "Todos los tipos" },
+        { value: "INVOICE", label: "Facturas" },
+        { value: "CREDIT_NOTE", label: "N. Crédito" },
+        { value: "DEBIT_NOTE", label: "N. Débito" },
+        { value: "RECEIPT", label: "Recibos" },
+        { value: "PURCHASE_ORDER", label: "O. Compra" },
+        { value: "CONTRACT", label: "Contratos" },
+      ],
+      className: "min-w-40",
+    },
+    {
+      key: "status",
+      type: "select" as const,
+      placeholder: "Estado",
+      options: [
+        { value: "all", label: "Todos los estados" },
+        { value: "APPROVED", label: "Aprobado" },
+        { value: "PENDING", label: "Pendiente" },
+        { value: "PAID", label: "Pagado" },
+      ],
+      className: "min-w-32",
+    },
+    {
+      key: "minAmount",
+      type: "search" as const,
+      placeholder: "Monto mínimo",
+      className: "w-32",
+    },
+    {
+      key: "maxAmount",
+      type: "search" as const,
+      placeholder: "Monto máximo",
+      className: "w-32",
+    },
+  ]
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Error</h2>
-          <p className="text-muted-foreground mb-4">{error}</p>
-          <Button onClick={() => router.push("/conciliations")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver a Conciliaciones
-          </Button>
-        </div>
+      <div className="container mx-auto py-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Error cargando conciliaciones: {error}
+            <Button variant="outline" size="sm" className="ml-2" onClick={clearError}>
+              Reintentar
+            </Button>
+          </AlertDescription>
+        </Alert>
       </div>
     )
   }
-
-  if (!conciliation) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Conciliación no encontrada</h2>
-          <p className="text-muted-foreground mb-4">
-            La conciliación solicitada no existe o no tienes permisos para verla.
-          </p>
-          <Button onClick={() => router.push("/conciliations")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver a Conciliaciones
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  const isWithinTolerance = Math.abs(Number(conciliation.difference)) <= Number(conciliation.toleranceAmount)
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => router.push("/conciliations")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Detalle de Conciliación</h1>
-            <p className="text-muted-foreground">ID: {conciliation.id}</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Conciliaciones Bancarias</h1>
+          <p className="text-gray-600 dark:text-gray-400">Selecciona transacciones y documentos para conciliar</p>
         </div>
-        <div className="flex items-center gap-2">
-          {getStatusBadge(conciliation.status)}
-          <Button variant="destructive" size="sm" onClick={() => setIsDeleteDialogOpen(true)} disabled={isDeleting}>
-            <Trash2 className="w-4 h-4 mr-2" />
-            Eliminar
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm">Tipo de conciliación:</Label>
+            <div className="flex items-center gap-2">
+              <span className={`text-sm ${conciliationType === "DOCUMENTS" ? "font-medium" : "text-muted-foreground"}`}>
+                Documentos
+              </span>
+              <Switch checked={conciliationType === "DETRACTIONS"} onCheckedChange={handleConciliationTypeChange} />
+              <span
+                className={`text-sm ${conciliationType === "DETRACTIONS" ? "font-medium" : "text-muted-foreground"}`}
+              >
+                Detracciones
+              </span>
+            </div>
+          </div>
+          <Button variant="outline" size="sm">
+            <Download className="w-4 h-4 mr-2" />
+            Exportar
           </Button>
         </div>
       </div>
 
-      {/* Información General */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            Información General
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Calendar className="w-4 h-4" />
-                Período
-              </div>
-              <div className="text-sm">
-                <p>
-                  <strong>Inicio:</strong> {format(new Date(conciliation.periodStart), "dd/MM/yyyy", { locale: es })}
-                </p>
-                <p>
-                  <strong>Fin:</strong> {format(new Date(conciliation.periodEnd), "dd/MM/yyyy", { locale: es })}
-                </p>
-              </div>
-            </div>
+      {/* Selection Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Transaction Selection */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CreditCard className="h-4 w-4" />
+              Transacciones Disponibles (
+              {
+                transactions.filter(
+                  (transaction) =>
+                    transaction.status === "PENDING" &&
+                    (transaction.pendingAmount === null ||
+                      Number.parseFloat(transaction.pendingAmount || transaction.amount) > 0),
+                ).length
+              }
+              )
+            </CardTitle>
+            <CardDescription className="text-xs">Selecciona una transacción bancaria</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Transaction Filters */}
+            <Card>
+              <FiltersBar
+                filters={transactionFilterConfigs}
+                values={transactionFilters}
+                onChange={handleTransactionFilterChange}
+              />
+            </Card>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Building2 className="w-4 h-4" />
-                Cuenta Bancaria
-              </div>
-              <div className="text-sm">
-                <p>
-                  <strong>Banco:</strong> {conciliation.bankAccount?.bankName}
-                </p>
-                <p>
-                  <strong>Cuenta:</strong> {conciliation.bankAccount?.accountNumber}
-                </p>
-                <p>
-                  <strong>Alias:</strong> {conciliation.bankAccount?.alias}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <User className="w-4 h-4" />
-                Creado por
-              </div>
-              <div className="text-sm">
-                <p>
-                  <strong>Usuario:</strong> {conciliation.createdBy?.firstName} {conciliation.createdBy?.lastName}
-                </p>
-                <p>
-                  <strong>Email:</strong> {conciliation.createdBy?.email}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="w-4 h-4" />
-                Fechas
-              </div>
-              <div className="text-sm">
-                <p>
-                  <strong>Creado:</strong>{" "}
-                  {format(new Date(conciliation.createdAt), "dd/MM/yyyy HH:mm", { locale: es })}
-                </p>
-                <p>
-                  <strong>Actualizado:</strong>{" "}
-                  {format(new Date(conciliation.updatedAt), "dd/MM/yyyy HH:mm", { locale: es })}
-                </p>
-                {conciliation.completedAt && (
-                  <p>
-                    <strong>Completado:</strong>{" "}
-                    {format(new Date(conciliation.completedAt), "dd/MM/yyyy HH:mm", { locale: es })}
-                  </p>
+            {loading ? (
+              <TableSkeleton rows={5} columns={4} />
+            ) : (
+              <div className="border rounded-lg">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-3 w-12"></th>
+                        <th className="text-left p-3">Descripción</th>
+                        <th className="text-left p-3">Fecha</th>
+                        <th className="text-right p-3">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {availableTransactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="text-center py-8 text-muted-foreground">
+                            No se encontraron transacciones
+                          </td>
+                        </tr>
+                      ) : (
+                        availableTransactions.map((transaction) => (
+                          <tr
+                            key={transaction.id}
+                            className={`border-b cursor-pointer transition-colors ${
+                              selectedTransaction?.id === transaction.id
+                                ? "bg-primary/5 border-primary/20"
+                                : "hover:bg-muted/50"
+                            }`}
+                            onClick={() => handleTransactionSelect(transaction)}
+                          >
+                            <td className="p-3">
+                              <input
+                                type="radio"
+                                checked={selectedTransaction?.id === transaction.id}
+                                onChange={() => {}}
+                                className="text-primary"
+                              />
+                            </td>
+                            <td className="p-3">
+                              <div className="font-medium text-sm">{transaction.description}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {transaction.operationNumber} • {transaction.bankAccount?.bank?.name || "Banco"}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {transaction.bankAccount?.alias || transaction.bankAccount?.accountNumber}
+                              </div>
+                            </td>
+                            <td className="p-3 text-sm">{formatDate(transaction.transactionDate)}</td>
+                            <td className="p-3 text-right">
+                              <div className="font-bold text-sm">{formatCurrency(transaction.amount)}</div>
+                              <Badge variant="outline" className="text-xs mt-1">
+                                {transaction.transactionType}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {totalTransactionPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 px-3 pb-3">
+                    <div className="text-sm text-gray-500">
+                      Página {transactionPage} de {totalTransactionPages}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleTransactionPageChange(transactionPage - 1)}
+                        disabled={transactionPage <= 1}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleTransactionPageChange(transactionPage + 1)}
+                        disabled={transactionPage >= totalTransactionPages}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Transacción Bancaria */}
-      {conciliation.transaction && (
+        {/* Document Selection */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wallet className="w-5 h-5" />
-              Transacción Bancaria
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              {conciliationType === "DOCUMENTS" ? "Documentos" : "Detracciones"} (
+              {
+                (conciliationType === "DOCUMENTS"
+                  ? documents.filter(
+                      (doc) => doc.status === "APPROVED" && Number.parseFloat(doc.pendingAmount || "0") > 0,
+                    )
+                  : documents.filter(
+                      (doc) =>
+                        doc.status === "APPROVED" &&
+                        doc.detraction?.hasDetraction &&
+                        Number.parseFloat(doc.detraction.pendingAmount || "0") > 0,
+                    )
+                ).length
+              }
+              )
             </CardTitle>
+            <CardDescription className="text-xs">
+              {selectedDocuments.length} seleccionado{selectedDocuments.length !== 1 ? "s" : ""}
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div>
-                <p className="text-sm text-muted-foreground">Fecha</p>
-                <p className="font-medium">
-                  {format(new Date(conciliation.transaction.transactionDate), "dd/MM/yyyy", { locale: es })}
-                </p>
+          <CardContent className="space-y-4">
+            {/* Document Filters */}
+            <Card>
+              <FiltersBar
+                filters={documentFilterConfigs}
+                values={documentFilters}
+                onChange={handleDocumentFilterChange}
+              />
+            </Card>
+
+            {loading ? (
+              <TableSkeleton rows={5} columns={5} />
+            ) : (
+              <div className="border rounded-lg">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-3 w-12"></th>
+                        <th className="text-left p-3">Documento</th>
+                        <th className="text-left p-3">Proveedor</th>
+                        <th className="text-right p-3">Pendiente</th>
+                        <th className="text-right p-3">Conciliar</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(conciliationType === "DOCUMENTS" ? availableDocuments : availableDetractions).length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="text-center py-8 text-muted-foreground">
+                            No se encontraron {conciliationType === "DOCUMENTS" ? "documentos" : "detracciones"}
+                          </td>
+                        </tr>
+                      ) : (
+                        (conciliationType === "DOCUMENTS" ? availableDocuments : availableDetractions).map(
+                          (document) => {
+                            const isSelected = selectedDocuments.some((doc) => doc.id === document.id)
+                            const pendingAmount =
+                              conciliationType === "DOCUMENTS"
+                                ? Number.parseFloat(document.pendingAmount || "0")
+                                : Number.parseFloat(document.detraction?.pendingAmount || "0")
+                            const conciliationAmount = documentConciliationAmounts[document.id] || pendingAmount
+
+                            return (
+                              <tr
+                                key={document.id}
+                                className={`border-b cursor-pointer transition-colors ${
+                                  isSelected ? "bg-primary/5 border-primary/20" : "hover:bg-muted/50"
+                                }`}
+                                onClick={() => handleDocumentSelect(document)}
+                              >
+                                <td className="p-3">
+                                  <Checkbox checked={isSelected} onChange={() => {}} />
+                                </td>
+                                <td className="p-3">
+                                  <div className="flex items-center gap-2">
+                                    {getTypeBadge(document.documentType)}
+                                    <div>
+                                      <div className="font-medium text-sm">{document.fullNumber}</div>
+                                      <div className="text-xs text-muted-foreground">
+                                        Emisión: {formatDate(document.issueDate)}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground">
+                                        Vence: {formatDate(document.dueDate || document.issueDate)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="p-3">
+                                  <div className="text-sm truncate max-w-32" title={document.supplier?.businessName}>
+                                    {document.supplier?.businessName}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground font-mono">
+                                    {document.supplier?.documentNumber}
+                                  </div>
+                                  {getStatusBadge(document.status)}
+                                </td>
+                                <td className="p-3 text-right">
+                                  <div className="font-bold text-sm">{formatCurrency(pendingAmount)}</div>
+                                  {document.detraction?.hasDetraction && conciliationType === "DOCUMENTS" && (
+                                    <Badge variant="secondary" className="text-xs mt-1">
+                                      Det: {formatCurrency(document.detraction.pendingAmount)}
+                                    </Badge>
+                                  )}
+                                  {document.hasRetention && (
+                                    <Badge variant="outline" className="text-xs mt-1">
+                                      Ret: {formatCurrency(document.retentionAmount)}
+                                    </Badge>
+                                  )}
+                                </td>
+                                <td className="p-3 text-right">
+                                  {isSelected ? (
+                                    <div className="space-y-1">
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max={pendingAmount}
+                                        value={conciliationAmount}
+                                        onChange={(e) => {
+                                          e.stopPropagation()
+                                          handleConciliationAmountChange(
+                                            document.id,
+                                            Number.parseFloat(e.target.value) || 0,
+                                          )
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="h-8 text-xs text-right w-24"
+                                      />
+                                      <div className="text-xs text-muted-foreground">
+                                        {((conciliationAmount / pendingAmount) * 100).toFixed(1)}%
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-muted-foreground">-</div>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          },
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {(conciliationType === "DOCUMENTS" ? totalDocumentPages : totalDetractionPages) > 1 && (
+                  <div className="flex items-center justify-between mt-4 px-3 pb-3">
+                    <div className="text-sm text-gray-500">
+                      Página {documentPage} de{" "}
+                      {conciliationType === "DOCUMENTS" ? totalDocumentPages : totalDetractionPages}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDocumentPageChange(documentPage - 1)}
+                        disabled={documentPage <= 1}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDocumentPageChange(documentPage + 1)}
+                        disabled={
+                          documentPage >= (conciliationType === "DOCUMENTS" ? totalDocumentPages : totalDetractionPages)
+                        }
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Descripción</p>
-                <p className="font-medium">{conciliation.transaction.description}</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Summary and Action */}
+      {selectedTransaction && selectedDocuments.length > 0 && (
+        <Card>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
+              <div className="text-center">
+                <div className="text-sm text-muted-foreground">Transacción</div>
+                <div className="font-bold text-xl">{formatCurrency(getTransactionAmount())}</div>
+                <div className="text-sm text-muted-foreground truncate">{selectedTransaction.description}</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {selectedTransaction.bankAccount?.bank?.name || "Banco"} -{" "}
+                  {selectedTransaction.bankAccount?.alias || selectedTransaction.bankAccount?.accountNumber}
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Monto</p>
-                <p className="font-medium font-mono text-red-600">
-                  S/{" "}
-                  {Math.abs(Number(conciliation.transaction.amount)).toLocaleString("es-PE", {
-                    minimumFractionDigits: 2,
-                  })}
-                </p>
+
+              <div className="flex justify-center">
+                <ArrowRight className="h-8 w-8 text-muted-foreground" />
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Operación</p>
-                <p className="font-medium font-mono">{conciliation.transaction.operationNumber}</p>
+
+              <div className="text-center">
+                <div className="text-sm text-muted-foreground">
+                  {conciliationType === "DOCUMENTS" ? "Documentos" : "Detracciones"}
+                </div>
+                <div className="font-bold text-xl">{formatCurrency(getSelectedTotal())}</div>
+                <div className="text-sm text-muted-foreground">
+                  {selectedDocuments.length} seleccionado{selectedDocuments.length !== 1 ? "s" : ""}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Conciliación{" "}
+                  {getSelectedTotal() <
+                  selectedDocuments.reduce((sum, doc) => {
+                    const pendingAmount =
+                      conciliationType === "DOCUMENTS"
+                        ? Number.parseFloat(doc.pendingAmount || "0")
+                        : Number.parseFloat(doc.detraction?.pendingAmount || "0")
+                    return sum + pendingAmount
+                  }, 0)
+                    ? "parcial"
+                    : "completa"}
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Canal</p>
-                <p className="font-medium">{conciliation.transaction.channel || "-"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Balance</p>
-                <p className="font-medium font-mono">
-                  S/ {Number(conciliation.transaction.balance).toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-                </p>
+
+              <div className="text-center">
+                <div className="text-sm text-muted-foreground">Diferencia</div>
+                <div className={`font-bold text-xl ${getDifference() === 0 ? "text-green-600" : "text-orange-600"}`}>
+                  {formatCurrency(getDifference())}
+                </div>
+                <Button onClick={handleCreateConciliation} className="mt-3 w-full" size="lg">
+                  Conciliar
+                </Button>
+                {getDifference() > 5 && (
+                  <div className="text-xs text-orange-600 mt-1">Diferencia excede tolerancia (S/ 5.00)</div>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Resumen de Conciliación */}
+      {/* Existing Conciliations Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Resumen de Conciliación</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="text-center p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
-              <p className="text-sm text-muted-foreground">Saldo Bancario</p>
-              <p className="text-xl font-bold text-blue-600">
-                S/ {Number(conciliation.bankBalance).toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <div className="text-center p-4 bg-green-500/10 rounded-lg border border-green-500/20">
-              <p className="text-sm text-muted-foreground">Saldo Contable</p>
-              <p className="text-xl font-bold text-green-600">
-                S/ {Number(conciliation.bookBalance).toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <div
-              className={`text-center p-4 rounded-lg border ${
-                isWithinTolerance ? "bg-emerald-500/10 border-emerald-500/20" : "bg-red-500/10 border-red-500/20"
-              }`}
-            >
-              <p className="text-sm text-muted-foreground">Diferencia</p>
-              <p className={`text-xl font-bold ${isWithinTolerance ? "text-emerald-600" : "text-red-600"}`}>
-                S/ {Math.abs(Number(conciliation.difference)).toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <div className="text-center p-4 bg-amber-500/10 rounded-lg border border-amber-500/20">
-              <p className="text-sm text-muted-foreground">Tolerancia</p>
-              <p className="text-xl font-bold text-amber-600">
-                S/ {Number(conciliation.toleranceAmount).toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-              </p>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Conciliaciones Existentes</CardTitle>
+              <CardDescription>{conciliations.length} conciliaciones registradas</CardDescription>
             </div>
           </div>
-
-          <Separator className="my-6" />
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <p className="text-sm text-muted-foreground">Total Documentos</p>
-              <p className="text-2xl font-bold">{conciliation.totalDocuments}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-muted-foreground">Items Conciliados</p>
-              <p className="text-2xl font-bold text-emerald-600">{conciliation.conciliatedItems}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-muted-foreground">Items Pendientes</p>
-              <p className="text-2xl font-bold text-amber-600">{conciliation.pendingItems}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Items de Conciliación */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Items de Conciliación ({conciliation.items?.length || 0})</CardTitle>
-          <CardDescription>Documentos incluidos en esta conciliación</CardDescription>
         </CardHeader>
         <CardContent>
-          {conciliation.items && conciliation.items.length > 0 ? (
-            <div className="space-y-4">
-              {conciliation.items.map((item: ConciliationItem) => (
-                <Card key={item.id} className="border-l-4 border-l-blue-500">
-                  <CardContent className="p-4">
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-semibold">{item.document?.fullNumber}</h4>
-                          {getItemStatusBadge(item.status)}
-                        </div>
-                        <p className="text-sm text-muted-foreground">{item.document?.supplier?.businessName}</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">Monto Documento:</span>
-                            <p className="font-mono">
-                              S/ {Number(item.documentAmount).toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Monto Conciliado:</span>
-                            <p className="font-mono text-emerald-600">
-                              S/ {Number(item.conciliatedAmount).toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Diferencia:</span>
-                            <p
-                              className={`font-mono ${
-                                Math.abs(Number(item.difference)) < 0.01 ? "text-emerald-600" : "text-red-600"
-                              }`}
-                            >
-                              S/{" "}
-                              {Math.abs(Number(item.difference)).toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-                            </p>
-                          </div>
-                        </div>
-                        {item.notes && (
-                          <div className="mt-2 p-2 bg-muted/50 rounded text-sm">
-                            <strong>Notas:</strong> {item.notes}
-                          </div>
-                        )}
-                        {item.systemNotes && (
-                          <div className="mt-2 p-2 bg-blue-500/10 rounded text-sm">
-                            <strong>Notas del Sistema:</strong> {item.systemNotes}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+          {loading ? (
+            <TableSkeleton rows={5} columns={6} />
+          ) : conciliations.length === 0 ? (
+            <div className="text-center py-8">
+              <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-muted-foreground">No hay conciliaciones registradas</p>
             </div>
           ) : (
-            <div className="text-center py-8">
-              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No hay items de conciliación</p>
-            </div>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-3">Referencia</th>
+                      <th className="text-left p-3">Fecha</th>
+                      <th className="text-left p-3">Banco</th>
+                      <th className="text-center p-3">Tipo</th>
+                      <th className="text-center p-3">Estado</th>
+                      <th className="text-right p-3">Monto</th>
+                      <th className="text-center p-3">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedConciliations.map((conciliation) => (
+                      <tr key={conciliation.id} className="border-b hover:bg-muted/50">
+                        <td className="p-3">
+                          <div className="font-medium">{conciliation.reference || "Sin referencia"}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {conciliation.totalDocuments} documento{conciliation.totalDocuments !== 1 ? "s" : ""}
+                          </div>
+                        </td>
+                        <td className="p-3">{formatDate(conciliation.createdAt)}</td>
+                        <td className="p-3">
+                          <div className="text-sm">{conciliation.bankAccount?.bank?.name || "Banco"}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {conciliation.bankAccount?.alias || conciliation.bankAccount?.accountNumber}
+                          </div>
+                        </td>
+                        <td className="p-3 text-center">
+                          <Badge variant="outline">{conciliation.type}</Badge>
+                        </td>
+                        <td className="p-3 text-center">
+                          <Badge
+                            className={
+                              conciliation.status === "COMPLETED"
+                                ? "bg-green-100 text-green-800"
+                                : conciliation.status === "PENDING"
+                                  ? "bg-yellow-100 text-yellow-800"
+                                  : "bg-blue-100 text-blue-800"
+                            }
+                          >
+                            {conciliation.status}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="font-medium">{formatCurrency(conciliation.totalAmount)}</div>
+                          {Number.parseFloat(conciliation.difference) !== 0 && (
+                            <div className="text-xs text-orange-600">
+                              Dif: {formatCurrency(conciliation.difference)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3 text-center">
+                          <Button variant="ghost" size="sm">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-6">
+                  <div className="text-sm text-gray-500">
+                    Mostrando {(currentPage - 1) * itemsPerPage + 1} a{" "}
+                    {Math.min(currentPage * itemsPerPage, conciliations.length)} de {conciliations.length}{" "}
+                    conciliaciones
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage <= 1}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      Anterior
+                    </Button>
+                    <span className="text-sm">
+                      Página {currentPage} de {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage >= totalPages}
+                    >
+                      Siguiente
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
 
-      {/* Diálogo de confirmación para eliminar */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Está seguro de eliminar esta conciliación?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción no se puede deshacer. Se eliminará la conciliación y todos sus items asociados. Los documentos
-              y transacciones volverán a su estado anterior.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-red-600 hover:bg-red-700">
-              {isDeleting ? (
-                <>
-                  <div className="animate-spin w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full" />
-                  Eliminando...
-                </>
-              ) : (
-                "Eliminar"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Conciliation Dialog */}
+      <ConciliationDialog
+        open={showConciliationDialog}
+        onOpenChange={setShowConciliationDialog}
+        selectedTransaction={selectedTransaction}
+        selectedDocuments={selectedDocuments}
+        documentConciliationAmounts={documentConciliationAmounts}
+        conciliationType={conciliationType}
+        bankAccounts={bankAccounts}
+      />
     </div>
   )
 }

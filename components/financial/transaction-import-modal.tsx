@@ -28,8 +28,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { useTransactionsStore } from "@/stores/transactions-store"
 import { useBankAccountsStore } from "@/stores/bank-accounts-store"
-import type { TransactionType, CreateTransactionDto } from "@/types/transactions"
-import type { BankAccount } from "@/types/bank-accounts"
+import type { TransactionType, CreateTransactionDto } from "@/types"
+import type { BankAccount } from "@/types"
 import * as XLSX from "xlsx"
 import { useAuthStore } from "@/stores/authStore"
 
@@ -39,6 +39,7 @@ interface TransactionImportModalProps {
   onImportComplete?: (hasSuccessfulImports: boolean) => void
 }
 
+// Actualizar la interface ParsedTransaction para incluir los nuevos tipos
 interface ParsedTransaction {
   transactionDate: string
   valueDate?: string
@@ -53,10 +54,7 @@ interface ParsedTransaction {
   reference?: string
   channel?: string
   transactionType: TransactionType
-  isITF?: boolean
-  isDetraction?: boolean
-  isBankFee?: boolean
-  isTransfer?: boolean
+  // Remover los flags booleanos ya que ahora son tipos de transacción
 }
 
 interface ImportSummary {
@@ -102,19 +100,33 @@ export default function TransactionImportModal({ open, onOpenChange, onImportCom
 
   // Stores
   const { createTransaction } = useTransactionsStore()
-  const { activeBankAccounts, loading: bankAccountsLoading, fetchActiveBankAccounts } = useBankAccountsStore()
+  const { bankAccounts, loading: bankAccountsLoading, getBankAccountsByCompany } = useBankAccountsStore()
   const { user } = useAuthStore()
 
-  // Estado local para las cuentas bancarias
+  // Estado local para las cuentas bancarias activas
+  const [activeBankAccounts, setActiveBankAccounts] = useState<BankAccount[]>([])
   const [accountOptions, setAccountOptions] = useState<{ label: string; value: string }[]>([])
 
   // Cargar cuentas bancarias activas al abrir el modal
   useEffect(() => {
     if (open && user?.companyId) {
       console.log("Cargando cuentas bancarias activas para companyId:", user.companyId)
-      fetchActiveBankAccounts(user.companyId)
+      loadActiveBankAccounts()
     }
-  }, [open, user?.companyId, fetchActiveBankAccounts])
+  }, [open, user?.companyId])
+
+  const loadActiveBankAccounts = async () => {
+    if (!user?.companyId) return
+
+    try {
+      const accounts = await getBankAccountsByCompany(user.companyId)
+      setActiveBankAccounts(accounts)
+      console.log("Cuentas bancarias activas cargadas:", accounts.length)
+    } catch (error) {
+      console.error("Error cargando cuentas bancarias activas:", error)
+      setActiveBankAccounts([])
+    }
+  }
 
   // Actualizar opciones cuando cambian las cuentas activas
   useEffect(() => {
@@ -122,7 +134,7 @@ export default function TransactionImportModal({ open, onOpenChange, onImportCom
       console.log("Actualizando opciones de cuentas con:", activeBankAccounts.length, "cuentas activas")
 
       const options = activeBankAccounts.map((account: BankAccount) => ({
-        label: `${account.accountNumber} - ${account.bankName}${account.alias ? ` (${account.alias})` : ""}`,
+        label: `${account.accountNumber} - ${account.bank?.name || "Banco"}${account.alias ? ` (${account.alias})` : ""}`,
         value: account.id,
       }))
 
@@ -465,25 +477,64 @@ export default function TransactionImportModal({ open, onOpenChange, onImportCom
               ? row[channelIndex].toString().trim()
               : ""
 
-          // Validar datos mínimos
+          // Validar datos mínimos y fechas
           if (!date || !description || isNaN(amount)) {
             console.log(`Fila ${i} tiene datos insuficientes:`, { date, description, amount, row })
             errors.push(`Fila ${i + 1}: Datos insuficientes o inválidos (fecha, descripción y monto son requeridos)`)
             continue
           }
 
-          // Determinar el tipo de transacción basado en el monto
-          const transactionType: TransactionType = amount < 0 ? "DEBIT" : "CREDIT"
+          // Validar que la fecha se pueda parsear correctamente
+          try {
+            parseDate(date)
+            if (valueDate) {
+              parseDate(valueDate)
+            }
+          } catch (error) {
+            console.log(`Fila ${i} tiene fecha inválida:`, { date, valueDate, error })
+            errors.push(`Fila ${i + 1}: Formato de fecha inválido - ${error}`)
+            continue
+          }
 
-          // Clasificación automática basada en la descripción
+          // Actualizar la lógica de clasificación automática en parseTransactionFile
+          // Reemplazar la sección de clasificación automática:
+
+          // Determinar el tipo de transacción basado en el monto y descripción
+          let transactionType: TransactionType = "CREDIT" // Default
+
           const descLower = description.toLowerCase()
-          const isITF = descLower.includes("itf") || descLower.includes("impuesto")
-          const isDetraction = descLower.includes("detr") || descLower.includes("detrac")
-          const isBankFee = descLower.includes("comis") || descLower.includes("manten") || descLower.includes("portes")
-          const isTransfer =
-            descLower.includes("transfer") || descLower.includes("cce") || descLower.includes("interbancaria")
 
-          // Crear el objeto de transacción
+          // Clasificación más específica basada en la descripción
+          if (descLower.includes("itf") || descLower.includes("impuesto")) {
+            transactionType = "ITF"
+          } else if (descLower.includes("detr") || descLower.includes("detrac")) {
+            transactionType = "DETRACTION"
+          } else if (descLower.includes("comis") || descLower.includes("manten") || descLower.includes("portes")) {
+            transactionType = "FEE"
+          } else if (
+            descLower.includes("transfer") ||
+            descLower.includes("cce") ||
+            descLower.includes("interbancaria")
+          ) {
+            transactionType = "TRANSFER"
+          } else if (descLower.includes("pago") || descLower.includes("payment")) {
+            transactionType = "PAYMENT"
+          } else if (
+            descLower.includes("depósito") ||
+            descLower.includes("deposito") ||
+            descLower.includes("deposit")
+          ) {
+            transactionType = "DEPOSIT"
+          } else if (descLower.includes("retiro") || descLower.includes("withdrawal")) {
+            transactionType = "WITHDRAWAL"
+          } else if (descLower.includes("interés") || descLower.includes("interes") || descLower.includes("interest")) {
+            transactionType = "INTEREST"
+          } else {
+            // Clasificación por monto como fallback
+            transactionType = amount < 0 ? "DEBIT" : "CREDIT"
+          }
+
+          // Crear el objeto de transacción (actualizar para remover los flags booleanos)
           const transaction: ParsedTransaction = {
             transactionDate: date,
             valueDate: valueDate || undefined,
@@ -498,10 +549,6 @@ export default function TransactionImportModal({ open, onOpenChange, onImportCom
             reference: reference || undefined,
             channel: channel || undefined,
             transactionType,
-            isITF,
-            isDetraction,
-            isBankFee,
-            isTransfer,
           }
 
           transactions.push(transaction)
@@ -537,41 +584,156 @@ export default function TransactionImportModal({ open, onOpenChange, onImportCom
 
   const parseDate = (dateStr: string): string => {
     try {
-      // Intentar diferentes formatos de fecha comunes
+      // Limpiar la cadena de fecha
+      const cleanDateStr = dateStr.toString().trim()
+
+      if (!cleanDateStr) {
+        throw new Error("Fecha vacía")
+      }
+
+      console.log("Parseando fecha:", cleanDateStr)
+
       let date: Date
 
-      // Formato DD/MM/YYYY
-      if (dateStr.includes("/")) {
-        const [day, month, year] = dateStr.split("/")
-        date = new Date(Number.parseInt(year), Number.parseInt(month) - 1, Number.parseInt(day))
-      }
-      // Formato DD-MM-YYYY
-      else if (dateStr.includes("-") && dateStr.split("-").length === 3) {
-        const parts = dateStr.split("-")
-        if (parts[0].length === 2) {
-          // DD-MM-YYYY
-          const [day, month, year] = parts
-          date = new Date(Number.parseInt(year), Number.parseInt(month) - 1, Number.parseInt(day))
+      // Formato DD/MM/YYYY o DD/MM/YY
+      if (cleanDateStr.includes("/")) {
+        const parts = cleanDateStr.split("/")
+        if (parts.length === 3) {
+          let [day, month, year] = parts.map((p) => p.trim())
+
+          // Convertir año de 2 dígitos a 4 dígitos
+          if (year.length === 2) {
+            const currentYear = new Date().getFullYear()
+            const currentCentury = Math.floor(currentYear / 100) * 100
+            const yearNum = Number.parseInt(year)
+            year = (yearNum + currentCentury).toString()
+          }
+
+          const dayNum = Number.parseInt(day)
+          const monthNum = Number.parseInt(month)
+          const yearNum = Number.parseInt(year)
+
+          if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum)) {
+            throw new Error("Componentes de fecha inválidos")
+          }
+
+          if (monthNum < 1 || monthNum > 12) {
+            throw new Error("Mes inválido")
+          }
+
+          if (dayNum < 1 || dayNum > 31) {
+            throw new Error("Día inválido")
+          }
+
+          // Crear fecha (mes - 1 porque Date usa 0-11 para meses)
+          date = new Date(yearNum, monthNum - 1, dayNum, 0, 0, 0, 0)
         } else {
-          // YYYY-MM-DD
-          date = new Date(dateStr)
+          throw new Error("Formato de fecha con / inválido")
         }
       }
-      // Formato ISO o otros formatos que Date puede parsear
+      // Formato DD-MM-YYYY o YYYY-MM-DD
+      else if (cleanDateStr.includes("-")) {
+        const parts = cleanDateStr.split("-")
+        if (parts.length === 3) {
+          if (parts[0].length === 4) {
+            // Formato YYYY-MM-DD (ISO)
+            const [year, month, day] = parts.map((p) => p.trim())
+            const yearNum = Number.parseInt(year)
+            const monthNum = Number.parseInt(month)
+            const dayNum = Number.parseInt(day)
+
+            if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum)) {
+              throw new Error("Componentes de fecha inválidos")
+            }
+
+            date = new Date(yearNum, monthNum - 1, dayNum, 0, 0, 0, 0)
+          } else {
+            // Formato DD-MM-YYYY
+            let [day, month, year] = parts.map((p) => p.trim())
+
+            // Convertir año de 2 dígitos a 4 dígitos
+            if (year.length === 2) {
+              const currentYear = new Date().getFullYear()
+              const currentCentury = Math.floor(currentYear / 100) * 100
+              const yearNum = Number.parseInt(year)
+              year = (yearNum + currentCentury).toString()
+            }
+
+            const dayNum = Number.parseInt(day)
+            const monthNum = Number.parseInt(month)
+            const yearNum = Number.parseInt(year)
+
+            if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum)) {
+              throw new Error("Componentes de fecha inválidos")
+            }
+
+            date = new Date(yearNum, monthNum - 1, dayNum, 0, 0, 0, 0)
+          }
+        } else {
+          throw new Error("Formato de fecha con - inválido")
+        }
+      }
+      // Formato DD.MM.YYYY
+      else if (cleanDateStr.includes(".")) {
+        const parts = cleanDateStr.split(".")
+        if (parts.length === 3) {
+          let [day, month, year] = parts.map((p) => p.trim())
+
+          // Convertir año de 2 dígitos a 4 dígitos
+          if (year.length === 2) {
+            const currentYear = new Date().getFullYear()
+            const currentCentury = Math.floor(currentYear / 100) * 100
+            const yearNum = Number.parseInt(year)
+            year = (yearNum + currentCentury).toString()
+          }
+
+          const dayNum = Number.parseInt(day)
+          const monthNum = Number.parseInt(month)
+          const yearNum = Number.parseInt(year)
+
+          if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum)) {
+            throw new Error("Componentes de fecha inválidos")
+          }
+
+          date = new Date(yearNum, monthNum - 1, dayNum, 0, 0, 0, 0)
+        } else {
+          throw new Error("Formato de fecha con . inválido")
+        }
+      }
+      // Intentar parsear como fecha ISO o formato que Date pueda entender
       else {
-        date = new Date(dateStr)
+        date = new Date(cleanDateStr)
       }
 
       // Verificar que la fecha es válida
       if (isNaN(date.getTime())) {
-        throw new Error("Fecha inválida")
+        throw new Error("Fecha resultante inválida")
       }
 
-      return date.toISOString()
+      // Verificar que la fecha esté en un rango razonable (últimos 10 años hasta 1 año en el futuro)
+      const now = new Date()
+      const tenYearsAgo = new Date(now.getFullYear() - 10, 0, 1)
+      const oneYearFromNow = new Date(now.getFullYear() + 1, 11, 31)
+
+      if (date < tenYearsAgo || date > oneYearFromNow) {
+        console.warn("Fecha fuera del rango esperado:", date.toISOString())
+      }
+
+      // Generar ISO string con timezone UTC
+      const isoString = date.toISOString()
+      console.log("Fecha parseada exitosamente:", cleanDateStr, "->", isoString)
+
+      return isoString
     } catch (error) {
       console.error("Error parseando fecha:", dateStr, error)
-      // Retornar fecha actual como fallback
-      return new Date().toISOString()
+
+      // Como último recurso, usar la fecha actual
+      const fallbackDate = new Date()
+      fallbackDate.setHours(0, 0, 0, 0) // Resetear a medianoche
+      const fallbackIso = fallbackDate.toISOString()
+
+      console.warn("Usando fecha actual como fallback:", fallbackIso)
+      return fallbackIso
     }
   }
 
@@ -640,59 +802,33 @@ export default function TransactionImportModal({ open, onOpenChange, onImportCom
               for (let j = 0; j < transactions.length; j++) {
                 const transaction = transactions[j]
 
-                // Inicializar con valores por defecto para evitar el error
-                let transactionData: CreateTransactionDto = {
-                  companyId: user.companyId,
-                  bankAccountId: selectedBankAccountId,
-                  transactionDate: new Date().toISOString(),
-                  valueDate: new Date().toISOString(),
-                  description: "",
-                  transactionType: "CREDIT",
-                  amount: 0,
-                  balance: 0,
-                  branch: "N/A",
-                  operationNumber: "",
-                  operationTime: "00:00:00",
-                  operatorUser: "SISTEMA",
-                  utc: "-05:00",
-                  reference: "IMPORTACIÓN AUTOMÁTICA",
-                  channel: "IMPORTACIÓN",
-                  fileName: files[0].name,
-                  isITF: false,
-                  isDetraction: false,
-                  isBankFee: false,
-                  isTransfer: false,
-                  supplierId: undefined,
-                }
-
                 try {
                   setCurrentOperation(`Creando transacción ${j + 1}/${transactions.length}`)
 
                   // Preparar los datos de la transacción según CreateTransactionDto
-                  transactionData = {
+                  // IMPORTANTE: Enviar las fechas como strings ISO 8601, no como objetos Date
+                  // Actualizar la creación del payload en handleUpload
+                  const transactionData: CreateTransactionDto = {
                     companyId: user.companyId,
                     bankAccountId: selectedBankAccountId,
-                    transactionDate: parseDate(transaction.transactionDate),
-                    valueDate: transaction.valueDate
-                      ? parseDate(transaction.valueDate)
-                      : parseDate(transaction.transactionDate),
+                    transactionDate: parseDate(transaction.transactionDate), // String ISO 8601
+                    valueDate: transaction.valueDate ? parseDate(transaction.valueDate) : undefined, // String ISO 8601 o undefined
                     description: transaction.description,
                     transactionType: transaction.transactionType,
                     amount: Number.parseFloat(transaction.amount.toFixed(2)),
                     balance: Number.parseFloat(transaction.balance.toFixed(2)),
-                    branch: transaction.branch || "N/A",
-                    operationNumber: transaction.operationNumber,
-                    operationTime: transaction.operationTime || "00:00:00",
-                    operatorUser: transaction.operatorUser || "SISTEMA",
-                    utc: transaction.utc || "-05:00",
-                    reference: transaction.reference || "IMPORTACIÓN AUTOMÁTICA",
-                    channel: transaction.channel || "IMPORTACIÓN",
+                    branch: transaction.branch || undefined,
+                    operationNumber: transaction.operationNumber || undefined,
+                    operationTime: transaction.operationTime || undefined,
+                    operatorUser: transaction.operatorUser || undefined,
+                    utc: transaction.utc || undefined,
+                    reference: transaction.reference || undefined,
+                    channel: transaction.channel || undefined,
                     fileName: files[0].name,
-                    isITF: transaction.isITF || false,
-                    isDetraction: transaction.isDetraction || false,
-                    isBankFee: transaction.isBankFee || false,
-                    isTransfer: transaction.isTransfer || false,
-                    supplierId: undefined,
+                    importedAt: new Date().toISOString(), // String ISO 8601
+                    status: "PENDING",
+                    conciliatedAmount: undefined, // Ahora es opcional
+                    pendingAmount: undefined, // Ahora es opcional
                   }
 
                   console.log(`Creando transacción ${j + 1}/${transactions.length}:`, {
@@ -736,7 +872,6 @@ export default function TransactionImportModal({ open, onOpenChange, onImportCom
                   }
                 } catch (error: any) {
                   console.error(`Error procesando transacción ${j + 1}:`, error)
-                  console.error("Payload que causó el error:", JSON.stringify(transactionData, null, 2))
 
                   // Categorizar el error
                   const { type, details } = categorizeError(error)
@@ -746,7 +881,7 @@ export default function TransactionImportModal({ open, onOpenChange, onImportCom
                     index: j,
                     error: `Error en transacción ${j + 1}: ${transaction.description}`,
                     errorType: type,
-                    payload: transactionData,
+                    payload: undefined, // No incluir payload si falló antes de crearlo
                     httpStatus: error?.response?.status,
                     timestamp: new Date(),
                     details,
@@ -1275,7 +1410,7 @@ export default function TransactionImportModal({ open, onOpenChange, onImportCom
               disabled={uploading}
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
             >
-              {importSummary && importSummary.successCount > 0 ? "Finalizar y Actualizar" : "Cerrar"}
+              {importSummary && importSummary.successCount > 0 ? "Cerrar" : "Cerrar"}
             </Button>
           </div>
         </div>

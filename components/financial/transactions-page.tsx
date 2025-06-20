@@ -21,7 +21,7 @@ import {
   ChevronsRight,
 } from "lucide-react"
 import { useTransactionsStore } from "@/stores/transactions-store"
-import { useBankAccountsStore } from "@/stores/bank-accounts-store"
+import { useBanksStore } from "@/stores/bank-store"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
 import { FiltersBar } from "@/components/ui/filters-bar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -53,17 +53,24 @@ export default function TransactionsPage() {
 
   // Stores
   const { transactions, loading, error, fetchTransactions, clearError } = useTransactionsStore()
-  const { bankAccounts, fetchActiveBankAccounts, getAccountOptions } = useBankAccountsStore()
+  const { banks, getActiveBanks, clearError: clearBanksError } = useBanksStore()
   const { user } = useAuthStore()
+
+  const [selectedTransactions, setSelectedTransactions] = useState<string[]>([])
+  const [selectAll, setSelectAll] = useState(false)
+
+  const [loadingAll, setLoadingAll] = useState(false)
+  const [allDataLoaded, setAllDataLoaded] = useState(false)
 
   // Cargar datos al montar el componente
   useEffect(() => {
     if (user?.companyId) {
       console.log("Cargando datos para companyId:", user.companyId)
-      fetchTransactions(user.companyId)
-      fetchActiveBankAccounts(user.companyId)
+      // Cargar con límite más alto inicialmente
+      fetchTransactions(user.companyId, { page: 1, limit: 100 })
+      getActiveBanks()
     }
-  }, [user?.companyId, fetchTransactions, fetchActiveBankAccounts])
+  }, [user?.companyId, fetchTransactions, getActiveBanks])
 
   const handleFilterChange = (key: string, value: any) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
@@ -91,9 +98,10 @@ export default function TransactionsPage() {
     if (user?.companyId) {
       setRefreshing(true)
       clearError() // Limpiar errores previos
+      clearBanksError() // Limpiar errores de banks
       try {
         await fetchTransactions(user.companyId)
-        await fetchActiveBankAccounts(user.companyId)
+        await getActiveBanks()
       } catch (error) {
         console.error("Error al refrescar datos:", error)
       } finally {
@@ -102,10 +110,38 @@ export default function TransactionsPage() {
     }
   }
 
+  const handleLoadAllData = async () => {
+    if (user?.companyId) {
+      setLoadingAll(true)
+      try {
+        // Cargar con un límite alto para obtener todos los datos
+        await fetchTransactions(user.companyId, { page: 1, limit: 1000 })
+        setAllDataLoaded(true)
+      } catch (error) {
+        console.error("Error al cargar todos los datos:", error)
+      } finally {
+        setLoadingAll(false)
+      }
+    }
+  }
+
+  // Actualizar la función getTypeBadge para incluir los nuevos tipos
   const getTypeBadge = (type: TransactionType) => {
-    const typeConfig = {
+    const typeConfig: Record<TransactionType, { color: string; label: string; icon: any }> = {
       DEBIT: { color: "bg-red-500/10 text-red-600 border-red-500/20", label: "Débito", icon: TrendingDown },
       CREDIT: { color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", label: "Crédito", icon: TrendingUp },
+      TRANSFER: { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", label: "Transferencia", icon: TrendingUp },
+      FEE: { color: "bg-orange-500/10 text-orange-600 border-orange-500/20", label: "Comisión", icon: TrendingDown },
+      INTEREST: { color: "bg-green-500/10 text-green-600 border-green-500/20", label: "Interés", icon: TrendingUp },
+      DETRACTION: {
+        color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+        label: "Detracción",
+        icon: TrendingDown,
+      },
+      ITF: { color: "bg-pink-500/10 text-pink-600 border-pink-500/20", label: "ITF", icon: TrendingDown },
+      PAYMENT: { color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20", label: "Pago", icon: TrendingDown },
+      DEPOSIT: { color: "bg-teal-500/10 text-teal-600 border-teal-500/20", label: "Depósito", icon: TrendingUp },
+      WITHDRAWAL: { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", label: "Retiro", icon: TrendingDown },
     }
 
     const config = typeConfig[type]
@@ -118,22 +154,32 @@ export default function TransactionsPage() {
     )
   }
 
+  // Actualizar la función getTransactionFlags para usar los nuevos tipos
   const getTransactionFlags = (transaction: any) => {
     const flags = []
-    if (transaction.isITF) flags.push({ label: "ITF", color: "bg-purple-500/10 text-purple-600" })
-    if (transaction.isDetraction) flags.push({ label: "Detracción", color: "bg-orange-500/10 text-orange-600" })
-    if (transaction.isBankFee) flags.push({ label: "Comisión", color: "bg-red-500/10 text-red-600" })
-    if (transaction.isTransfer) flags.push({ label: "Transferencia", color: "bg-blue-500/10 text-blue-600" })
+
+    // Ahora estos son tipos de transacción, no flags booleanos
+    if (transaction.transactionType === "ITF") {
+      flags.push({ label: "ITF", color: "bg-pink-500/10 text-pink-600" })
+    }
+    if (transaction.transactionType === "DETRACTION") {
+      flags.push({ label: "Detracción", color: "bg-purple-500/10 text-purple-600" })
+    }
+    if (transaction.transactionType === "FEE") {
+      flags.push({ label: "Comisión", color: "bg-orange-500/10 text-orange-600" })
+    }
+    if (transaction.transactionType === "TRANSFER") {
+      flags.push({ label: "Transferencia", color: "bg-blue-500/10 text-blue-600" })
+    }
+
     return flags
   }
 
   const filteredTransactions = transactions.filter((transaction) => {
     const matchesSearch =
       transaction.description.toLowerCase().includes(filters.search.toLowerCase()) ||
-      transaction.operationNumber.includes(filters.search) ||
-      (transaction.reference && transaction.reference.toLowerCase().includes(filters.search.toLowerCase())) ||
-      (transaction.supplier?.businessName &&
-        transaction.supplier.businessName.toLowerCase().includes(filters.search.toLowerCase()))
+      (transaction.operationNumber && transaction.operationNumber.includes(filters.search)) ||
+      (transaction.reference && transaction.reference.toLowerCase().includes(filters.search.toLowerCase()))
 
     const matchesBankAccount =
       filters.bankAccounts.length === 0 || (filters.bankAccounts as string[]).includes(transaction.bankAccountId)
@@ -152,28 +198,86 @@ export default function TransactionsPage() {
     return matchesSearch && matchesBankAccount && matchesStatus && matchesType && matchesDate
   })
 
+  // Ordenar por fecha y hora (más reciente primero)
+  const sortedTransactions = [...filteredTransactions].sort((a, b) => {
+    const dateA = new Date(a.transactionDate)
+    const dateB = new Date(b.transactionDate)
+
+    // Si las fechas son iguales, ordenar por hora de operación
+    if (dateA.getTime() === dateB.getTime() && a.operationTime && b.operationTime) {
+      return b.operationTime.localeCompare(a.operationTime)
+    }
+
+    return dateB.getTime() - dateA.getTime()
+  })
+
   // Cálculos de paginación
-  const totalItems = filteredTransactions.length
+  const totalItems = sortedTransactions.length
   const totalPages = Math.ceil(totalItems / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
-  const paginatedTransactions = filteredTransactions.slice(startIndex, endIndex)
+  const paginatedTransactions = sortedTransactions.slice(startIndex, endIndex)
 
   const statusOptions = [
-    { value: "IMPORTED", label: "Importado" },
     { value: "PENDING", label: "Pendiente" },
-    { value: "CONCILIATED", label: "Conciliado" },
-    { value: "PARTIALLY_CONCILIATED", label: "Parcialmente Conciliado" },
-    { value: "EXCLUDED", label: "Excluido" },
+    { value: "PROCESSED", label: "Procesado" },
+    { value: "RECONCILED", label: "Conciliado" },
+    { value: "CANCELLED", label: "Cancelado" },
   ]
 
+  // Actualizar las opciones de tipos de transacción para incluir los nuevos tipos
   const typeOptions = [
     { value: "DEBIT", label: "Débito" },
     { value: "CREDIT", label: "Crédito" },
+    { value: "TRANSFER", label: "Transferencia" },
+    { value: "FEE", label: "Comisión" },
+    { value: "INTEREST", label: "Interés" },
+    { value: "DETRACTION", label: "Detracción" },
+    { value: "ITF", label: "ITF" },
+    { value: "PAYMENT", label: "Pago" },
+    { value: "DEPOSIT", label: "Depósito" },
+    { value: "WITHDRAWAL", label: "Retiro" },
   ]
 
-  // Usar las opciones del store de bank accounts
-  const bankAccountOptions = getAccountOptions()
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedTransactions([])
+    } else {
+      setSelectedTransactions(paginatedTransactions.map((t) => t.id))
+    }
+    setSelectAll(!selectAll)
+  }
+
+  const handleSelectTransaction = (transactionId: string) => {
+    setSelectedTransactions((prev) =>
+      prev.includes(transactionId) ? prev.filter((id) => id !== transactionId) : [...prev, transactionId],
+    )
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedTransactions.length === 0) return
+
+    // Aquí implementarías la lógica de eliminación
+    console.log("Eliminar transacciones:", selectedTransactions)
+    // Después de eliminar, limpiar selección
+    setSelectedTransactions([])
+    setSelectAll(false)
+  }
+
+  // Crear opciones de cuentas bancarias desde banks
+  const bankAccountOptions = transactions.reduce(
+    (acc, transaction) => {
+      const bankAccount = transaction.bankAccount
+      if (bankAccount && !acc.find((opt) => opt.value === bankAccount.id)) {
+        acc.push({
+          value: bankAccount.id,
+          label: `${bankAccount.bank.name} - ${bankAccount.accountNumber}`,
+        })
+      }
+      return acc
+    },
+    [] as Array<{ value: string; label: string }>,
+  )
 
   const filterConfigs = [
     {
@@ -232,10 +336,22 @@ export default function TransactionsPage() {
           <p className="text-muted-foreground">Administre las transacciones importadas desde los extractos bancarios</p>
         </div>
         <div className="flex gap-2">
+          {selectedTransactions.length > 0 && (
+            <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              Eliminar ({selectedTransactions.length})
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing || loading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
             Actualizar
           </Button>
+          {!allDataLoaded && (
+            <Button variant="outline" size="sm" onClick={handleLoadAllData} disabled={loadingAll || loading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${loadingAll ? "animate-spin" : ""}`} />
+              {loadingAll ? "Cargando..." : "Cargar Todos"}
+            </Button>
+          )}
           <Button variant="outline" size="sm">
             <Download className="w-4 h-4 mr-2" />
             Exportar
@@ -259,6 +375,11 @@ export default function TransactionsPage() {
             <div className="flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-emerald-600" />
               Transacciones ({loading || refreshing ? "..." : totalItems})
+              {allDataLoaded && (
+                <Badge variant="secondary" className="ml-2">
+                  Todos los datos cargados
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Mostrar:</span>
@@ -292,21 +413,35 @@ export default function TransactionsPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="text-left p-3 text-card-foreground">Fecha</th>
+                        <th className="text-left p-3 w-12">
+                          <input
+                            type="checkbox"
+                            checked={selectAll}
+                            onChange={handleSelectAll}
+                            className="rounded border-gray-300"
+                          />
+                        </th>
+                        <th className="text-left p-3 text-card-foreground">Fecha/Hora</th>
                         <th className="text-left p-3 text-card-foreground">Cuenta</th>
                         <th className="text-left p-3 text-card-foreground">Operación</th>
                         <th className="text-left p-3 text-card-foreground">Descripción</th>
                         <th className="text-center p-3 text-card-foreground">Tipo</th>
                         <th className="text-right p-3 text-card-foreground">Monto</th>
                         <th className="text-right p-3 text-card-foreground">Saldo</th>
-                        <th className="text-left p-3 text-card-foreground">Proveedor</th>
-                        <th className="text-left p-3 text-card-foreground">Clasificación</th>
                         <th className="text-center p-3 text-card-foreground">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
                       {paginatedTransactions.map((transaction) => (
                         <tr key={transaction.id} className="border-b border-border hover:bg-muted/30">
+                          <td className="p-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedTransactions.includes(transaction.id)}
+                              onChange={() => handleSelectTransaction(transaction.id)}
+                              className="rounded border-gray-300"
+                            />
+                          </td>
                           <td className="p-3">
                             <div>
                               <p className="text-card-foreground text-sm">
@@ -316,15 +451,8 @@ export default function TransactionsPage() {
                                   year: "numeric",
                                 })}
                               </p>
-                              {transaction.valueDate && (
-                                <p className="text-xs text-muted-foreground">
-                                  Valor:{" "}
-                                  {new Date(transaction.valueDate).toLocaleDateString("es-PE", {
-                                    day: "2-digit",
-                                    month: "2-digit",
-                                    year: "numeric",
-                                  })}
-                                </p>
+                              {transaction.operationTime && (
+                                <p className="text-xs text-muted-foreground">{transaction.operationTime}</p>
                               )}
                             </div>
                           </td>
@@ -334,14 +462,16 @@ export default function TransactionsPage() {
                                 {transaction.bankAccount?.accountNumber || "N/A"}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {transaction.bankAccount?.bankName || "N/A"}
+                                {transaction.bankAccount?.bank?.name || "N/A"}
                               </p>
                             </div>
                           </td>
                           <td className="p-3">
-                            <p className="font-mono text-card-foreground text-sm">{transaction.operationNumber}</p>
-                            {transaction.operationTime && (
-                              <p className="text-xs text-muted-foreground">{transaction.operationTime}</p>
+                            <p className="font-mono text-card-foreground text-sm">
+                              {transaction.operationNumber || "N/A"}
+                            </p>
+                            {transaction.branch && (
+                              <p className="text-xs text-muted-foreground">Suc: {transaction.branch}</p>
                             )}
                           </td>
                           <td className="p-3 max-w-64 truncate text-card-foreground" title={transaction.description}>
@@ -351,43 +481,29 @@ export default function TransactionsPage() {
                             )}
                           </td>
                           <td className="p-3 text-center">{getTypeBadge(transaction.transactionType)}</td>
-                          <td className="p-3 text-right font-mono">
-                            <span
-                              className={
-                                transaction.transactionType === "DEBIT"
-                                  ? "text-red-600 dark:text-red-400"
-                                  : "text-emerald-600 dark:text-emerald-400"
-                              }
-                            >
-                              PEN {transaction.amount.toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-                            </span>
+                          <td className="p-3 text-right font-mono text-card-foreground">
+                            {transaction.bankAccount?.currencyRef?.symbol || "PEN"}{" "}
+                            {Number.parseFloat(transaction.amount).toLocaleString("es-PE", {
+                              minimumFractionDigits: 2,
+                            })}
                           </td>
                           <td className="p-3 text-right font-mono text-card-foreground">
-                            PEN {transaction.balance.toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="p-3 text-card-foreground">
-                            <div>
-                              <p className="text-sm">{transaction.supplier?.businessName || "-"}</p>
-                              {transaction.supplier?.tradeName && (
-                                <p className="text-xs text-muted-foreground">{transaction.supplier.tradeName}</p>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <div className="flex flex-wrap gap-1">
-                              {getTransactionFlags(transaction).map((flag, index) => (
-                                <Badge key={index} variant="secondary" className={`${flag.color} text-xs`}>
-                                  {flag.label}
-                                </Badge>
-                              ))}
-                            </div>
+                            {transaction.bankAccount?.currencyRef?.symbol || "PEN"}{" "}
+                            {Number.parseFloat(transaction.balance).toLocaleString("es-PE", {
+                              minimumFractionDigits: 2,
+                            })}
                           </td>
                           <td className="p-3">
                             <div className="flex items-center justify-center gap-1">
                               <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                                 <Eye className="w-4 h-4" />
                               </Button>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600 hover:text-red-700">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                                onClick={() => handleSelectTransaction(transaction.id)}
+                              >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </div>

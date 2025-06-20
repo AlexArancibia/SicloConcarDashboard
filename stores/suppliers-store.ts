@@ -1,14 +1,15 @@
 import { create } from "zustand"
-import type { Supplier } from "@/types"
+import type {
+  Supplier,
+  SupplierStatus,
+  SupplierType,
+  PaginationDto,
+  PaginatedResponse,
+  CreateSupplierDto,
+  UpdateSupplierDto,
+  SupplierStats,
+} from "@/types"
 import apiClient from "@/lib/axiosConfig"
-
-interface PaginatedResponse<T> {
-  data: T[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
 
 interface SuppliersState {
   suppliers: Supplier[]
@@ -21,15 +22,29 @@ interface SuppliersState {
     totalPages: number
   }
 
-  // CRUD methods
-  fetchSuppliers: (companyId: string, page?: number, limit?: number) => Promise<void>
-  createSupplier: (supplier: Omit<Supplier, "id" | "createdAt" | "updatedAt">) => Promise<Supplier | null>
-  updateSupplier: (id: string, supplier: Partial<Supplier>) => Promise<void>
-  deleteSupplier: (id: string) => Promise<void>
+  // Métodos que coinciden exactamente con el service
+  fetchSuppliers: (companyId: string, pagination?: PaginationDto) => Promise<void>
+  createSupplier: (createSupplierDto: CreateSupplierDto) => Promise<Supplier | null>
   getSupplierById: (id: string) => Promise<Supplier | null>
+  updateSupplier: (id: string, updateSupplierDto: UpdateSupplierDto) => Promise<void>
+  deleteSupplier: (id: string) => Promise<void>
   getSupplierByDocument: (companyId: string, documentNumber: string) => Promise<Supplier | null>
+  getSuppliersByStatus: (companyId: string, status: SupplierStatus) => Promise<Supplier[]>
+  updateSupplierStatus: (id: string, status: SupplierStatus) => Promise<Supplier | null>
+  getSupplierStats: (companyId: string) => Promise<SupplierStats | null>
+  searchSuppliers: (companyId: string, searchTerm: string, pagination?: PaginationDto) => Promise<void>
+  getSuppliersByStatusPaginated: (
+    companyId: string,
+    status: SupplierStatus,
+    pagination?: PaginationDto,
+  ) => Promise<void>
+  getSuppliersByTypePaginated: (
+    companyId: string,
+    supplierType: SupplierType,
+    pagination?: PaginationDto,
+  ) => Promise<void>
 
-  // Utility methods
+  // Métodos utilitarios
   clearSuppliers: () => void
   clearError: () => void
 }
@@ -45,9 +60,10 @@ export const useSuppliersStore = create<SuppliersState>((set, get) => ({
     totalPages: 0,
   },
 
-  fetchSuppliers: async (companyId: string, page = 1, limit = 10) => {
+  fetchSuppliers: async (companyId: string, pagination: PaginationDto = {}) => {
     set({ loading: true, error: null })
     try {
+      const { page = 1, limit = 10 } = pagination
       const response = await apiClient.get<PaginatedResponse<Supplier>>(
         `/suppliers/company/${companyId}?page=${page}&limit=${limit}`,
       )
@@ -67,10 +83,10 @@ export const useSuppliersStore = create<SuppliersState>((set, get) => ({
     }
   },
 
-  createSupplier: async (supplierData) => {
+  createSupplier: async (createSupplierDto: CreateSupplierDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Supplier>("/suppliers", supplierData)
+      const response = await apiClient.post<Supplier>("/suppliers", createSupplierDto)
       const newSupplier = response.data
 
       set((state) => ({
@@ -88,10 +104,25 @@ export const useSuppliersStore = create<SuppliersState>((set, get) => ({
     }
   },
 
-  updateSupplier: async (id: string, supplierData: Partial<Supplier>) => {
+  getSupplierById: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<Supplier>(`/suppliers/${id}`, supplierData)
+      const response = await apiClient.get<Supplier>(`/suppliers/${id}`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching supplier",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  updateSupplier: async (id: string, updateSupplierDto: UpdateSupplierDto) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.patch<Supplier>(`/suppliers/${id}`, updateSupplierDto)
       const updatedSupplier = response.data
 
       set((state) => ({
@@ -123,21 +154,6 @@ export const useSuppliersStore = create<SuppliersState>((set, get) => ({
     }
   },
 
-  getSupplierById: async (id: string) => {
-    set({ loading: true, error: null })
-    try {
-      const response = await apiClient.get<Supplier>(`/suppliers/${id}`)
-      set({ loading: false })
-      return response.data
-    } catch (error: any) {
-      set({
-        error: error.response?.data?.message || "Error fetching supplier",
-        loading: false,
-      })
-      return null
-    }
-  },
-
   getSupplierByDocument: async (companyId: string, documentNumber: string) => {
     set({ loading: true, error: null })
     try {
@@ -150,6 +166,130 @@ export const useSuppliersStore = create<SuppliersState>((set, get) => ({
         loading: false,
       })
       return null
+    }
+  },
+
+  getSuppliersByStatus: async (companyId: string, status: SupplierStatus) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Supplier[]>(`/suppliers/company/${companyId}/status/${status}`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching suppliers by status",
+        loading: false,
+      })
+      return []
+    }
+  },
+
+  updateSupplierStatus: async (id: string, status: SupplierStatus) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.patch<Supplier>(`/suppliers/${id}/status`, { status })
+      const updatedSupplier = response.data
+
+      set((state) => ({
+        suppliers: state.suppliers.map((supplier) => (supplier.id === id ? updatedSupplier : supplier)),
+        loading: false,
+      }))
+
+      return updatedSupplier
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error updating supplier status",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  getSupplierStats: async (companyId: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<SupplierStats>(`/suppliers/company/${companyId}/stats`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching supplier stats",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  searchSuppliers: async (companyId: string, searchTerm: string, pagination: PaginationDto = {}) => {
+    set({ loading: true, error: null })
+    try {
+      const { page = 1, limit = 10 } = pagination
+      const response = await apiClient.get<PaginatedResponse<Supplier>>(
+        `/suppliers/company/${companyId}/search?term=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}`,
+      )
+
+      const { data, total, totalPages } = response.data
+
+      set({
+        suppliers: data,
+        pagination: { total, page, limit, totalPages },
+        loading: false,
+      })
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error searching suppliers",
+        loading: false,
+      })
+    }
+  },
+
+  getSuppliersByStatusPaginated: async (companyId: string, status: SupplierStatus, pagination: PaginationDto = {}) => {
+    set({ loading: true, error: null })
+    try {
+      const { page = 1, limit = 10 } = pagination
+      const response = await apiClient.get<PaginatedResponse<Supplier>>(
+        `/suppliers/company/${companyId}/status/${status}/paginated?page=${page}&limit=${limit}`,
+      )
+
+      const { data, total, totalPages } = response.data
+
+      set({
+        suppliers: data,
+        pagination: { total, page, limit, totalPages },
+        loading: false,
+      })
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching suppliers by status",
+        loading: false,
+      })
+    }
+  },
+
+  getSuppliersByTypePaginated: async (
+    companyId: string,
+    supplierType: SupplierType,
+    pagination: PaginationDto = {},
+  ) => {
+    set({ loading: true, error: null })
+    try {
+      const { page = 1, limit = 10 } = pagination
+      const response = await apiClient.get<PaginatedResponse<Supplier>>(
+        `/suppliers/company/${companyId}/type/${supplierType}/paginated?page=${page}&limit=${limit}`,
+      )
+
+      const { data, total, totalPages } = response.data
+
+      set({
+        suppliers: data,
+        pagination: { total, page, limit, totalPages },
+        loading: false,
+      })
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching suppliers by type",
+        loading: false,
+      })
     }
   },
 

@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useCallback, useEffect, useRef } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -11,9 +10,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 import { useDocumentsStore } from "@/stores/documents-store"
 import { useSuppliersStore } from "@/stores/suppliers-store"
-import type { Document } from "@/types/documents"
+import { useTaxSchemesStore } from "@/stores/tax-schemes-store"
+import type { CreateDocumentDto, CreateSupplierDto, DocumentType, SupplierType } from "@/types"
 import { useAuthStore } from "@/stores/authStore"
-import XMLVisualizer from "./xml-visualizer"
 
 interface XMLImportModalProps {
   open: boolean
@@ -44,31 +43,6 @@ interface SupplierData {
   phone?: string | null
 }
 
-interface CreateSupplierPayload {
-  companyId: string
-  businessName: string
-  tradeName: string
-  documentType: "DNI" | "RUC"
-  documentNumber: string
-  supplierType: "PERSONA_NATURAL" | "PERSONA_JURIDICA" | "EXTRANJERO"
-  email: string | null
-  phone: string | null
-  address: string | null
-  district: string | null
-  province: string | null
-  department: string | null
-  country: string
-  status: "ACTIVE"
-  creditLimit: number
-  paymentTerms: number
-  taxCategory: string
-  isRetentionAgent: boolean
-  retentionRate: number | null
-}
-
-// Tipo que coincide exactamente con lo que espera el store
-type CreateDocumentPayload = Omit<Document, "id" | "createdAt" | "updatedAt">
-
 export default function XMLImportModal({ open, onOpenChange, onImportComplete, companyId }: XMLImportModalProps) {
   const [files, setFiles] = useState<FileWithStatus[]>([])
   const [processing, setProcessing] = useState(false)
@@ -86,7 +60,47 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
     error: supplierError,
     clearError: clearSupplierError,
   } = useSuppliersStore()
-  const { user } = useAuthStore()
+  const {
+    loadTaxSchemes,
+    getTaxSchemeByName,
+    getTaxSchemeBySchemeId,
+    taxSchemes,
+    loading: taxSchemesLoading,
+    error: taxSchemeError,
+    clearError: clearTaxSchemeError,
+  } = useTaxSchemesStore()
+  const { user, company } = useAuthStore()
+
+  // Load tax schemes when modal opens
+  useEffect(() => {
+    if (open) {
+      console.log("🚀 Modal abierto - Verificando tax schemes...")
+      console.log("📋 Tax schemes actuales en store:", taxSchemes.length)
+      console.log("🔄 Loading state:", taxSchemesLoading)
+
+      if (taxSchemes.length === 0 && !taxSchemesLoading) {
+        console.log("🔄 Cargando tax schemes para importación XML...")
+        loadTaxSchemes({ isActive: true })
+      } else if (taxSchemes.length > 0) {
+        console.log("✅ Tax schemes ya cargados:")
+        taxSchemes.forEach((ts, index) => {
+          console.log(`  ${index + 1}. ${ts.taxSchemeName} (${ts.taxSchemeId}) - ${(ts.taxPercentage || 0 )* 100}%`)
+        })
+      }
+    }
+  }, [open, taxSchemes.length, taxSchemesLoading, loadTaxSchemes])
+
+  // Debug tax schemes state
+  useEffect(() => {
+    console.log("🔍 Tax Schemes State Update:")
+    console.log("  - Count:", taxSchemes.length)
+    console.log("  - Loading:", taxSchemesLoading)
+    console.log("  - Error:", taxSchemeError)
+    console.log(
+      "  - Schemes:",
+      taxSchemes.map((ts) => `${ts.taxSchemeName} (${ts.taxSchemeId})`),
+    )
+  }, [taxSchemes, taxSchemesLoading, taxSchemeError])
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -99,12 +113,12 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
       setPreviewXml(null)
       clearDocumentError()
       clearSupplierError()
+      clearTaxSchemeError()
     } else {
       console.log("🚀 Modal abierto - Iniciando importación XML")
       console.log("📋 Company ID:", companyId)
-      console.log("👤 Usuario:", user?.id, user?.email)
     }
-  }, [open, clearDocumentError, clearSupplierError, companyId, user])
+  }, [open, clearDocumentError, clearSupplierError, clearTaxSchemeError, companyId])
 
   // Show error toast if stores have errors
   useEffect(() => {
@@ -131,12 +145,23 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
     }
   }, [supplierError, toast, clearSupplierError])
 
+  useEffect(() => {
+    if (taxSchemeError) {
+      console.error("❌ Error en tax scheme store:", taxSchemeError)
+      toast({
+        title: "Error al cargar esquemas tributarios",
+        description: taxSchemeError,
+        variant: "destructive",
+      })
+      clearTaxSchemeError()
+    }
+  }, [taxSchemeError, toast, clearTaxSchemeError])
+
   // Drag and drop handlers
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragOver(true)
-    console.log("📁 Archivo arrastrado sobre la zona de drop")
   }, [])
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
@@ -144,7 +169,6 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
     e.stopPropagation()
     if (dropZoneRef.current && !dropZoneRef.current.contains(e.relatedTarget as Node)) {
       setIsDragOver(false)
-      console.log("📁 Archivo salió de la zona de drop")
     }
   }, [])
 
@@ -291,7 +315,6 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
               return element.textContent.trim()
             }
           } catch (e) {
-            // Ignore invalid selector errors
             continue
           }
         }
@@ -315,8 +338,6 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
       const supplierEmail = getElementText(
         "cac\\:AccountingSupplierParty cac\\:Party cac\\:Contact cbc\\:ElectronicMail",
         "AccountingSupplierParty Party Contact ElectronicMail",
-        "cac\\:AccountingSupplierParty cac\\:Party cac\\:PartyTaxScheme cac\\:RegistrationAddress cbc\\:ElectronicMail",
-        "AccountingSupplierParty Party PartyTaxScheme RegistrationAddress ElectronicMail",
       )
 
       const supplierPhone = getElementText(
@@ -369,13 +390,10 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
     }
   }
 
-  // Parse XML to document data - ahora enviamos TODOS los campos tal como vienen del XML
-  const parseXMLToDocument = (
-    xmlContent: string,
-    fileName: string,
-    supplierId: string,
-  ): CreateDocumentPayload | null => {
-    console.log("🔍 Parseando XML a estructura de documento para API")
+  // Parse XML to document data - PAYLOAD COMPLETO
+  const parseXMLToDocument = (xmlContent: string, fileName: string, supplierId: string): CreateDocumentDto | null => {
+    console.log("🔍 Parseando XML a estructura de documento COMPLETA")
+    console.log("🏷️ Tax schemes disponibles para parsing:", taxSchemes.length)
 
     try {
       const parser = new DOMParser()
@@ -397,7 +415,6 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
               return element.textContent.trim()
             }
           } catch (e) {
-            // Ignore invalid selector errors
             continue
           }
         }
@@ -421,6 +438,7 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
       // Basic document information
       const documentId = getElementText("cbc\\:ID", "ID")
       const issueDate = getElementText("cbc\\:IssueDate", "IssueDate")
+      const issueTime = getElementText("cbc\\:IssueTime", "IssueTime")
       const dueDate = getElementText("cbc\\:DueDate", "DueDate") || issueDate
       const currency = getElementText("cbc\\:DocumentCurrencyCode", "DocumentCurrencyCode") || "PEN"
       const exchangeRate = getNumericValue("cbc\\:SourceCurrencyBaseRate", "SourceCurrencyBaseRate") || 1.0
@@ -450,23 +468,23 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
         "DebitNoteTypeCode",
       )
 
-      let documentType: "FACTURA" | "BOLETA" | "NOTA_CREDITO" | "NOTA_DEBITO" | "RECIBO_HONORARIOS" = "FACTURA"
+      let documentType: DocumentType = "INVOICE"
       let documentTypeDescription = "Factura Electrónica"
 
       if (invoiceTypeCode === "01") {
-        documentType = "FACTURA"
+        documentType = "INVOICE"
         documentTypeDescription = "Factura Electrónica"
       } else if (invoiceTypeCode === "03") {
-        documentType = "BOLETA"
+        documentType = "RECEIPT"
         documentTypeDescription = "Boleta de Venta Electrónica"
       } else if (invoiceTypeCode === "07") {
-        documentType = "NOTA_CREDITO"
+        documentType = "CREDIT_NOTE"
         documentTypeDescription = "Nota de Crédito Electrónica"
       } else if (invoiceTypeCode === "08") {
-        documentType = "NOTA_DEBITO"
+        documentType = "DEBIT_NOTE"
         documentTypeDescription = "Nota de Débito Electrónica"
       } else if (fileName.toUpperCase().includes("RH") || fileName.toUpperCase().includes("RHE")) {
-        documentType = "RECIBO_HONORARIOS"
+        documentType = "RECEIPT"
         documentTypeDescription = "Recibo por Honorarios Electrónico"
       }
 
@@ -511,6 +529,10 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
       let detractionCode = ""
       let detractionPercentage = 0
       let hasDetraction = false
+      let detractionServiceCode = ""
+      let detractionAccount = ""
+      let detractionPaymentDate: Date | null = null
+      let detractionPaymentReference = ""
 
       Array.from(retentionElements).forEach((element) => {
         const paymentTermsId = element.querySelector("cbc\\:ID, ID")?.textContent?.trim()?.toLowerCase() || ""
@@ -522,33 +544,47 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
             hasRetention = retentionAmount > 0
           }
           if (percent) {
-            retentionPercentage = Number.parseFloat(percent) || 0
+            retentionPercentage = (Number.parseFloat(percent) || 0) / 100 // Convertir a 0-1
           }
         }
         if (paymentTermsId.includes("detraccion")) {
           const amount = element.querySelector("cbc\\:Amount, Amount")?.textContent?.trim()
           const code = element.querySelector("cbc\\:PaymentMeansID, PaymentMeansID")?.textContent?.trim()
           const percent = element.querySelector("cbc\\:PaymentPercent, PaymentPercent")?.textContent?.trim()
+          const account = element.querySelector("cbc\\:PaymentID, PaymentID")?.textContent?.trim()
+          const paymentDate = element.querySelector("cbc\\:PaymentDueDate, PaymentDueDate")?.textContent?.trim()
+          const paymentRef = element.querySelector("cbc\\:PaymentNote, PaymentNote")?.textContent?.trim()
+
           if (amount) {
             detractionAmount = Number.parseFloat(amount) || 0
             hasDetraction = detractionAmount > 0
           }
           if (code) {
             detractionCode = code
+            detractionServiceCode = code
           }
           if (percent) {
-            detractionPercentage = Number.parseFloat(percent) || 0
+            detractionPercentage = (Number.parseFloat(percent) || 0) / 100 // Convertir a 0-1
+          }
+          if (account) {
+            detractionAccount = account
+          }
+          if (paymentDate) {
+            detractionPaymentDate = new Date(paymentDate)
+          }
+          if (paymentRef) {
+            detractionPaymentReference = paymentRef
           }
         }
       })
 
       // Calculate percentages if not found
       if (hasRetention && retentionPercentage === 0 && subtotal > 0) {
-        retentionPercentage = (retentionAmount / subtotal) * 100
+        retentionPercentage = retentionAmount / subtotal // Ya está en 0-1
       }
 
       if (hasDetraction && detractionPercentage === 0 && total > 0) {
-        detractionPercentage = (detractionAmount / total) * 100
+        detractionPercentage = detractionAmount / total // Ya está en 0-1
       }
 
       // Check for RET 4TA in invoice lines (for recibos por honorarios)
@@ -561,7 +597,7 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
           const taxCategoryId = line.querySelector("cac\\:TaxCategory cbc\\:ID, TaxCategory ID")?.textContent
           if (taxCategoryId === "RET 4TA") {
             hasRetention = true
-            documentType = "RECIBO_HONORARIOS"
+            documentType = "RECEIPT"
             documentTypeDescription = "Recibo por Honorarios Electrónico"
 
             // Extract retention amount and percentage
@@ -573,7 +609,7 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
             }
 
             if (taxPercent) {
-              retentionPercentage = Number.parseFloat(taxPercent) || 8
+              retentionPercentage = (Number.parseFloat(taxPercent) || 8) / 100 // Convertir a 0-1
             }
           }
         } catch (e) {
@@ -612,8 +648,8 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
         }
       })
 
-      // Document lines - incluir TODOS los campos, incluso lineNumber
-      const lines: any[] = Array.from(lineElements).map((lineElement, index) => {
+      // Document lines - COMPLETAS con tax scheme
+      const lines = Array.from(lineElements).map((lineElement, index) => {
         const getLineText = (selector: string): string => {
           try {
             const element = lineElement.querySelector(selector)
@@ -637,13 +673,55 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
           }
         }
 
-        return {
-          // Incluir lineNumber del XML o generar uno
-          lineNumber: index + 1,
-          productCode:
-            getLineText("cac\\:Item cbc\\:SellersItemIdentification cbc\\:ID") ||
-            getLineText("Item SellersItemIdentification ID") ||
-            `PROD${String(index + 1).padStart(3, "0")}`,
+        // Determinar tax scheme basado en el tipo de impuesto
+        const taxSchemeIdFromXml =
+          getLineText("cac\\:TaxTotal cac\\:TaxSubtotal cac\\:TaxCategory cac\\:TaxScheme cbc\\:ID") ||
+          getLineText("TaxTotal TaxSubtotal TaxCategory TaxScheme ID")
+
+        const taxCategoryId =
+          getLineText("cac\\:TaxTotal cac\\:TaxSubtotal cac\\:TaxCategory cbc\\:ID") ||
+          getLineText("TaxTotal TaxSubtotal TaxCategory ID")
+
+        console.log(`🏷️ Procesando línea ${index + 1}:`)
+        console.log(`  - taxSchemeIdFromXml: "${taxSchemeIdFromXml}"`)
+        console.log(`  - taxCategoryId: "${taxCategoryId}"`)
+
+        let taxSchemeId = ""
+
+        // Buscar tax scheme por ID del XML
+        if (taxSchemeIdFromXml) {
+          const taxScheme = getTaxSchemeBySchemeId(taxSchemeIdFromXml)
+          if (taxScheme) {
+            taxSchemeId = taxScheme.id
+            console.log(`✅ Tax scheme encontrado por ID XML "${taxSchemeIdFromXml}":`, taxScheme.taxSchemeName)
+          } else {
+            console.warn(`❌ Tax scheme NO encontrado por ID XML "${taxSchemeIdFromXml}"`)
+          }
+        }
+
+        // Si no se encuentra, buscar por categoría
+        if (!taxSchemeId) {
+          console.log("🔍 Buscando tax scheme por categoría...")
+          if (taxCategoryId === "S" || taxSchemeIdFromXml === "1000") {
+            const igvScheme = getTaxSchemeByName("IGV")
+            taxSchemeId = igvScheme?.id || ""
+            console.log("🏷️ Usando tax scheme IGV para línea gravada:", taxSchemeId)
+          } else if (taxCategoryId === "E" || taxSchemeIdFromXml === "9997") {
+            const exoneradoScheme = getTaxSchemeByName("Exonerado")
+            taxSchemeId = exoneradoScheme?.id || ""
+            console.log("🏷️ Usando tax scheme Exonerado:", taxSchemeId)
+          } else if (taxCategoryId === "O" || taxSchemeIdFromXml === "9998") {
+            const inafectoScheme = getTaxSchemeByName("Inafecto")
+            taxSchemeId = inafectoScheme?.id || ""
+            console.log("🏷️ Usando tax scheme Inafecto:", taxSchemeId)
+          } else {
+            const otrosScheme = getTaxSchemeByName("Otros")
+            taxSchemeId = otrosScheme?.id || ""
+            console.log("🏷️ Usando tax scheme Otros por defecto:", taxSchemeId)
+          }
+        }
+
+        const lineData = {
           description:
             getLineText("cac\\:Item cbc\\:Description") || getLineText("Item Description") || "Producto/Servicio",
           quantity:
@@ -654,47 +732,111 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
             getLineNumber("cbc\\:DebitedQuantity") ||
             getLineNumber("DebitedQuantity") ||
             1,
+          productCode:
+            getLineText("cac\\:Item cbc\\:SellersItemIdentification cbc\\:ID") ||
+            getLineText("Item SellersItemIdentification ID") ||
+            `PROD${String(index + 1).padStart(3, "0")}`,
           unitCode:
             getLineAttribute("cbc\\:InvoicedQuantity", "unitCode") ||
             getLineAttribute("cbc\\:CreditedQuantity", "unitCode") ||
             getLineAttribute("cbc\\:DebitedQuantity", "unitCode") ||
             "NIU",
           unitPrice: getLineNumber("cac\\:Price cbc\\:PriceAmount") || getLineNumber("Price PriceAmount"),
+          unitPriceWithTax: 0, // Se calculará después
           lineTotal: getLineNumber("cbc\\:LineExtensionAmount") || getLineNumber("LineExtensionAmount"),
-          igvAmount:
-            getLineNumber("cac\\:TaxTotal cbc\\:TaxAmount") || getLineNumber("TaxTotal TaxAmount") || undefined,
-          taxPercentage:
-            getLineNumber("cac\\:TaxTotal cac\\:TaxSubtotal cac\\:TaxCategory cbc\\:Percent") ||
-            getLineNumber("TaxTotal TaxSubtotal TaxCategory Percent") ||
-            undefined,
-          taxCategoryId:
-            getLineText("cac\\:TaxTotal cac\\:TaxSubtotal cac\\:TaxCategory cbc\\:ID") ||
-            getLineText("TaxTotal TaxSubtotal TaxCategory ID") ||
-            undefined,
-          taxSchemeId:
-            getLineText("cac\\:TaxTotal cac\\:TaxSubtotal cac\\:TaxCategory cac\\:TaxScheme cbc\\:ID") ||
-            getLineText("TaxTotal TaxSubtotal TaxCategory TaxScheme ID") ||
-            undefined,
-          taxSchemeName:
-            getLineText("cac\\:TaxTotal cac\\:TaxSubtotal cac\\:TaxCategory cac\\:TaxScheme cbc\\:Name") ||
-            getLineText("TaxTotal TaxSubtotal TaxCategory TaxScheme Name") ||
-            undefined,
-          freeOfChargeIndicator:
-            getLineText("cac\\:PricingReference cac\\:AlternativeConditionPrice cbc\\:PriceTypeCode") === "02" ||
-            getLineText("PricingReference AlternativeConditionPrice PriceTypeCode") === "02" ||
-            undefined,
-          taxableAmount:
-            getLineNumber("cac\\:TaxTotal cac\\:TaxSubtotal cbc\\:TaxableAmount") ||
-            getLineNumber("TaxTotal TaxSubtotal TaxableAmount") ||
-            undefined,
-          allowanceIndicator: false,
-          chargeIndicator: false,
+          igvAmount: getLineNumber("cac\\:TaxTotal cbc\\:TaxAmount") || getLineNumber("TaxTotal TaxAmount") || 0,
           taxExemptionCode:
             getLineText("cac\\:TaxTotal cac\\:TaxSubtotal cac\\:TaxCategory cbc\\:TaxExemptionReasonCode") ||
             getLineText("TaxTotal TaxSubtotal TaxCategory TaxExemptionReasonCode") ||
-            undefined,
+            null,
+          taxExemptionReason:
+            getLineText("cac\\:TaxTotal cac\\:TaxSubtotal cac\\:TaxCategory cbc\\:TaxExemptionReason") ||
+            getLineText("TaxTotal TaxSubtotal TaxCategory TaxExemptionReason") ||
+            null,
+          taxSchemeId,
+          priceTypeCode:
+            getLineText("cac\\:PricingReference cac\\:AlternativeConditionPrice cbc\\:PriceTypeCode") ||
+            getLineText("PricingReference AlternativeConditionPrice PriceTypeCode") ||
+            "01",
+          referencePrice:
+            getLineNumber("cac\\:PricingReference cac\\:AlternativeConditionPrice cbc\\:PriceAmount") ||
+            getLineNumber("PricingReference AlternativeConditionPrice PriceAmount") ||
+            null,
+          itemClassificationCode:
+            getLineText("cac\\:Item cac\\:CommodityClassification cbc\\:ItemClassificationCode") ||
+            getLineText("Item CommodityClassification ItemClassificationCode") ||
+            null,
+          freeOfChargeIndicator:
+            getLineText("cac\\:PricingReference cac\\:AlternativeConditionPrice cbc\\:PriceTypeCode") === "02" ||
+            getLineText("PricingReference AlternativeConditionPrice PriceTypeCode") === "02",
+          allowanceAmount: getLineNumber("cac\\:AllowanceCharge cbc\\:Amount") || 0,
+          allowanceIndicator: getLineText("cac\\:AllowanceCharge cbc\\:ChargeIndicator") === "false",
+          chargeAmount: getLineNumber("cac\\:AllowanceCharge cbc\\:Amount") || 0,
+          chargeIndicator: getLineText("cac\\:AllowanceCharge cbc\\:ChargeIndicator") === "true",
+          orderLineReference:
+            getLineText("cac\\:OrderLineReference cbc\\:LineID") || getLineText("OrderLineReference LineID") || null,
+          lineNotes: getLineText("cbc\\:Note") || getLineText("Note") || null,
+          taxableAmount:
+            getLineNumber("cac\\:TaxTotal cac\\:TaxSubtotal cbc\\:TaxableAmount") ||
+            getLineNumber("TaxTotal TaxSubtotal TaxableAmount") ||
+            0,
+          exemptAmount:
+            taxCategoryId === "E"
+              ? getLineNumber("cbc\\:LineExtensionAmount") || getLineNumber("LineExtensionAmount")
+              : 0,
+          inaffectedAmount:
+            taxCategoryId === "O"
+              ? getLineNumber("cbc\\:LineExtensionAmount") || getLineNumber("LineExtensionAmount")
+              : 0,
+          xmlLineData: JSON.stringify({
+            taxCategoryId,
+            taxSchemeIdFromXml,
+            originalData: {
+              itemDescription: getLineText("cac\\:Item cbc\\:Description") || getLineText("Item Description"),
+              sellersItemId:
+                getLineText("cac\\:Item cbc\\:SellersItemIdentification cbc\\:ID") ||
+                getLineText("Item SellersItemIdentification ID"),
+            },
+          }),
         }
+
+        // Calcular unitPriceWithTax
+        if (lineData.unitPrice > 0 && lineData.igvAmount > 0) {
+          lineData.unitPriceWithTax = lineData.unitPrice + lineData.igvAmount / lineData.quantity
+        } else {
+          lineData.unitPriceWithTax = lineData.unitPrice
+        }
+
+        console.log(`✅ Línea ${index + 1} procesada:`, {
+          description: lineData.description,
+          taxSchemeId: lineData.taxSchemeId,
+          unitPrice: lineData.unitPrice,
+          igvAmount: lineData.igvAmount,
+        })
+
+        return lineData
       })
+
+      // Payment Terms
+      const paymentTerms = Array.from(retentionElements)
+        .filter((element) => {
+          const paymentTermsId = element.querySelector("cbc\\:ID, ID")?.textContent?.trim()?.toLowerCase() || ""
+          return !paymentTermsId.includes("retencion") && !paymentTermsId.includes("detraccion")
+        })
+        .map((element) => ({
+          amount: getNumericValue("cbc\\:Amount", "Amount") || total / 2, // Default split payment
+          dueDate: new Date(getElementText("cbc\\:PaymentDueDate", "PaymentDueDate") || dueDate),
+          description: getElementText("cbc\\:Note", "Note") || "Pago según términos acordados",
+        }))
+
+      // Si no hay payment terms, crear uno por defecto
+      if (paymentTerms.length === 0) {
+        paymentTerms.push({
+          amount: total,
+          dueDate: new Date(dueDate),
+          description: "Pago total",
+        })
+      }
 
       // Description from lines
       const description = lines.length > 0 ? lines.map((line) => line.description).join(", ") : "Documento electrónico"
@@ -704,35 +846,29 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
         .toLowerCase()
         .split(/\s+|,/)
         .filter((word) => word.length > 2)
-      const tags = ["importado", "xml", documentType.toLowerCase(), ...baseWords.slice(0, 3)].filter(
-        (tag, index, array) => tag.length > 2 && array.indexOf(tag) === index,
-      )
+      const tags = ["importado", "xml", documentType.toLowerCase(), ...baseWords.slice(0, 3)]
+        .filter((tag, index, array) => tag.length > 2 && array.indexOf(tag) === index)
+        .join(",")
 
       // Validations
       if (!documentId || !total) {
         throw new Error("Información insuficiente en el XML: falta ID del documento o monto")
       }
 
-      // Calcular TODOS los campos que vienen del XML
-      const fullNumber = `${series}-${number}`
-      const netPayableAmount = total - (retentionAmount || 0) - (detractionAmount || 0)
-      const conciliatedAmount = 0 // Inicialmente sin conciliar
-      const pendingAmount = netPayableAmount // Todo está pendiente inicialmente
-
-      // Generar hash del XML para detectar duplicados
+      // Generate hash
       const xmlHash = `${documentId}-${supplierId}-${total}`.replace(/\s/g, "")
 
-      const documentPayload: CreateDocumentPayload = {
+      // PAYLOAD COMPLETO
+      const documentPayload: CreateDocumentDto = {
         companyId,
         documentType,
         series,
         number,
-        // INCLUIR todos los campos calculados del XML
-        fullNumber,
         supplierId,
-        issueDate: issueDate ? new Date(issueDate).toISOString() : new Date().toISOString(),
-        dueDate: dueDate ? new Date(dueDate).toISOString() : null,
-        receptionDate: new Date().toISOString(),
+        issueDate: issueDate ? new Date(issueDate) : new Date(),
+        issueTime: issueTime || null,
+        dueDate: dueDate ? new Date(dueDate) : null,
+        receptionDate: new Date(),
         currency,
         exchangeRate,
         subtotal,
@@ -740,42 +876,103 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
         otherTaxes,
         total,
         hasRetention,
-        retentionAmount: hasRetention ? retentionAmount : null,
-        retentionPercentage: hasRetention ? retentionPercentage : null,
-        hasDetraction,
-        detractionAmount: hasDetraction ? detractionAmount : null,
-        detractionCode: hasDetraction ? detractionCode : null,
-        detractionPercentage: hasDetraction ? detractionPercentage : null,
-        detractionServiceCode: hasDetraction ? detractionCode : null,
-        // INCLUIR campos calculados
-        netPayableAmount,
-        conciliatedAmount,
-        pendingAmount,
+        retentionAmount: hasRetention ? retentionAmount : 0,
+        retentionPercentage: hasRetention ? retentionPercentage : 0,
+        paymentMethod: null,
         description,
         observations: documentNotes.join("; ") || "Factura electrónica procesada automáticamente",
         tags,
         status: "PENDING",
-        xmlFileName: fileName,
-        xmlContent,
-        xmlHash,
-        xmlUblVersion,
-        xmlCustomizationId,
-        documentTypeDescription,
-        // SUNAT fields - inicialmente null
-        sunatResponseCode: null,
-        cdrStatus: null,
-        sunatProcessDate: null,
-        pdfFile: null,
-        qrCode,
-        documentNotes,
-        operationNotes,
+        orderReference: null,
+        contractNumber: null,
+        additionalNotes: operationNotes.join("; ") || null,
+        documentNotes: documentNotes.join("; ") || null,
+        operationNotes: operationNotes.join("; ") || null,
+        createdById: user?.id || "",
         lines,
-        createdById: user!.id,
-        // updatedById inicialmente null
-        updatedById: null,
+        xmlData: {
+          xmlFileName: fileName,
+          xmlContent,
+          xmlHash,
+          xmlUblVersion,
+          xmlCustomizationId,
+          documentTypeDescription,
+          sunatResponseCode: null,
+          cdrStatus: null,
+          sunatProcessDate: null,
+          pdfFile: null,
+          qrCode: qrCode || null,
+          xmlAdditionalData: JSON.stringify({
+            version: "1.0",
+            importedAt: new Date().toISOString(),
+            processingInfo: {
+              linesCount: lines.length,
+              hasRetention,
+              hasDetraction,
+              currency,
+              exchangeRate,
+            },
+          }),
+        },
+        detraction: hasDetraction
+          ? {
+              hasDetraction: true,
+              amount: detractionAmount,
+              code: detractionCode,
+              percentage: detractionPercentage,
+              serviceCode: detractionServiceCode,
+              account: detractionAccount || null,
+              paymentDate: detractionPaymentDate,
+              paymentReference: detractionPaymentReference || null,
+            }
+          : undefined,
+        paymentTerms,
       }
 
-      console.log("✅ Documento parseado correctamente")
+      console.log("📤 PAYLOAD COMPLETO PARA CREAR DOCUMENTO:")
+      console.log("=".repeat(80))
+      console.log("📋 Información básica:")
+      console.log("  - companyId:", companyId)
+      console.log("  - documentType:", documentType)
+      console.log("  - series:", series)
+      console.log("  - number:", number)
+      console.log("  - supplierId:", supplierId)
+      console.log("💰 Montos:")
+      console.log("  - subtotal:", subtotal)
+      console.log("  - igv:", igv)
+      console.log("  - total:", total)
+      console.log("  - exchangeRate:", exchangeRate)
+      console.log("🏷️ Retenciones:")
+      console.log("  - hasRetention:", hasRetention)
+      console.log("  - retentionAmount:", hasRetention ? retentionAmount : 0)
+      console.log("  - retentionPercentage:", hasRetention ? retentionPercentage : 0, "(0-1 format)")
+      console.log("💸 Detracciones:")
+      console.log("  - hasDetraction:", hasDetraction)
+      console.log("  - detractionAmount:", hasDetraction ? detractionAmount : 0)
+      console.log("  - detractionPercentage:", hasDetraction ? detractionPercentage : 0, "(0-1 format)")
+      console.log("  - detractionCode:", detractionCode)
+      console.log("📄 Líneas del documento:", lines.length)
+      lines.forEach((line, index) => {
+        console.log(`  Línea ${index + 1}:`, {
+          description: line.description,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          lineTotal: line.lineTotal,
+          igvAmount: line.igvAmount,
+          taxSchemeId: line.taxSchemeId,
+          productCode: line.productCode,
+        })
+      })
+      console.log("💳 Payment Terms:", paymentTerms.length)
+      paymentTerms.forEach((term, index) => {
+        console.log(`  Término ${index + 1}:`, {
+          amount: term.amount,
+          dueDate: term.dueDate,
+          description: term.description,
+        })
+      })
+
+      console.log("✅ Documento parseado correctamente con payload completo")
       return documentPayload
     } catch (error) {
       console.error("❌ Error parseando XML:", error)
@@ -801,28 +998,28 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
         return existingSupplier.id
       }
 
-      // Create new supplier with exact API structure
+      // Create new supplier
       console.log("➕ Creando nuevo proveedor...")
 
-      const getSupplierType = (documentType: string): "PERSONA_NATURAL" | "PERSONA_JURIDICA" | "EXTRANJERO" => {
-        if (documentType === "RUC") return "PERSONA_JURIDICA"
-        if (documentType === "DNI") return "PERSONA_NATURAL"
-        return "EXTRANJERO"
+      const getSupplierType = (documentType: string): SupplierType => {
+        if (documentType === "RUC") return "COMPANY"
+        if (documentType === "DNI") return "INDIVIDUAL"
+        return "FOREIGN"
       }
 
-      const newSupplierPayload: CreateSupplierPayload = {
+      const newSupplierPayload: CreateSupplierDto = {
         companyId,
         businessName: supplierData.businessName,
         tradeName: supplierData.businessName,
-        documentType: supplierData.documentType as "RUC" | "DNI",
+        documentType: supplierData.documentType,
         documentNumber: supplierData.documentNumber,
         supplierType: getSupplierType(supplierData.documentType),
-        email: supplierData.email ?? null,
-        phone: supplierData.phone ?? null,
-        address: supplierData.address ?? null,
-        district: supplierData.district ?? null,
-        province: supplierData.province ?? null,
-        department: supplierData.department ?? null,
+        email: supplierData.email,
+        phone: supplierData.phone,
+        address: supplierData.address,
+        district: supplierData.district,
+        province: supplierData.province,
+        department: supplierData.department,
         country: "PE",
         status: "ACTIVE",
         creditLimit: 0,
@@ -901,19 +1098,6 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
         throw new Error("No se pudo parsear el XML a datos de documento")
       }
 
-      console.log(
-        "📤 Payload para crear documento:",
-        JSON.stringify(
-          {
-            ...documentData,
-            xmlContent: `[XML Content - ${documentData.xmlContent?.length || 0} chars]`, // Truncate for readability
-            lines: documentData.lines?.map((line) => ({ ...line })), // Remover el index que se agregaba para debugging
-          },
-          null,
-          2,
-        ),
-      )
-
       // Update progress
       setFiles((prev) => prev.map((f, idx) => (idx === index ? { ...f, progress: 90 } : f)))
 
@@ -924,7 +1108,7 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
       if (createdDocument) {
         console.log("✅ Documento creado exitosamente:", {
           id: createdDocument.id,
-          fullNumber: documentData.fullNumber,
+          fullNumber: createdDocument.fullNumber,
           total: createdDocument.total,
           supplierId: createdDocument.supplierId,
         })
@@ -971,15 +1155,28 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
 
   // Main import handler
   const handleImport = async () => {
-    if (files.length === 0 || !user?.id) {
-      console.warn("⚠️ No hay archivos para procesar o usuario no autenticado")
+    if (files.length === 0 || !user?.id || !company?.id) {
+      console.warn("⚠️ No hay archivos para procesar, usuario no autenticado, o empresa no seleccionada")
+      return
+    }
+
+    if (taxSchemes.length === 0) {
+      console.error("❌ No hay tax schemes cargados")
+      toast({
+        title: "Error",
+        description: "No se han cargado los esquemas tributarios. Intente recargar la página.",
+        variant: "destructive",
+      })
       return
     }
 
     console.log("\n🚀 Iniciando proceso de importación")
     console.log("📋 Archivos a procesar:", files.length)
-    console.log("👤 Usuario:", user.id, user.email)
     console.log("🏢 Empresa:", companyId)
+    console.log(
+      "🏷️ Tax schemes disponibles:",
+      taxSchemes.map((ts) => `${ts.taxSchemeName} (${ts.taxSchemeId})`),
+    )
 
     setProcessing(true)
     setOverallProgress(0)
@@ -1024,254 +1221,215 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
     console.log("❌ Errores:", errorCount)
     console.log("📋 Total procesados:", completedCount)
 
-    // Show summary toast
     if (successCount > 0) {
       toast({
         title: "Importación completada",
-        description: `${successCount} documento(s) importado(s) correctamente${
-          errorCount > 0 ? `, ${errorCount} con errores` : ""
-        }`,
-        variant: successCount > 0 && errorCount === 0 ? "default" : "destructive",
+        description: `${successCount} documento(s) importado(s) exitosamente${errorCount > 0 ? `, ${errorCount} con errores` : ""}`,
       })
 
+      // Call completion callback
       if (onImportComplete) {
-        console.log("🔄 Ejecutando callback de importación completada")
-        setTimeout(() => {
-          onImportComplete()
-
-          if (errorCount === 0) {
-            setTimeout(() => {
-              console.log("🚪 Cerrando modal automáticamente")
-              onOpenChange(false)
-            }, 1000)
-          }
-        }, 500)
+        console.log("🔄 Ejecutando callback de finalización")
+        onImportComplete()
       }
     } else if (errorCount > 0) {
       toast({
-        title: "Error en la importación",
-        description: `No se pudo importar ningún documento. Revise los errores.`,
+        title: "Error en importación",
+        description: `No se pudo importar ningún documento. ${errorCount} archivo(s) con errores.`,
         variant: "destructive",
       })
     }
   }
 
-  const handleClose = () => {
-    if (!processing) {
-      console.log("🚪 Cerrando modal")
-      onOpenChange(false)
-    } else {
-      console.log("⚠️ Intento de cerrar modal durante procesamiento")
-      toast({
-        title: "Procesamiento en progreso",
-        description: "Espere a que termine el procesamiento antes de cerrar",
-        variant: "default",
-      })
-    }
-  }
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes"
-    const k = 1024
-    const sizes = ["Bytes", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-  }
-
   const getStatusIcon = (status: FileWithStatus["status"]) => {
     switch (status) {
-      case "success":
-        return <CheckCircle className="w-4 h-4 text-green-500 dark:text-green-400" />
-      case "error":
-        return <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400" />
+      case "pending":
+        return <FileText className="h-4 w-4 text-blue-500" />
       case "processing":
-        return (
-          <div className="w-4 h-4 border-2 border-blue-500 dark:border-blue-400 border-t-transparent rounded-full animate-spin" />
-        )
-      default:
-        return <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+        return <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+      case "success":
+        return <CheckCircle className="h-4 w-4 text-green-500" />
+      case "error":
+        return <AlertCircle className="h-4 w-4 text-red-500" />
     }
   }
 
-  const pendingFiles = files.filter((f) => f.status === "pending")
-  const hasValidFiles = pendingFiles.length > 0
+  const getStatusText = (file: FileWithStatus) => {
+    switch (file.status) {
+      case "pending":
+        return "Pendiente"
+      case "processing":
+        return "Procesando..."
+      case "success":
+        return `Éxito - Doc: ${file.documentId?.substring(0, 8)}...`
+      case "error":
+        return `Error: ${file.error}`
+    }
+  }
+
+  const canStartImport = files.length > 0 && files.some((f) => f.status === "pending") && !processing
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Upload className="w-5 h-5 text-primary" />
-            Importar Documentos XML SUNAT
-          </DialogTitle>
-          <DialogDescription>
-            Seleccione los archivos XML de facturas electrónicas para procesar e importar al sistema
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Importar Documentos XML
+            </DialogTitle>
+            <DialogDescription>
+              Selecciona archivos XML para importar documentos electrónicos. Los proveedores se crearán automáticamente
+              si no existen.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="flex-1 overflow-hidden flex gap-4">
-          {/* Left Panel - File Management */}
-          <div className="w-1/2 flex flex-col space-y-4">
-            {/* File Input (Hidden) */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".xml,text/xml,application/xml"
-              onChange={handleFileInputChange}
-              className="hidden"
-            />
-
-            {/* Upload Area */}
-            <div
-              ref={dropZoneRef}
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onClick={openFileDialog}
-              className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all duration-200 ${
-                isDragOver
-                  ? "border-primary bg-primary/10 scale-[1.02]"
-                  : "border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-              }`}
-            >
-              <div className="flex flex-col items-center">
-                <Upload
-                  className={`w-10 h-10 mx-auto mb-3 transition-colors ${
-                    isDragOver ? "text-primary" : "text-gray-400 dark:text-gray-500"
-                  }`}
+          <div className="flex-1 overflow-hidden flex gap-4">
+            {/* Left Panel - File Upload and List */}
+            <div className="flex-1 flex flex-col gap-4">
+              {/* Upload Area */}
+              <div
+                ref={dropZoneRef}
+                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                  isDragOver ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+                }`}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
+                <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <p className="text-lg font-medium text-gray-900 mb-2">
+                  {isDragOver ? "Suelta los archivos aquí" : "Arrastra archivos XML aquí"}
+                </p>
+                <p className="text-sm text-gray-500 mb-4">o</p>
+                <Button type="button" variant="outline" onClick={openFileDialog} disabled={processing}>
+                  <FolderOpen className="h-4 w-4 mr-2" />
+                  Seleccionar archivos
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".xml,text/xml,application/xml"
+                  onChange={handleFileInputChange}
+                  className="hidden"
                 />
-                {isDragOver ? (
-                  <p className="text-primary font-medium">Suelta los archivos XML aquí...</p>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-gray-600 dark:text-gray-300 font-medium">
-                      Arrastra archivos XML aquí o haz clic para seleccionar
-                    </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Formatos soportados: .xml (múltiples archivos permitidos)
-                    </p>
-                    <Button variant="outline" size="sm" className="mt-3" type="button">
-                      <FolderOpen className="w-4 h-4 mr-2" />
-                      Seleccionar Archivos
+              </div>
+
+              {/* Tax Schemes Status */}
+              {taxSchemesLoading && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>Cargando esquemas tributarios...</AlertDescription>
+                </Alert>
+              )}
+
+              {taxSchemes.length > 0 && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    ✅ {taxSchemes.length} esquemas tributarios cargados:{" "}
+                    {taxSchemes.map((ts) => ts.taxSchemeName).join(", ")}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {taxSchemeError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>Error cargando esquemas tributarios: {taxSchemeError}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Files List */}
+              {files.length > 0 && (
+                <div className="flex-1 overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium">Archivos ({files.length})</h3>
+                    <Button type="button" variant="ghost" size="sm" onClick={clearAllFiles} disabled={processing}>
+                      <X className="h-4 w-4" />
+                      Limpiar
                     </Button>
                   </div>
-                )}
+
+                  <div className="flex-1 overflow-y-auto border rounded-lg">
+                    <div className="divide-y">
+                      {files.map((fileWithStatus, index) => (
+                        <div key={index} className="p-3 hover:bg-gray-50">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              {getStatusIcon(fileWithStatus.status)}
+                              <span className="text-sm font-medium truncate">{fileWithStatus.file.name}</span>
+                              <span className="text-xs text-gray-500">
+                                ({(fileWithStatus.file.size / 1024).toFixed(1)} KB)
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => togglePreview(index)}
+                                disabled={processing}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeFile(index)}
+                                disabled={processing}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="mt-2">
+                            <div className="text-xs text-gray-600 mb-1">{getStatusText(fileWithStatus)}</div>
+                            {fileWithStatus.status === "processing" && (
+                              <Progress value={fileWithStatus.progress} className="h-1" />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Overall Progress */}
+              {processing && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Progreso general</span>
+                    <span>{overallProgress}%</span>
+                  </div>
+                  <Progress value={overallProgress} />
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={processing}>
+                  Cancelar
+                </Button>
+                <Button type="button" onClick={handleImport} disabled={!canStartImport}>
+                  {processing
+                    ? "Procesando..."
+                    : `Importar ${files.filter((f) => f.status === "pending").length} archivo(s)`}
+                </Button>
               </div>
             </div>
 
-            {/* Overall Progress */}
-            {processing && (
-              <div className="space-y-2 p-4 bg-blue-50 dark:bg-blue-950/50 rounded-lg border border-blue-200 dark:border-blue-800">
-                <div className="flex justify-between text-sm">
-                  <span className="text-blue-700 dark:text-blue-300 font-medium">Procesando archivos...</span>
-                  <span className="text-blue-700 dark:text-blue-300 font-medium">{overallProgress}%</span>
-                </div>
-                <Progress value={overallProgress} className="w-full h-2" />
-              </div>
-            )}
-
-            {/* Files List */}
-            {files.length > 0 && (
-              <div className="space-y-3 flex-1 overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-sm text-gray-700 dark:text-gray-300">
-                    Archivos seleccionados ({files.length})
-                  </h4>
-                  {!processing && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearAllFiles}
-                      className="text-red-500 hover:text-red-600"
-                    >
-                      <X className="w-4 h-4 mr-1" />
-                      Limpiar todo
-                    </Button>
-                  )}
-                </div>
-                <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-                  {files.map((fileWithStatus, index) => (
-                    <div
-                      key={index}
-                      className={`flex items-center justify-between p-3 rounded-lg border shadow-sm transition-colors ${
-                        fileWithStatus.preview
-                          ? "bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800"
-                          : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        {getStatusIcon(fileWithStatus.status)}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate text-gray-800 dark:text-gray-200">
-                            {fileWithStatus.file.name}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {formatFileSize(fileWithStatus.file.size)}
-                            {fileWithStatus.documentId && (
-                              <span className="ml-2 text-green-600">• Doc: {fileWithStatus.documentId}</span>
-                            )}
-                            {fileWithStatus.supplierId && (
-                              <span className="ml-2 text-blue-600">• Sup: {fileWithStatus.supplierId}</span>
-                            )}
-                          </p>
-                          {fileWithStatus.status === "processing" && (
-                            <div className="mt-2">
-                              <Progress value={fileWithStatus.progress} className="h-1" />
-                            </div>
-                          )}
-                          {fileWithStatus.error && (
-                            <p className="text-xs text-red-500 dark:text-red-400 mt-1">{fileWithStatus.error}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {fileWithStatus.status === "pending" && !processing && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => togglePreview(index)}
-                              className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeFile(index)}
-                              className="text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400"
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Info Alert */}
-            <Alert variant="default" className="bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800">
-              <Info className="h-4 w-4 text-blue-500 dark:text-blue-400" />
-              <AlertDescription className="text-blue-700 dark:text-blue-300">
-                Los archivos XML serán procesados enviando TODA la información extraída del XML al backend. El backend
-                guardará los datos tal como vienen, minimizando los cálculos. Use el botón de vista previa para revisar
-                el contenido antes de procesar.
-              </AlertDescription>
-            </Alert>
-          </div>
-
-          {/* Right Panel - XML Preview */}
-          <div className="w-1/2 border-l border-gray-200 dark:border-gray-700 pl-4">
-            {previewXml ? (
-              <div className="h-full overflow-hidden flex flex-col">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-medium text-gray-800 dark:text-gray-200">Vista previa: {previewXml.fileName}</h3>
+            {/* Right Panel - XML Preview */}
+            {previewXml && (
+              <div className="w-1/2 flex flex-col border-l pl-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium">Vista previa: {previewXml.fileName}</h3>
                   <Button
+                    type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => {
@@ -1279,44 +1437,17 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
                       setFiles((prev) => prev.map((f) => ({ ...f, preview: false })))
                     }}
                   >
-                    <X className="w-4 h-4" />
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  <XMLVisualizer xmlContent={previewXml.content} fileName={previewXml.fileName} />
-                </div>
-              </div>
-            ) : (
-              <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
-                <div className="text-center">
-                  <Eye className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg font-medium mb-2">Vista previa XML</p>
-                  <p className="text-sm">
-                    Selecciona un archivo y haz clic en el ícono de vista previa para ver su contenido
-                  </p>
+                  <pre className="text-xs bg-gray-50 p-3 rounded border h-full overflow-auto">{previewXml.content}</pre>
                 </div>
               </div>
             )}
           </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800">
-          <Button variant="outline" onClick={handleClose} disabled={processing}>
-            Cancelar
-          </Button>
-          <Button onClick={handleImport} disabled={!hasValidFiles || processing} className="min-w-24" variant="default">
-            {processing ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Procesando...
-              </div>
-            ) : (
-              `Procesar ${pendingFiles.length} archivo${pendingFiles.length !== 1 ? "s" : ""}`
-            )}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

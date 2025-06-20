@@ -1,83 +1,158 @@
 import type { BaseEntity } from "./common"
 import type { Company } from "./auth"
-import type { BankAccount } from "./bank-accounts"
-import type { Supplier } from "./suppliers"
-import { Conciliation } from "./conciliation"
 
-// Tipos de transacciones basados en el schema de Prisma
-export type TransactionType = "DEBIT" | "CREDIT"
-export type TransactionStatus = "IMPORTED" | "PENDING" | "CONCILIATED" | "PARTIALLY_CONCILIATED" | "EXCLUDED"
+// Actualizar los enums para que coincidan con el schema de Prisma
+export type TransactionType =
+  | "DEBIT"
+  | "CREDIT"
+  | "TRANSFER"
+  | "FEE"
+  | "INTEREST"
+  | "DETRACTION"
+  | "ITF"
+  | "PAYMENT"
+  | "DEPOSIT"
+  | "WITHDRAWAL"
+export type TransactionStatus = "PENDING" | "PROCESSED" | "RECONCILED" | "CANCELLED"
 
-// DTO para crear transacciones (coincide con CreateTransactionDto del backend)
+// ============================================================================
+// INTERFACES PRINCIPALES
+// ============================================================================
+
+// En la interface Transaction, actualizar los campos opcionales
+export interface Transaction extends BaseEntity {
+  companyId: string
+  bankAccountId: string
+  transactionDate: Date
+  valueDate: Date | null
+  description: string
+  transactionType: TransactionType
+  amount: string // Decimal en schema
+  balance: string // Decimal en schema
+  branch: string | null
+  operationNumber: string | null
+  operationTime: string | null
+  operatorUser: string | null
+  utc: string | null
+  reference: string | null
+  channel: string | null
+  fileName: string | null
+  importedAt: Date | null
+  status: TransactionStatus
+  conciliatedAmount: string | null // Ahora es opcional en el schema
+  pendingAmount: string | null // Ahora es opcional en el schema
+  transactionHash: string
+
+  // Relaciones expandidas se mantienen igual
+  company?: Company
+  bankAccount?: {
+    id: string
+    accountNumber: string
+    alias: string | null
+    bank: {
+      name: string
+      code: string
+    }
+    currencyRef: {
+      code: string
+      name: string
+      symbol: string
+    }
+  }
+  supplier?: {
+    id: string
+    businessName: string
+    documentNumber: string
+  } | null
+  conciliations?: Array<{
+    id: string
+    reference: string | null
+    status: string
+    totalAmount: string | null
+    createdAt: Date
+  }>
+}
+
+// ============================================================================
+// DTOs (Data Transfer Objects)
+// ============================================================================
+
+export interface PaginationDto {
+  page?: number
+  limit?: number
+}
+
+export interface TransactionPaginatedResponse {
+  data: Transaction[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+// En CreateTransactionDto, actualizar campos opcionales
 export interface CreateTransactionDto {
   companyId: string
   bankAccountId: string
-  transactionDate: string // ISO 8601 date string
-  valueDate?: string // ISO 8601 date string opcional
+  transactionDate: Date | string
+  valueDate?: Date | string | null
   description: string
   transactionType: TransactionType
-  amount: number // máximo 2 decimales
-  balance: number // máximo 2 decimales
-  branch?: string
-  operationNumber: string
-  operationTime?: string
-  operatorUser?: string
-  utc?: string
-  reference?: string
-  channel?: string
-  fileName?: string
-  isITF?: boolean
-  isDetraction?: boolean
-  isBankFee?: boolean
-  isTransfer?: boolean
-  supplierId?: string
+  amount: number
+  balance: number
+  branch?: string | null
+  operationNumber?: string | null
+  operationTime?: string | null
+  operatorUser?: string | null
+  utc?: string | null
+  reference?: string | null
+  channel?: string | null
+  fileName?: string | null
+  importedAt?: Date | string | null
+  status?: TransactionStatus
+  conciliatedAmount?: number | null // Ahora opcional
+  pendingAmount?: number | null // Ahora opcional
 }
 
-export interface Transaction extends BaseEntity {
+// En UpdateTransactionDto, actualizar campos opcionales
+export interface UpdateTransactionDto {
+  transactionDate?: Date | string
+  valueDate?: Date | string | null
+  description?: string
+  transactionType?: TransactionType
+  amount?: number
+  balance?: number
+  branch?: string | null
+  operationNumber?: string | null
+  operationTime?: string | null
+  operatorUser?: string | null
+  utc?: string | null
+  reference?: string | null
+  channel?: string | null
+  fileName?: string | null
+  importedAt?: Date | string | null
+  status?: TransactionStatus
+  conciliatedAmount?: number | null // Ahora opcional
+  pendingAmount?: number | null // Ahora opcional
+}
+
+export interface ImportTransactionsDto {
   companyId: string
-  company?: Company
-
-  // Información de la cuenta bancaria
   bankAccountId: string
-  bankAccount?: BankAccount
+  file: File
+}
 
-  // Datos de la transacción bancaria (del Excel)
-  transactionDate: string // Fecha de la transacción
-  valueDate: string | null // Fecha valor
-  description: string // Descripción de la operación
-  transactionType: TransactionType // Débito o Crédito
-  amount: number // Monto (siempre positivo)
-  balance: number // Saldo después de la transacción
+export interface ImportTransactionsResult {
+  imported: number
+  duplicates: number
+  errors: string[]
+}
 
-  // Información adicional del banco
-  branch: string | null // Sucursal
-  operationNumber: string // Número de operación (único por cuenta)
-  operationTime: string | null // Hora de la operación
-  operatorUser: string | null // Usuario que realizó la operación
-  utc: string | null // UTC
-  reference: string | null // Referencia adicional
-  channel: string | null // Canal (Online, ATM, Sucursal, etc.)
+export interface TransactionStats {
+  total: number
+  byStatus: Record<string, { count: number; amount: number }>
+}
 
-  // Información de importación simplificada
-  fileName: string | null // Nombre del archivo importado
-  importedAt: string // Fecha de importación
-
-  // Clasificación automática
-  isITF: boolean // Es Impuesto a las Transacciones Financieras
-  isDetraction: boolean // Es detracción masiva
-  isBankFee: boolean // Es comisión bancaria
-  isTransfer: boolean // Es transferencia
-
-  // Relación con proveedores (inferida)
-  supplierId: string | null
-  supplier?: Supplier | null
-
-  // Estado de conciliación
+export interface UpdateTransactionStatusDto {
   status: TransactionStatus
-  conciliatedAmount: number // Monto ya conciliado
-  pendingAmount: number // Monto pendiente de conciliar
-
-  // Hash único para evitar duplicados
-  transactionHash: string // Hash basado en cuenta + fecha + monto + operación
-  conciliation?: Conciliation | null
 }

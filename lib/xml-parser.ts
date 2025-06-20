@@ -207,7 +207,7 @@ export function parseXMLToCreateDocumentBodyImproved(
 
     // ========== DETECCIÓN DEL TIPO DE DOCUMENTO (LÓGICA DE TU CÓDIGO) ==========
     const invoiceTypeCode = extractTextValue(invoice.InvoiceTypeCode)
-    let documentType: DocumentType = "FACTURA"
+    let documentType: DocumentType = "INVOICE"
     let documentTypeDescription = "Factura Electrónica"
     let hasRetencion = false
 
@@ -235,7 +235,7 @@ export function parseXMLToCreateDocumentBodyImproved(
             const taxCategoryId = extractTextValue(taxSubtotal.TaxCategory.ID)
             if (taxCategoryId === "RET 4TA") {
               hasRetencion = true
-              documentType = "RECIBO_HONORARIOS"
+              documentType = "RECEIPT"
               documentTypeDescription = "Recibo por Honorarios Electrónico"
               break
             }
@@ -246,22 +246,22 @@ export function parseXMLToCreateDocumentBodyImproved(
 
     // Si es persona natural emitiendo, probablemente sea recibo por honorarios
     if (emisorTipoEntidad === "NATURAL" && receptorTipoEntidad === "JURIDICA") {
-      documentType = "RECIBO_HONORARIOS"
+      documentType = "RECEIPT"
       documentTypeDescription = "Recibo por Honorarios Electrónico"
     }
 
     // Determinar por código de tipo de documento
     if (invoiceTypeCode === "01") {
-      documentType = "FACTURA"
+      documentType = "INVOICE"
       documentTypeDescription = "Factura Electrónica"
     } else if (invoiceTypeCode === "03") {
-      documentType = "BOLETA"
+      documentType = "PURCHASE_ORDER"
       documentTypeDescription = "Boleta de Venta Electrónica"
     } else if (invoiceTypeCode === "07") {
-      documentType = "NOTA_CREDITO"
+      documentType = "CREDIT_NOTE"
       documentTypeDescription = "Nota de Crédito Electrónica"
     } else if (invoiceTypeCode === "08") {
-      documentType = "NOTA_DEBITO"
+      documentType = "DEBIT_NOTE"
       documentTypeDescription = "Nota de Débito Electrónica"
     }
 
@@ -342,7 +342,7 @@ export function parseXMLToCreateDocumentBodyImproved(
     let hasDetraction = false
 
     // Extraer información de detracción (solo para facturas)
-    if (documentType === "FACTURA" && invoice.PaymentTerms) {
+    if (documentType === "INVOICE" && invoice.PaymentTerms) {
       const detractionTerms = Array.isArray(invoice.PaymentTerms)
         ? invoice.PaymentTerms.find((pt: any) => {
             const ptID = typeof pt.ID === "object" ? pt.ID._ || pt.ID._text : pt.ID
@@ -365,7 +365,7 @@ export function parseXMLToCreateDocumentBodyImproved(
     }
 
     // Extraer información de retención (para recibos por honorarios)
-    if (documentType === "RECIBO_HONORARIOS" && invoice.InvoiceLine) {
+    if (documentType === "RECEIPT" && invoice.InvoiceLine) {
       const lines = Array.isArray(invoice.InvoiceLine) ? invoice.InvoiceLine : [invoice.InvoiceLine]
       for (const line of lines) {
         if (line.TaxTotal && line.TaxTotal.TaxSubtotal) {
@@ -613,24 +613,24 @@ function parseWithDOMParser(
 
     // ========== DETECCIÓN DEL TIPO DE DOCUMENTO ==========
     const invoiceTypeCode = invoiceNode.getElementsByTagName("InvoiceTypeCode")[0]?.textContent || ""
-    let documentType: DocumentType = "FACTURA"
+    let documentType: DocumentType = "INVOICE"
     let documentTypeDescription = "Factura Electrónica"
 
     // Determinar tipo de documento
     if (fileName.toUpperCase().includes("RH") || fileName.toUpperCase().includes("RHE")) {
-      documentType = "RECIBO_HONORARIOS"
+      documentType = "RECEIPT"
       documentTypeDescription = "Recibo por Honorarios Electrónico"
     } else if (invoiceTypeCode === "01") {
-      documentType = "FACTURA"
+      documentType = "INVOICE"
       documentTypeDescription = "Factura Electrónica"
     } else if (invoiceTypeCode === "03") {
-      documentType = "BOLETA"
+      documentType = "PURCHASE_ORDER"
       documentTypeDescription = "Boleta de Venta Electrónica"
     } else if (invoiceTypeCode === "07") {
-      documentType = "NOTA_CREDITO"
+      documentType = "CREDIT_NOTE"
       documentTypeDescription = "Nota de Crédito Electrónica"
     } else if (invoiceTypeCode === "08") {
-      documentType = "NOTA_DEBITO"
+      documentType = "DEBIT_NOTE"
       documentTypeDescription = "Nota de Débito Electrónica"
     }
 

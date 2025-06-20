@@ -1,14 +1,16 @@
 import { create } from "zustand"
-import type { CreateTransactionDto, Transaction, TransactionStatus } from "@/types"
+import type {
+  Transaction,
+  TransactionStatus,
+  TransactionPaginatedResponse,
+  CreateTransactionDto,
+  UpdateTransactionDto,
+  ImportTransactionsDto,
+  ImportTransactionsResult,
+  TransactionStats,
+  PaginationDto,
+} from "@/types"
 import apiClient from "@/lib/axiosConfig"
-
-interface PaginatedResponse<T> {
-  data: T[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
 
 interface TransactionsState {
   transactions: Transaction[]
@@ -21,22 +23,23 @@ interface TransactionsState {
     totalPages: number
   }
 
-  // CRUD methods
-  fetchTransactions: (companyId: string, page?: number, limit?: number) => Promise<void>
-  createTransaction: (transaction: CreateTransactionDto) => Promise<Transaction | null>
-  updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>
-  deleteTransaction: (id: string) => Promise<void>
+  // Métodos que coinciden exactamente con el service/controller
+  fetchTransactions: (companyId: string, pagination?: PaginationDto) => Promise<void>
+  createTransaction: (createTransactionDto: CreateTransactionDto) => Promise<Transaction | null>
+  importTransactions: (importDto: ImportTransactionsDto) => Promise<ImportTransactionsResult | null>
   getTransactionById: (id: string) => Promise<Transaction | null>
-
-  // File operations
-  importTransactions: (file: File, companyId: string, bankAccountId: string) => Promise<boolean>
-
-  // Filtering methods
+  updateTransaction: (id: string, updateTransactionDto: UpdateTransactionDto) => Promise<void>
+  deleteTransaction: (id: string) => Promise<void>
   getTransactionsByBankAccount: (bankAccountId: string) => Promise<Transaction[]>
   getTransactionsByStatus: (companyId: string, status: TransactionStatus) => Promise<Transaction[]>
   getTransactionsByDateRange: (companyId: string, startDate: string, endDate: string) => Promise<Transaction[]>
 
-  // Utility methods
+  // Métodos adicionales del service
+  getTransactionStats: (companyId: string) => Promise<TransactionStats | null>
+  searchTransactions: (companyId: string, searchTerm: string, pagination?: PaginationDto) => Promise<void>
+  updateTransactionStatus: (id: string, status: TransactionStatus) => Promise<Transaction | null>
+
+  // Métodos utilitarios
   clearTransactions: () => void
   clearError: () => void
 }
@@ -52,10 +55,11 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     totalPages: 0,
   },
 
-  fetchTransactions: async (companyId: string, page = 1, limit = 10000) => {
+  fetchTransactions: async (companyId: string, pagination: PaginationDto = {}) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<PaginatedResponse<Transaction>>(
+      const { page = 1, limit = 10 } = pagination
+      const response = await apiClient.get<TransactionPaginatedResponse>(
         `/transactions/company/${companyId}?page=${page}&limit=${limit}`,
       )
 
@@ -74,10 +78,10 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     }
   },
 
-  createTransaction: async (transactionData) => {
+  createTransaction: async (createTransactionDto: CreateTransactionDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Transaction>("/transactions", transactionData)
+      const response = await apiClient.post<Transaction>("/transactions", createTransactionDto)
       const newTransaction = response.data
 
       set((state) => ({
@@ -95,10 +99,50 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     }
   },
 
-  updateTransaction: async (id: string, updates: Partial<Transaction>) => {
+  importTransactions: async (importDto: ImportTransactionsDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<Transaction>(`/transactions/${id}`, updates)
+      const formData = new FormData()
+      formData.append("file", importDto.file)
+      formData.append("companyId", importDto.companyId)
+      formData.append("bankAccountId", importDto.bankAccountId)
+
+      const response = await apiClient.post<ImportTransactionsResult>("/transactions/import", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      })
+
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error importing transactions",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  getTransactionById: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Transaction>(`/transactions/${id}`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching transaction",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  updateTransaction: async (id: string, updateTransactionDto: UpdateTransactionDto) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.patch<Transaction>(`/transactions/${id}`, updateTransactionDto)
       const updatedTransaction = response.data
 
       set((state) => ({
@@ -129,46 +173,6 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
         error: error.response?.data?.message || "Error deleting transaction",
         loading: false,
       })
-    }
-  },
-
-  getTransactionById: async (id: string) => {
-    set({ loading: true, error: null })
-    try {
-      const response = await apiClient.get<Transaction>(`/transactions/${id}`)
-      set({ loading: false })
-      return response.data
-    } catch (error: any) {
-      set({
-        error: error.response?.data?.message || "Error fetching transaction",
-        loading: false,
-      })
-      return null
-    }
-  },
-
-  importTransactions: async (file: File, companyId: string, bankAccountId: string) => {
-    set({ loading: true, error: null })
-    try {
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("companyId", companyId)
-      formData.append("bankAccountId", bankAccountId)
-
-      await apiClient.post("/transactions/import", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      })
-
-      set({ loading: false })
-      return true
-    } catch (error: any) {
-      set({
-        error: error.response?.data?.message || "Error importing transactions",
-        loading: false,
-      })
-      return false
     }
   },
 
@@ -216,6 +220,67 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
         loading: false,
       })
       return []
+    }
+  },
+
+  getTransactionStats: async (companyId: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<TransactionStats>(`/transactions/company/${companyId}/stats`)
+      set({ loading: false })
+      return response.data
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error fetching transaction stats",
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  searchTransactions: async (companyId: string, searchTerm: string, pagination: PaginationDto = {}) => {
+    set({ loading: true, error: null })
+    try {
+      const { page = 1, limit = 10 } = pagination
+      const response = await apiClient.get<TransactionPaginatedResponse>(
+        `/transactions/company/${companyId}/search?term=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}`,
+      )
+
+      const { data, total, totalPages } = response.data
+
+      set({
+        transactions: data,
+        pagination: { total, page, limit, totalPages },
+        loading: false,
+      })
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error searching transactions",
+        loading: false,
+      })
+    }
+  },
+
+  updateTransactionStatus: async (id: string, status: TransactionStatus) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.patch<Transaction>(`/transactions/${id}/status`, { status })
+      const updatedTransaction = response.data
+
+      set((state) => ({
+        transactions: state.transactions.map((transaction) =>
+          transaction.id === id ? updatedTransaction : transaction,
+        ),
+        loading: false,
+      }))
+
+      return updatedTransaction
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error updating transaction status",
+        loading: false,
+      })
+      return null
     }
   },
 

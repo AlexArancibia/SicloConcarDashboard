@@ -14,6 +14,7 @@ import {
   Database,
   Home,
   LogOut,
+  Shield,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -117,15 +118,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <NavItem href="/suppliers" icon={Building2}>
                 Proveedores
               </NavItem>
-              <NavItem href="/suppliers" icon={Building2}>
+              <NavItem href="/sunat" icon={Shield}>
                 Validación Sunat
               </NavItem>
-              {/* <NavItem href="/retentions" icon={Receipt}>
-                Retenciones
-              </NavItem>
+      
               <NavItem href="/detractions" icon={TrendingDown}>
                 Detracciones
-              </NavItem> */}
+              </NavItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
