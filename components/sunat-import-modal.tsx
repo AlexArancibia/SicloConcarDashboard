@@ -9,8 +9,7 @@ import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Upload,
@@ -23,8 +22,8 @@ import {
   Loader2,
   Code,
   Database,
-  Clock,
-  XCircle,
+  FileSpreadsheet,
+  Zap,
 } from "lucide-react"
 import { useSunatStore } from "@/stores/sunat-store"
 import { useAuthStore } from "@/stores/authStore"
@@ -48,15 +47,6 @@ interface ImportResult {
   errorDetails: Array<{ row: number; error: string }>
 }
 
-interface RowImportStatus {
-  rowNumber: number
-  status: "pending" | "processing" | "success" | "error"
-  payload: string
-  response?: any
-  error?: string
-  timestamp?: Date
-}
-
 export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [dragActive, setDragActive] = useState(false)
@@ -66,8 +56,6 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
-  const [rowStatuses, setRowStatuses] = useState<RowImportStatus[]>([])
-  const [showImportDetails, setShowImportDetails] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { user } = useAuthStore()
@@ -90,7 +78,7 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0]
-      if (isValidFileType(file)) {
+      if (file.name.toLowerCase().endsWith(".txt")) {
         setSelectedFile(file)
         setParseError(null)
         parseFile(file)
@@ -103,7 +91,7 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
-      if (isValidFileType(file)) {
+      if (file.name.toLowerCase().endsWith(".txt")) {
         setSelectedFile(file)
         setParseError(null)
         parseFile(file)
@@ -113,252 +101,168 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
     }
   }
 
-  const isValidFileType = (file: File) => {
-    return file.name.toLowerCase().endsWith(".txt")
-  }
-
   const parseFile = async (file: File) => {
     try {
       const text = await file.text()
-
-      const lines = text
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0 && line !== "|")
+      const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0)
 
       if (lines.length < 2) {
         setParseError("El archivo debe contener al menos una fila de encabezados y una fila de datos")
         return
       }
 
-      const headerLine = lines[0]
-      const headers = headerLine
-        .split("|")
-        .map((h) => h.trim())
-        .filter((h) => h.length > 0)
-
-      if (headers.length === 0) {
-        setParseError("No se pudieron detectar los encabezados del archivo")
-        return
-      }
-
-      const dataLines = lines.slice(1)
-      const rows: string[][] = []
-      const warnings: string[] = []
-
-      for (let i = 0; i < dataLines.length; i++) {
-        const line = dataLines[i]
-        let cells = line.split("|").map((cell) => cell.trim())
-
+      const headers = lines[0].split("|").map((h) => h.trim())
+      const rows = lines.slice(1).map((line) => {
+        const cells = line.split("|").map((cell) => cell.trim())
+        // Asegurar que todas las filas tengan el mismo número de columnas
         while (cells.length < headers.length) {
           cells.push("")
         }
-
-        if (cells.length > headers.length) {
-          const extraCells = cells.slice(headers.length - 1)
-          cells = cells.slice(0, headers.length - 1)
-          cells.push(extraCells.join("|"))
-          warnings.push(`Fila ${i + 2}: Se detectaron columnas adicionales que fueron combinadas`)
-        }
-
-        rows.push(cells)
-      }
+        return cells.slice(0, headers.length)
+      })
 
       setParsedData({
         headers,
         rows,
         totalRows: rows.length,
-        warnings,
+        warnings: [],
       })
       setParseError(null)
     } catch (error) {
       console.error("Parse error:", error)
-      setParseError("Error al leer el archivo. Asegúrate de que sea un archivo TXT válido con encoding UTF-8.")
+      setParseError("Error al leer el archivo. Asegúrate de que sea un archivo TXT válido.")
     }
   }
 
-  const mapRowToRheDto = (row: string[], headers: string[]) => {
-    const getValueByHeader = (headerName: string) => {
-      const index = headers.findIndex((h) => h.toLowerCase().includes(headerName.toLowerCase()))
-      return index >= 0 ? row[index] : ""
-    }
+  const getValueByHeader = (row: string[], headers: string[], headerName: string) => {
+    const index = headers.findIndex((h) => h.trim() === headerName)
+    return index >= 0 ? row[index]?.trim() || "" : ""
+  }
 
-    const parseDate = (dateStr: string) => {
-      if (!dateStr || dateStr === "" || dateStr === "-") return new Date()
-      try {
-        const date = new Date(dateStr)
-        return isNaN(date.getTime()) ? new Date() : date
-      } catch {
-        return new Date()
+  const parseDate = (dateStr: string) => {
+    if (!dateStr || dateStr === "" || dateStr === "-") {
+      return new Date()
+    }
+    try {
+      const [day, month, year] = dateStr.split("/")
+      if (day && month && year) {
+        return new Date(Number.parseInt(year), Number.parseInt(month) - 1, Number.parseInt(day))
       }
+      return new Date()
+    } catch {
+      return new Date()
     }
+  }
 
-    const parseNumber = (numStr: string, defaultValue = 0) => {
-      if (!numStr || numStr === "" || numStr === "-") return defaultValue
-      const num = Number.parseFloat(numStr.replace(/,/g, ""))
-      return isNaN(num) ? defaultValue : num
-    }
+  const parseNumber = (numStr: string, defaultValue = 0) => {
+    if (!numStr || numStr === "" || numStr === "-") return defaultValue
+    const num = Number.parseFloat(numStr.replace(/,/g, ""))
+    return isNaN(num) ? defaultValue : num
+  }
 
-    const parseBoolean = (boolStr: string) => {
-      if (!boolStr || boolStr === "" || boolStr === "-") return false
-      return boolStr.toLowerCase() === "true" || boolStr.toLowerCase() === "1" || boolStr.toLowerCase() === "si"
-    }
+  const mapRowToRheDto = (row: string[], headers: string[]) => {
+    try {
+      const issueDate = parseDate(getValueByHeader(row, headers, "Fecha de Emisión"))
+      const documentType = getValueByHeader(row, headers, "Tipo Doc. Emitido") || "RH"
+      const documentNumber = getValueByHeader(row, headers, "Nro. Doc. Emitido") || `AUTO-${Date.now()}`
+      const issuerRuc = getValueByHeader(row, headers, "Nro. Doc. Emisor") || ""
+      const issuerName =
+        getValueByHeader(row, headers, "Apellidos y Nombres, Denominación o Razón Social del Emisor") || ""
+      const grossIncome = parseNumber(getValueByHeader(row, headers, "Renta Bruta"))
+      const incomeTax = parseNumber(getValueByHeader(row, headers, "Impuesto a la Renta"))
+      const netIncome = parseNumber(getValueByHeader(row, headers, "Renta Neta"))
 
-    return {
-      issueDate: parseDate(getValueByHeader("fecha") || getValueByHeader("fecha_emision")),
-      documentType: getValueByHeader("tipo_documento") || getValueByHeader("tipo") || "RETENCION",
-      documentNumber:
-        getValueByHeader("numero") || getValueByHeader("documento") || getValueByHeader("numero_documento") || "",
-      status: getValueByHeader("estado") || "VIGENTE",
-      issuerDocumentType: getValueByHeader("tipo_doc_emisor") || "RUC",
-      issuerRuc: getValueByHeader("ruc") || getValueByHeader("ruc_emisor") || "",
-      issuerName:
-        getValueByHeader("nombre") || getValueByHeader("razon_social") || getValueByHeader("nombre_emisor") || "",
-      rentType: getValueByHeader("tipo_renta") || "CUARTA_CATEGORIA",
-      isFree: parseBoolean(getValueByHeader("gratuito") || getValueByHeader("es_gratuito")),
-      description: getValueByHeader("descripcion") || undefined,
-      observation: getValueByHeader("observacion") || getValueByHeader("observaciones") || undefined,
-      currency: getValueByHeader("moneda") || "PEN",
-      grossIncome: parseNumber(getValueByHeader("ingreso_bruto") || getValueByHeader("monto_bruto")),
-      incomeTax: parseNumber(getValueByHeader("impuesto_renta") || getValueByHeader("retencion")),
-      netIncome: parseNumber(getValueByHeader("ingreso_neto") || getValueByHeader("monto_neto")),
-      netPendingAmount: parseNumber(getValueByHeader("monto_pendiente")) || undefined,
-      sourceFile: selectedFile?.name || "",
-      companyId: user?.companyId || "",
-      userId: user?.id || "",
+      return {
+        issueDate,
+        documentType,
+        documentNumber,
+        status: "VIGENTE",
+        issuerDocumentType: "RUC",
+        issuerRuc,
+        issuerName,
+        rentType: "CUARTA_CATEGORIA",
+        isFree: false,
+        currency: "PEN",
+        grossIncome,
+        incomeTax,
+        netIncome,
+        sourceFile: selectedFile?.name || "",
+        companyId: user?.companyId || "",
+        userId: user?.id || "",
+      }
+    } catch (error) {
+      console.error("Error mapping RHE row:", error)
+      throw new Error(`Error procesando fila: ${error instanceof Error ? error.message : "Error desconocido"}`)
     }
   }
 
   const mapRowToInvoiceDto = (row: string[], headers: string[]) => {
-    const getValueByHeader = (headerName: string) => {
-      const index = headers.findIndex((h) => h.toLowerCase().includes(headerName.toLowerCase()))
-      return index >= 0 ? row[index] : ""
-    }
+    try {
+      const period = getValueByHeader(row, headers, "Periodo") || ""
+      const carSunat = getValueByHeader(row, headers, "CAR SUNAT") || ""
+      const ruc = getValueByHeader(row, headers, "RUC") || ""
+      const name = getValueByHeader(row, headers, "Apellidos y Nombres o Razón social") || ""
+      const issueDate = parseDate(getValueByHeader(row, headers, "Fecha de emisión"))
+      const documentType = getValueByHeader(row, headers, "Tipo CP/Doc.") || "01"
+      const series = getValueByHeader(row, headers, "Serie del CDP") || ""
+      const documentNumber = getValueByHeader(row, headers, "Nro CP o Doc. Nro Inicial (Rango)") || `AUTO-${Date.now()}`
+      const taxableBase = parseNumber(getValueByHeader(row, headers, "BI Gravado DG"))
+      const igv = parseNumber(getValueByHeader(row, headers, "IGV / IPM DG"))
+      const total = parseNumber(getValueByHeader(row, headers, "Total CP"))
 
-    const parseDate = (dateStr: string) => {
-      if (!dateStr || dateStr === "" || dateStr === "-") return new Date()
-      try {
-        const date = new Date(dateStr)
-        return isNaN(date.getTime()) ? new Date() : date
-      } catch {
-        return new Date()
+      return {
+        period,
+        carSunat,
+        ruc,
+        name,
+        issueDate,
+        documentType,
+        series,
+        year: new Date().getFullYear().toString(),
+        documentNumber,
+        taxableBase,
+        igv,
+        total,
+        currency: "PEN",
+        invoiceStatus: "VIGENTE",
+        sourceFile: selectedFile?.name || "",
+        companyId: user?.companyId || "",
+        userId: user?.id || "",
       }
-    }
-
-    const parseNumber = (numStr: string, defaultValue = 0) => {
-      if (!numStr || numStr === "" || numStr === "-") return defaultValue
-      const num = Number.parseFloat(numStr.replace(/,/g, ""))
-      return isNaN(num) ? defaultValue : num
-    }
-
-    const parseOptionalNumber = (numStr: string) => {
-      if (!numStr || numStr === "" || numStr === "-") return undefined
-      const num = Number.parseFloat(numStr.replace(/,/g, ""))
-      return isNaN(num) ? undefined : num
-    }
-
-    const parseOptionalDate = (dateStr: string) => {
-      if (!dateStr || dateStr === "" || dateStr === "-") return undefined
-      try {
-        const date = new Date(dateStr)
-        return isNaN(date.getTime()) ? undefined : date
-      } catch {
-        return undefined
-      }
-    }
-
-    return {
-      period: getValueByHeader("periodo") || "",
-      carSunat: getValueByHeader("car") || getValueByHeader("car_sunat") || "",
-      ruc: getValueByHeader("ruc") || "",
-      name: getValueByHeader("nombre") || getValueByHeader("razon_social") || "",
-      issueDate: parseDate(getValueByHeader("fecha_emision") || getValueByHeader("fecha")),
-      expirationDate: parseOptionalDate(getValueByHeader("fecha_vencimiento")),
-      documentType: getValueByHeader("tipo_documento") || "FACTURA",
-      series: getValueByHeader("serie") || "",
-      year: getValueByHeader("año") || getValueByHeader("anio") || new Date().getFullYear().toString(),
-      documentNumber: getValueByHeader("numero") || getValueByHeader("numero_documento") || "",
-      identityDocumentType:
-        getValueByHeader("tipo_doc_identidad") || getValueByHeader("tipo_documento_cliente") || undefined,
-      identityDocumentNumber:
-        getValueByHeader("num_doc_identidad") || getValueByHeader("documento_cliente") || undefined,
-      customerName: getValueByHeader("cliente") || getValueByHeader("nombre_cliente") || undefined,
-      taxableBase: parseNumber(getValueByHeader("base_imponible") || getValueByHeader("base_gravada")),
-      igv: parseNumber(getValueByHeader("igv")),
-      taxableBaseNg: parseOptionalNumber(getValueByHeader("base_ng") || getValueByHeader("base_no_gravada")),
-      igvNg: parseOptionalNumber(getValueByHeader("igv_ng")),
-      taxableBaseDng: parseOptionalNumber(getValueByHeader("base_dng")),
-      igvDng: parseOptionalNumber(getValueByHeader("igv_dng")),
-      valueNgAcquisition: parseOptionalNumber(getValueByHeader("valor_adquisicion")),
-      isc: parseOptionalNumber(getValueByHeader("isc")),
-      icbper: parseOptionalNumber(getValueByHeader("icbper")),
-      otherCharges: parseOptionalNumber(getValueByHeader("otros_cargos") || getValueByHeader("otros_tributos")),
-      total: parseNumber(getValueByHeader("total") || getValueByHeader("importe_total")),
-      currency: getValueByHeader("moneda") || "PEN",
-      exchangeRate: parseOptionalNumber(getValueByHeader("tipo_cambio")),
-      modifiedIssueDate: parseOptionalDate(getValueByHeader("fecha_modificacion")),
-      modifiedDocType: getValueByHeader("tipo_doc_modificado") || undefined,
-      modifiedDocSeries: getValueByHeader("serie_modificada") || undefined,
-      modifiedDocNumber: getValueByHeader("numero_modificado") || undefined,
-      damCode: getValueByHeader("codigo_dam") || undefined,
-      goodsServicesClass: getValueByHeader("clase_bienes") || getValueByHeader("tipo_bien_servicio") || undefined,
-      projectOperatorId: getValueByHeader("operador_proyecto") || undefined,
-      participationPercent: parseOptionalNumber(getValueByHeader("porcentaje_participacion")),
-      imb: getValueByHeader("imb") || undefined,
-      carOrigin: getValueByHeader("car_origen") || undefined,
-      detraction: getValueByHeader("detraccion") || undefined,
-      noteType: getValueByHeader("tipo_nota") || undefined,
-      invoiceStatus: getValueByHeader("estado_factura") || getValueByHeader("estado") || "VIGENTE",
-      incal: getValueByHeader("incal") || undefined,
-      sourceFile: selectedFile?.name || "",
-      companyId: user?.companyId || "",
-      userId: user?.id || "",
+    } catch (error) {
+      console.error("Error mapping Invoice row:", error)
+      throw new Error(`Error procesando fila: ${error instanceof Error ? error.message : "Error desconocido"}`)
     }
   }
 
   const generatePayloadsPreview = () => {
     if (!parsedData) return []
 
-    return parsedData.rows.slice(0, 10).map((row, index) => {
-      const payload =
-        type === "rhe" ? mapRowToRheDto(row, parsedData.headers) : mapRowToInvoiceDto(row, parsedData.headers)
+    return parsedData.rows.slice(0, 5).map((row, index) => {
+      try {
+        const payload =
+          type === "rhe" ? mapRowToRheDto(row, parsedData.headers) : mapRowToInvoiceDto(row, parsedData.headers)
 
-      return {
-        rowNumber: index + 1,
-        payload: JSON.stringify(payload, null, 2),
+        return {
+          rowNumber: index + 1,
+          payload: JSON.stringify(payload, null, 2),
+          error: null,
+        }
+      } catch (error) {
+        return {
+          rowNumber: index + 1,
+          payload: "",
+          error: error instanceof Error ? error.message : "Error desconocido",
+        }
       }
     })
-  }
-
-  const updateRowStatus = (rowNumber: number, updates: Partial<RowImportStatus>) => {
-    setRowStatuses((prev) =>
-      prev.map((row) => (row.rowNumber === rowNumber ? { ...row, ...updates, timestamp: new Date() } : row)),
-    )
   }
 
   const handleImport = async () => {
     if (!parsedData || !user?.companyId || !user?.id) return
 
-    console.log("🚀 Starting import process...")
     setImporting(true)
     setImportProgress(0)
-    setShowImportDetails(true)
-
-    // Initialize row statuses
-    const initialStatuses: RowImportStatus[] = parsedData.rows.map((row, index) => {
-      const payload =
-        type === "rhe" ? mapRowToRheDto(row, parsedData.headers) : mapRowToInvoiceDto(row, parsedData.headers)
-
-      return {
-        rowNumber: index + 1,
-        status: "pending",
-        payload: JSON.stringify(payload, null, 2),
-      }
-    })
-
-    setRowStatuses(initialStatuses)
 
     const result: ImportResult = {
       success: 0,
@@ -372,9 +276,6 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
       const row = parsedData.rows[i]
       const rowNumber = i + 1
 
-      // Update status to processing
-      updateRowStatus(rowNumber, { status: "processing" })
-
       try {
         let response
         if (type === "rhe") {
@@ -385,23 +286,10 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
           response = await createSunatInvoice(dto)
         }
 
-        // Update status to success
-        updateRowStatus(rowNumber, {
-          status: "success",
-          response: response,
-        })
-
         result.success++
         console.log(`✅ Row ${rowNumber} processed successfully`)
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Error desconocido"
-
-        // Update status to error
-        updateRowStatus(rowNumber, {
-          status: "error",
-          error: errorMessage,
-        })
-
         console.error(`❌ Error processing row ${rowNumber}:`, error)
         result.errors++
         result.errorDetails.push({
@@ -415,12 +303,11 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
       setImportProgress(progress)
 
       // Small delay to prevent overwhelming the API
-      if (i % 5 === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 200))
+      if (i % 10 === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 100))
       }
     }
 
-    console.log("🏁 Import process completed!")
     setImportResult(result)
     setImporting(false)
   }
@@ -434,8 +321,6 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
     setImporting(false)
     setImportProgress(0)
     setImportResult(null)
-    setRowStatuses([])
-    setShowImportDetails(false)
     onOpenChange(false)
   }
 
@@ -445,84 +330,8 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
     setShowPreview(false)
     setParseError(null)
     setImportResult(null)
-    setRowStatuses([])
-    setShowImportDetails(false)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
-    }
-  }
-
-  const formatCurrency = (value: string) => {
-    if (!value || value === "" || value === "-") return "-"
-    const num = Number.parseFloat(value)
-    return isNaN(num) ? value : `S/ ${num.toFixed(2)}`
-  }
-
-  const formatDate = (value: string) => {
-    if (!value || value === "" || value === "-") return "-"
-    try {
-      const date = new Date(value)
-      return date.toLocaleDateString("es-PE")
-    } catch {
-      return value
-    }
-  }
-
-  const getColumnType = (header: string) => {
-    const lowerHeader = header.toLowerCase()
-    if (lowerHeader.includes("fecha")) return "date"
-    if (
-      lowerHeader.includes("monto") ||
-      lowerHeader.includes("total") ||
-      lowerHeader.includes("igv") ||
-      lowerHeader.includes("base") ||
-      lowerHeader.includes("renta") ||
-      lowerHeader.includes("impuesto") ||
-      lowerHeader.includes("cambio") ||
-      lowerHeader.includes("ingreso")
-    )
-      return "currency"
-    return "text"
-  }
-
-  const formatCellValue = (value: string, columnType: string) => {
-    switch (columnType) {
-      case "date":
-        return formatDate(value)
-      case "currency":
-        return formatCurrency(value)
-      default:
-        return value || "-"
-    }
-  }
-
-  const getStatusIcon = (status: RowImportStatus["status"]) => {
-    switch (status) {
-      case "pending":
-        return <Clock className="h-4 w-4 text-gray-400" />
-      case "processing":
-        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
-      case "success":
-        return <CheckCircle className="h-4 w-4 text-green-500" />
-      case "error":
-        return <XCircle className="h-4 w-4 text-red-500" />
-    }
-  }
-
-  const getStatusBadge = (status: RowImportStatus["status"]) => {
-    switch (status) {
-      case "pending":
-        return <Badge variant="secondary">Pendiente</Badge>
-      case "processing":
-        return <Badge variant="default">Procesando...</Badge>
-      case "success":
-        return (
-          <Badge variant="default" className="bg-green-500">
-            Exitoso
-          </Badge>
-        )
-      case "error":
-        return <Badge variant="destructive">Error</Badge>
     }
   }
 
@@ -532,51 +341,44 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
       ? "Selecciona el archivo TXT de Registro de Honorarios Electrónicos de SUNAT"
       : "Selecciona el archivo TXT de facturas/comprobantes de SUNAT"
 
-  const isComplete = importResult !== null && !importing
-
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[95vw] lg:max-w-7xl max-h-[95vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="sm:max-w-6xl max-h-[95vh] flex flex-col">
+        <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
+            <FileSpreadsheet className="h-5 w-5" />
             {title}
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full pr-4">
-            <div className="space-y-6">
+          <ScrollArea className="h-full">
+            <div className="space-y-4">
               <p className="text-sm text-muted-foreground">{description}</p>
 
-              {!showPreview && !showImportDetails && !isComplete && (
+              {!showPreview && !importResult && (
                 <>
-                  {/* File Upload Area */}
-                  <Card>
+                  {/* File Upload */}
+                  <Card className="border-2 border-dashed">
                     <CardContent className="p-6">
                       <div
-                        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                          dragActive
-                            ? "border-primary bg-primary/5"
-                            : "border-muted-foreground/25 hover:border-muted-foreground/50"
+                        className={`p-8 text-center border-2 border-dashed rounded-lg transition-colors ${
+                          dragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25"
                         }`}
                         onDragEnter={handleDrag}
                         onDragLeave={handleDrag}
                         onDragOver={handleDrag}
                         onDrop={handleDrop}
                       >
-                        <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                        <h3 className="text-lg font-medium mb-2">
-                          {dragActive ? "Suelta el archivo aquí" : "Arrastra tu archivo TXT aquí"}
+                        <Upload className="h-8 w-8 mx-auto mb-4 text-muted-foreground" />
+                        <h3 className="text-lg font-semibold mb-2">
+                          {dragActive ? "¡Suelta el archivo aquí!" : "Arrastra tu archivo TXT"}
                         </h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Solo archivos TXT delimitados por pipes (|)
-                        </p>
-
+                        <p className="text-muted-foreground mb-4">Archivos TXT delimitados por pipes (|)</p>
                         <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing}>
-                          Seleccionar Archivo TXT
+                          <FileText className="h-4 w-4 mr-2" />
+                          Seleccionar Archivo
                         </Button>
-
                         <Input
                           ref={fileInputRef}
                           type="file"
@@ -590,28 +392,37 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
 
                   {/* Selected File */}
                   {selectedFile && (
-                    <Card>
+                    <Card className="border-l-4 border-l-primary">
                       <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-primary/10 rounded-lg">
-                            <FileText className="h-5 w-5 text-primary" />
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-primary/10 rounded-lg">
+                              <FileText className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-lg">{selectedFile.name}</p>
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                <span>📁 {(selectedFile.size / 1024).toFixed(2)} KB</span>
+                                {parsedData && (
+                                  <>
+                                    <span>📊 {parsedData.totalRows} filas</span>
+                                    <span>📋 {parsedData.headers.length} columnas</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium truncate">{selectedFile.name}</h4>
-                            <p className="text-sm text-muted-foreground">{(selectedFile.size / 1024).toFixed(2)} KB</p>
-                          </div>
-                          {parsedData && (
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary">{parsedData.totalRows} filas</Badge>
+                          <div className="flex items-center gap-2">
+                            {parsedData && (
                               <Button variant="outline" size="sm" onClick={() => setShowPreview(true)}>
                                 <Eye className="h-4 w-4 mr-2" />
                                 Vista Previa
                               </Button>
-                            </div>
-                          )}
-                          <Button variant="ghost" size="sm" onClick={handleRemoveFile} disabled={importing}>
-                            <X className="h-4 w-4" />
-                          </Button>
+                            )}
+                            <Button variant="ghost" size="sm" onClick={handleRemoveFile} disabled={importing}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -619,16 +430,27 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
                 </>
               )}
 
-              {/* Preview */}
+              {/* Enhanced Preview */}
               {showPreview && parsedData && (
-                <Card>
-                  <CardHeader>
+                <Card className="border-0 shadow-lg">
+                  <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
                     <div className="flex items-center justify-between">
                       <div>
-                        <CardTitle>Vista Previa del Archivo</CardTitle>
-                        <CardDescription>
-                          {parsedData.totalRows} filas • {parsedData.headers.length} columnas
-                        </CardDescription>
+                        <h3 className="text-xl font-semibold flex items-center gap-2">
+                          <Database className="h-5 w-5" />
+                          Vista Previa del Archivo
+                        </h3>
+                        <div className="flex items-center gap-6 text-sm text-muted-foreground mt-1">
+                          <span className="flex items-center gap-1">
+                            📊 <strong>{parsedData.totalRows}</strong> filas
+                          </span>
+                          <span className="flex items-center gap-1">
+                            📋 <strong>{parsedData.headers.length}</strong> columnas
+                          </span>
+                          <span className="flex items-center gap-1">
+                            📁 <strong>{selectedFile?.name}</strong>
+                          </span>
+                        </div>
                       </div>
                       <Button variant="outline" size="sm" onClick={() => setShowPreview(false)}>
                         <EyeOff className="h-4 w-4 mr-2" />
@@ -637,60 +459,43 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
                     </div>
                   </CardHeader>
                   <CardContent className="p-0">
-                    {/* Warnings section */}
-                    {parsedData.warnings.length > 0 && (
-                      <div className="p-6 pb-0">
-                        <Alert className="mb-4">
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertDescription>
-                            <div className="space-y-1">
-                              <p className="font-medium">Advertencias encontradas:</p>
-                              {parsedData.warnings.slice(0, 3).map((warning, index) => (
-                                <p key={index} className="text-xs">
-                                  {warning}
-                                </p>
-                              ))}
-                              {parsedData.warnings.length > 3 && (
-                                <p className="text-xs">... y {parsedData.warnings.length - 3} advertencias más</p>
-                              )}
-                            </div>
-                          </AlertDescription>
-                        </Alert>
-                      </div>
-                    )}
-
-                    {/* Tabs for Raw Data vs Payload Preview */}
-                    <Tabs defaultValue="raw-data" className="w-full">
-                      <div className="px-6">
+                    <Tabs defaultValue="data" className="w-full">
+                      <div className="px-6 pt-4">
                         <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="raw-data" className="flex items-center gap-2">
+                          <TabsTrigger value="data" className="flex items-center gap-2">
                             <Database className="h-4 w-4" />
                             Datos del Archivo
                           </TabsTrigger>
-                          <TabsTrigger value="payload-preview" className="flex items-center gap-2">
+                          <TabsTrigger value="payload" className="flex items-center gap-2">
                             <Code className="h-4 w-4" />
-                            Payload a Enviar
+                            Vista Previa API
                           </TabsTrigger>
                         </TabsList>
                       </div>
 
-                      <TabsContent value="raw-data" className="mt-0">
-                        {/* Raw Data Table */}
-                        <div className="border rounded-lg overflow-hidden bg-background">
-                          <div className="h-[400px] overflow-auto">
+                      <TabsContent value="data" className="mt-0">
+                        <div className="border-t">
+                          <div className="p-4 bg-muted/20 border-b">
+                            <p className="text-sm text-muted-foreground">
+                              💡 <strong>Tip:</strong> Usa scroll horizontal para ver todas las columnas. 
+                              Pasa el mouse sobre las celdas para ver el contenido completo.
+                            </p>
+                          </div>
+                          <div className="overflow-auto max-h-[500px]">
                             <div className="min-w-max">
                               <Table>
-                                <TableHeader className="sticky top-0 z-30 bg-background">
-                                  <TableRow className="bg-muted/50 border-b-2">
-                                    <TableHead className="w-16 sticky left-0 bg-muted/50 z-40 border-r-2 font-semibold shadow-sm">
+                                <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
+                                  <TableRow className="bg-muted/50">
+                                    <TableHead className="w-16 sticky left-0 bg-muted/50 z-20 border-r font-bold">
                                       #
                                     </TableHead>
                                     {parsedData.headers.map((header, index) => (
-                                      <TableHead
-                                        key={index}
-                                        className="min-w-[150px] max-w-[250px] px-4 py-3 font-semibold whitespace-nowrap"
+                                      <TableHead 
+                                        key={index} 
+                                        className="min-w-[200px] max-w-[300px] px-4 py-3 font-semibold bg-muted/30"
+                                        title={header}
                                       >
-                                        <div className="truncate" title={header}>
+                                        <div className="truncate">
                                           {header}
                                         </div>
                                       </TableHead>
@@ -699,222 +504,293 @@ export function SunatImportModal({ open, onOpenChange, type }: SunatImportModalP
                                 </TableHeader>
                                 <TableBody>
                                   {parsedData.rows.slice(0, 50).map((row, rowIndex) => (
-                                    <TableRow key={rowIndex} className="hover:bg-muted/30">
-                                      <TableCell className="sticky left-0 bg-background z-20 border-r font-mono text-xs font-medium shadow-sm">
-                                        <div className="w-12 text-center">{rowIndex + 1}</div>
+                                    <TableRow key={rowIndex} className="hover:bg-muted/20">
+                                      <TableCell className="sticky left-0 bg-background z-10 border-r font-mono text-sm font-bold">
+                                        <div className="w-12 text-center bg-muted/20 rounded px-2 py-1">
+                                          {rowIndex + 1}
+                                        </div>
                                       </TableCell>
-                                      {row.map((cell, cellIndex) => {
-                                        const header = parsedData.headers[cellIndex] || ""
-                                        const columnType = getColumnType(header)
-                                        const displayValue = formatCellValue(cell, columnType)
-
-                                        return (
-                                          <TableCell
-                                            key={cellIndex}
-                                            className="px-4 py-3 text-sm min-w-[150px] max-w-[250px] whitespace-nowrap"
-                                          >
-                                            <div className="truncate" title={cell || ""}>
-                                              {displayValue}
-                                            </div>
-                                          </TableCell>
-                                        )
-                                      })}
+                                      {row.map((cell, cellIndex) => (
+                                        <TableCell 
+                                          key={cellIndex} 
+                                          className="px-4 py-3 text-sm min-w-[200px] max-w-[300px] cursor-help"
+                                          title={cell || "Valor vacío"}
+                                        >
+                                          <div className="truncate">
+                                            {cell || <span className="text-muted-foreground italic">Sin datos</span>}
+                                          </div>
+                                        </TableCell>
+                                      ))}
                                     </TableRow>
                                   ))}
                                 </TableBody>
                               </Table>
                             </div>
                           </div>
+                          <div className="border-t bg-muted/10 p-3">
+                            <div className="flex justify-between items-center text-sm text-muted-foreground">
+                              <span>Mostrando primeras 50 filas de {parsedData.totalRows} total</span>
+                              <div className="flex items-center gap-4">
+                                <span>↕️ Scroll vertical</span>
+                                <span>↔️ Scroll horizontal</span>
+                                <span>🖱️ Hover para detalles</span>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </TabsContent>
 
-                      <TabsContent value="payload-preview" className="mt-0">
-                        {/* Payload Preview */}
-                        <div className="space-y-4 p-6">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h4 className="font-medium">Payload que se enviará a la API</h4>
-                              <p className="text-sm text-muted-foreground">
-                                Mostrando las primeras 10 filas de {parsedData.totalRows} total
-                              </p>
-                            </div>
-                            <Badge variant="outline">{type === "rhe" ? "RHE" : "Facturas"} Format</Badge>
+                      <TabsContent value="payload" className="mt-0">
+                        <div className="p-6 space-y-4">
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <h4 className="font-semibold text-blue-900 mb-2">
+                              🚀 Payload que se enviará a la API
+                            </h4>
+                            <p className="text-sm text-blue-700">
+                              Vista previa de las primeras 3 filas de <strong>{parsedData.totalRows}</strong> total
+                            </p>
                           </div>
 
                           <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                            {generatePayloadsPreview().map((item, index) => (
+                            {generatePayloadsPreview().slice(0, 3).map((item, index) => (
                               <Card key={index} className="border-l-4 border-l-primary">
                                 <CardHeader className="pb-2">
-                                  <CardTitle className="text-sm flex items-center gap-2">
-                                    <span className="bg-primary text-primary-foreground px-2 py-1 rounded text-xs">
-                                      Fila {item.rowNumber}
-                                    </span>
-                                    <span className="text-muted-foreground">→</span>
-                                    <span className="text-muted-foreground text-xs">
-                                      {type === "rhe" ? "createSunatRhe()" : "createSunatInvoice()"}
-                                    </span>
-                                  </CardTitle>
-                                </CardHeader>
-                                <CardContent className="pt-0">
-                                  <div className="bg-muted/30 rounded-lg p-3 overflow-x-auto">
-                                    <pre className="text-xs font-mono whitespace-pre-wrap">{item.payload}</pre>
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="text-sm font-medium flex items-center gap-2">
+                                      <div className="bg-primary text-primary-foreground px-2 py-1 rounded text-xs font-bold">
+                                        Fila #{item.rowNumber}
+                                      </div>
+                                      <span className="text-muted-foreground">→</span>
+                                      <code className="text-xs bg-muted px-2 py-1 rounded">
+                                        {type === "rhe" ? "createSunatRhe()" : "createSunatInvoice()"}
+                                      </code>
+                                    </h4>
                                   </div>
+                                </CardHeader>
+                                <CardContent>
+                                  {item.error ? (
+                                    <Alert variant="destructive">
+                                      <AlertCircle className="h-4 w-4" />
+                                      <AlertDescription>{item.error}</AlertDescription>
+                                    </Alert>
+                                  ) : (
+                                    <div className="bg-slate-50 border rounded-lg overflow-hidden">
+                                      <div className="bg-slate-100 px-3 py-2 border-b">
+                                        <span className="text-xs font-mono text-slate-600">JSON Payload</span>
+                                      </div>
+                                      <div className="p-3 overflow-auto max-h-48">
+                                        <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap">
+                                          {item.payload}
+                                        </pre>
+                                      </div>
+                                    </div>
+                                  )}
                                 </CardContent>
                               </Card>
                             ))}
                           </div>
-
-                          {parsedData.totalRows > 10 && (
-                            <div className="text-center py-4 border-t">
-                              <p className="text-sm text-muted-foreground">
-                                ... y {parsedData.totalRows - 10} registros más que se procesarán de la misma manera
-                              </p>
-                            </div>
-                          )}
                         </div>
                       </TabsContent>
                     </Tabs>
+                  </CardContent>
+                </Card>
+              )}
 
-                    {/* Footer info */}
-                    <div className="p-6 pt-0 border-t">
-                      <div className="flex justify-between items-center text-sm text-muted-foreground">
-                        <span>Archivo: {selectedFile?.name}</span>
-                        <div className="flex items-center gap-2 text-xs">
-                          <div className="flex items-center gap-1 px-2 py-1 bg-muted rounded">
-                            <span>↕</span>
-                            <span>Scroll vertical</span>
-                          </div>
-                          <div className="flex items-center gap-1 px-2 py-1 bg-muted rounded">
-                            <span>↔</span>
-                            <span>Scroll horizontal</span>
-                          </div>
+              {/* Enhanced Import Progress */}
+              {importing && (
+                <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-indigo-50">
+                  <CardHeader className="border-b border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-xl font-semibold flex items-center gap-2 text-blue-900">
+                          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                          Importando Registros...
+                        </h3>
+                        <p className="text-sm text-blue-700 mt-1">
+                          Procesando archivo: <strong>{selectedFile?.name}</strong>
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-4xl font-bold text-blue-600 mb-1">
+                          {importProgress}%
+                        </div>
+                        <div className="text-sm text-blue-700">
+                          {parsedData && Math.round((importProgress / 100) * parsedData.totalRows)} de {parsedData?.totalRows} registros
                         </div>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Import Details - Real-time progress */}
-              {showImportDetails && (
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          {importing ? (
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                          ) : (
-                            <CheckCircle className="h-5 w-5 text-green-600" />
-                          )}
-                          {importing ? "Importando Registros..." : "Importación Completada"}
-                        </CardTitle>
-                        <CardDescription>Progreso detallado fila por fila</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm font-medium">
+                          <span>Progreso General</span>
+                          <span>{importProgress}%</span>
+                        </div>
+                        <Progress value={importProgress} className="h-3" />
                       </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-bold">{importProgress}%</div>
-                        <Progress value={importProgress} className="w-32 h-2" />
+                    
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="bg-white/50 rounded-lg p-3 border">
+                        <div className="text-2xl font-bold text-green-600">
+                          {Math.round((importProgress / 100) * (parsedData?.totalRows || 0))}
+                        </div>
+                        <div className="text-xs text-green-700 font-medium">Procesados</div>
+                      </div>
+                      <div className="bg-white/50 rounded-lg p-3 border">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {(parsedData?.totalRows || 0) - Math.round((importProgress / 100) * (parsedData?.totalRows || 0))}
+                        </div>
+                        <div className="text-xs text-blue-700 font-medium">Pendientes</div>
+                      </div>
+                      <div className="bg-white/50 rounded-lg p-3 border">
+                        <div className="text-2xl font-bold text-gray-600">
+                          {parsedData?.totalRows || 0}
+                        </div>
+                        <div className="text-xs text-gray-700 font-medium">Total</div>
                       </div>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                      {rowStatuses.map((rowStatus) => (
-                        <Card key={rowStatus.rowNumber} className="border-l-4 border-l-muted">
-                          <CardContent className="p-4">
-                            <div className="flex items-start gap-3">
-                              <div className="flex items-center gap-2 min-w-0">
-                                {getStatusIcon(rowStatus.status)}
-                                <span className="font-mono text-sm font-medium">Fila {rowStatus.rowNumber}</span>
-                                {getStatusBadge(rowStatus.status)}
-                                {rowStatus.timestamp && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {rowStatus.timestamp.toLocaleTimeString()}
-                                  </span>
-                                )}
+
+                    <div className="bg-white/30 rounded-lg p-3 border">
+                      <div className="flex items-center gap-2 text-sm text-blue-800">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="font-medium">Estado:</span>
+                        <span>Enviando datos a la API de SUNAT...</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Enhanced Import Results */}
+            {importResult && (
+              <Card className="border-0 shadow-lg">
+                <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-semibold flex items-center gap-2 text-green-900">
+                        <CheckCircle className="h-6 w-6 text-green-600" />
+                        Importación Completada
+                      </h3>
+                      <p className="text-sm text-green-700 mt-1">
+                        Archivo: <strong>{selectedFile?.name}</strong> procesado exitosamente
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-3xl font-bold text-green-600">100%</div>
+                      <div className="text-sm text-green-700">Completado</div>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="grid grid-cols-2 gap-6 mb-6">
+                    <Card className="border-green-200 bg-green-50">
+                      <CardContent className="text-center p-6">
+                        <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
+                        <div className="text-4xl font-bold text-green-700 mb-2">{importResult.success}</div>
+                        <div className="text-sm font-medium text-green-800">Registros Exitosos</div>
+                        <div className="text-xs text-green-600 mt-1">
+                          {parsedData && `${((importResult.success / parsedData.totalRows) * 100).toFixed(1)}% del total`}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-red-200 bg-red-50">
+                      <CardContent className="text-center p-6">
+                        <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-3" />
+                        <div className="text-4xl font-bold text-red-700 mb-2">{importResult.errors}</div>
+                        <div className="text-sm font-medium text-red-800">Errores Encontrados</div>
+                        <div className="text-xs text-red-600 mt-1">
+                          {parsedData && `${((importResult.errors / parsedData.totalRows) * 100).toFixed(1)}% del total`}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {importResult.errorDetails.length > 0 && (
+                    <Card className="border-amber-200 bg-amber-50">
+                      <CardHeader className="pb-3">
+                        <h4 className="font-semibold text-amber-900 flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4" />
+                          Detalles de Errores ({importResult.errorDetails.length})
+                        </h4>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="max-h-48 overflow-auto space-y-2">
+                          {importResult.errorDetails.slice(0, 10).map((error, index) => (
+                            <div key={index} className="bg-white border border-amber-200 rounded p-3">
+                              <div className="flex items-start gap-2">
+                                <div className="bg-amber-100 text-amber-800 px-2 py-1 rounded text-xs font-mono font-bold">
+                                  Fila {error.row}
+                                </div>
+                                <div className="flex-1 text-sm text-amber-800">
+                                  {error.error}
+                                </div>
                               </div>
                             </div>
-
-                            {rowStatus.error && (
-                              <Alert variant="destructive" className="mt-3">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertDescription className="text-sm">{rowStatus.error}</AlertDescription>
-                              </Alert>
-                            )}
-
-                            {rowStatus.response && (
-                              <Alert className="mt-3">
-                                <CheckCircle className="h-4 w-4" />
-                                <AlertDescription className="text-sm">Registro creado exitosamente</AlertDescription>
-                              </Alert>
-                            )}
-
-                            <details className="mt-3">
-                              <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
-                                Ver payload enviado
-                              </summary>
-                              <div className="mt-2 bg-muted/30 rounded-lg p-3 overflow-x-auto">
-                                <pre className="text-xs font-mono whitespace-pre-wrap">{rowStatus.payload}</pre>
+                          ))}
+                          {importResult.errorDetails.length > 10 && (
+                            <div className="text-center py-2">
+                              <div className="text-xs text-amber-700 bg-amber-100 px-3 py-1 rounded-full inline-block">
+                                ... y {importResult.errorDetails.length - 10} errores más
                               </div>
-                            </details>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
-              {/* Import Results Summary */}
-              {importResult && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <CheckCircle className="h-5 w-5 text-green-600" />
-                      Resumen de Importación
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
-                        <div className="text-2xl font-bold text-green-600">{importResult.success}</div>
-                        <div className="text-sm text-green-700">Registros creados</div>
-                      </div>
-                      <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
-                        <div className="text-2xl font-bold text-red-600">{importResult.errors}</div>
-                        <div className="text-sm text-red-700">Errores</div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+            {/* Error Messages */}
+            {parseError && (
+              <Alert variant="destructive" className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800 font-medium">{parseError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
 
-              {/* Error Messages */}
-              {parseError && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{parseError}</AlertDescription>
-                </Alert>
+      {/* Enhanced Actions */}
+      <div className="flex justify-between items-center pt-4 border-t bg-muted/20 -mx-6 px-6 -mb-6 pb-6">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          {parsedData && (
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1">
+                📊 <strong>{parsedData.totalRows}</strong> registros
+              </span>
+              <span className="flex items-center gap-1">
+                📁 <strong>{selectedFile?.name}</strong>
+              </span>
+              {importing && (
+                <span className="flex items-center gap-1 text-blue-600">
+                  ⚡ <strong>{importProgress}%</strong> completado
+                </span>
               )}
             </div>
-          </ScrollArea>
+          )}
         </div>
-
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t flex-shrink-0">
-          <Button variant="outline" onClick={handleClose}>
-            {isComplete ? "Cerrar" : "Cancelar"}
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={handleClose} disabled={importing}>
+            {importResult ? "Cerrar" : "Cancelar"}
           </Button>
-          {!isComplete && parsedData && !importing && !showImportDetails && (
-            <Button
-              onClick={handleImport}
-              disabled={!selectedFile || importing || !!parseError || !user?.companyId || !user?.id}
+          {parsedData && !importing && !importResult && (
+            <Button 
+              onClick={handleImport} 
+              disabled={!selectedFile || importing || !!parseError}
+              className="bg-primary hover:bg-primary/90"
             >
+              <Zap className="h-4 w-4 mr-2" />
               Importar {parsedData.totalRows} registros
             </Button>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
-  )
+      </div>
+    </DialogContent>
+  </Dialog>
+)
 }

@@ -10,7 +10,35 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Upload, Search, FileText, Receipt, TrendingUp, DollarSign, AlertCircle, Download } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  Upload,
+  Search,
+  FileText,
+  Receipt,
+  TrendingUp,
+  DollarSign,
+  AlertCircle,
+  Download,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Loader2,
+} from "lucide-react"
 import { useSunatStore } from "@/stores/sunat-store"
 import { useAuthStore } from "@/stores/authStore"
 import { SunatImportModal } from "@/components/sunat-import-modal"
@@ -21,6 +49,16 @@ export default function SunatPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [importType, setImportType] = useState<"rhe" | "invoices">("rhe")
+
+  // Pagination states
+  const [rhePage, setRhePage] = useState(1)
+  const [invoicePage, setInvoicePage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+
+  // Selection states
+  const [selectedRheIds, setSelectedRheIds] = useState<string[]>([])
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([])
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const { user } = useAuthStore()
 
@@ -38,6 +76,8 @@ export default function SunatPage() {
     searchSunatRhe,
     searchSunatInvoices,
     getSunatStats,
+    deleteSunatRhe,
+    deleteSunatInvoice,
     clearErrors,
   } = useSunatStore()
 
@@ -73,6 +113,82 @@ export default function SunatPage() {
     clearErrors()
   }
 
+  // Pagination logic
+  const getCurrentPageData = (data: any[], page: number) => {
+    const startIndex = (page - 1) * pageSize
+    const endIndex = startIndex + pageSize
+    return data.slice(startIndex, endIndex)
+  }
+
+  const getTotalPages = (totalItems: number) => {
+    return Math.ceil(totalItems / pageSize)
+  }
+
+  const currentRheData = getCurrentPageData(rheRecords, rhePage)
+  const currentInvoiceData = getCurrentPageData(invoices, invoicePage)
+  const rheTotalPages = getTotalPages(rheRecords.length)
+  const invoiceTotalPages = getTotalPages(invoices.length)
+
+  // Selection logic
+  const handleSelectRhe = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedRheIds([...selectedRheIds, id])
+    } else {
+      setSelectedRheIds(selectedRheIds.filter((selectedId) => selectedId !== id))
+    }
+  }
+
+  const handleSelectAllRhe = (checked: boolean) => {
+    if (checked) {
+      setSelectedRheIds(currentRheData.map((record) => record.id))
+    } else {
+      setSelectedRheIds([])
+    }
+  }
+
+  const handleSelectInvoice = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedInvoiceIds([...selectedInvoiceIds, id])
+    } else {
+      setSelectedInvoiceIds(selectedInvoiceIds.filter((selectedId) => selectedId !== id))
+    }
+  }
+
+  const handleSelectAllInvoices = (checked: boolean) => {
+    if (checked) {
+      setSelectedInvoiceIds(currentInvoiceData.map((invoice) => invoice.id))
+    } else {
+      setSelectedInvoiceIds([])
+    }
+  }
+
+  // Delete logic
+  const handleDeleteSelected = async () => {
+    if (!user?.companyId) return
+
+    setIsDeleting(true)
+    try {
+      if (activeTab === "rhe") {
+        for (const id of selectedRheIds) {
+          await deleteSunatRhe(id)
+        }
+        setSelectedRheIds([])
+        await fetchSunatRhe(user.companyId)
+      } else {
+        for (const id of selectedInvoiceIds) {
+          await deleteSunatInvoice(id)
+        }
+        setSelectedInvoiceIds([])
+        await fetchSunatInvoices(user.companyId)
+      }
+      await getSunatStats(user.companyId)
+    } catch (error) {
+      console.error("Error deleting records:", error)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const formatCurrency = (amount: number, currency = "PEN") => {
     return new Intl.NumberFormat("es-PE", {
       style: "currency",
@@ -104,6 +220,88 @@ export default function SunatPage() {
       </Badge>
     )
   }
+
+  // Pagination component
+  const PaginationControls = ({
+    currentPage,
+    totalPages,
+    onPageChange,
+    totalItems,
+    itemName,
+  }: {
+    currentPage: number
+    totalPages: number
+    onPageChange: (page: number) => void
+    totalItems: number
+    itemName: string
+  }) => (
+    <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-t">
+      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <span>
+          Mostrando {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, totalItems)} de {totalItems}{" "}
+          {itemName}
+        </span>
+        <div className="flex items-center gap-2">
+          <span>Filas por página:</span>
+          <Select value={pageSize.toString()} onValueChange={(value) => setPageSize(Number(value))}>
+            <SelectTrigger className="w-20 h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="5">5</SelectItem>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => onPageChange(1)} disabled={currentPage === 1}>
+          <ChevronsLeft className="h-4 w-4" />
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+
+        <div className="flex items-center gap-1">
+          <span className="text-sm">Página</span>
+          <Input
+            type="number"
+            min={1}
+            max={totalPages}
+            value={currentPage}
+            onChange={(e) => {
+              const page = Number(e.target.value)
+              if (page >= 1 && page <= totalPages) {
+                onPageChange(page)
+              }
+            }}
+            className="w-16 h-8 text-center"
+          />
+          <span className="text-sm">de {totalPages}</span>
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(totalPages)}
+          disabled={currentPage === totalPages}
+        >
+          <ChevronsRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
 
   if (rheError || invoicesError) {
     return (
@@ -223,10 +421,49 @@ export default function SunatPage() {
             <TabsTrigger value="invoices">Facturas</TabsTrigger>
           </TabsList>
 
-          <Button onClick={() => openImportModal(activeTab as "rhe" | "invoices")}>
-            <Upload className="h-4 w-4 mr-2" />
-            Importar {activeTab === "rhe" ? "RHE" : "Facturas"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Delete Selected Button */}
+            {((activeTab === "rhe" && selectedRheIds.length > 0) ||
+              (activeTab === "invoices" && selectedInvoiceIds.length > 0)) && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm" disabled={isDeleting}>
+                    {isDeleting ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-2" />
+                    )}
+                    Eliminar ({activeTab === "rhe" ? selectedRheIds.length : selectedInvoiceIds.length})
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Esta acción eliminará permanentemente{" "}
+                      {activeTab === "rhe" ? selectedRheIds.length : selectedInvoiceIds.length}{" "}
+                      {activeTab === "rhe" ? "registros RHE" : "facturas"} seleccionados. Esta acción no se puede
+                      deshacer.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteSelected}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Eliminar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+
+            <Button onClick={() => openImportModal(activeTab as "rhe" | "invoices")}>
+              <Upload className="h-4 w-4 mr-2" />
+              Importar {activeTab === "rhe" ? "RHE" : "Facturas"}
+            </Button>
+          </div>
         </div>
 
         {/* Search Filter */}
@@ -250,93 +487,130 @@ export default function SunatPage() {
         <TabsContent value="rhe" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Registros de Honorarios Electrónicos ({rheLoading ? "..." : rheRecords.length})
-              </CardTitle>
-              <CardDescription>Gestiona los registros RHE importados desde SUNAT</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    Registros de Honorarios Electrónicos ({rheLoading ? "..." : rheRecords.length})
+                  </CardTitle>
+                  <CardDescription>Gestiona los registros RHE importados desde SUNAT</CardDescription>
+                </div>
+                {selectedRheIds.length > 0 && (
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    {selectedRheIds.length} seleccionados
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
               {rheError && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{rheError}</AlertDescription>
-                </Alert>
+                <div className="p-6">
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{rheError}</AlertDescription>
+                  </Alert>
+                </div>
               )}
 
               {rheLoading ? (
-                <TableSkeleton rows={8} columns={9} />
+                <div className="p-6">
+                  <TableSkeleton rows={8} columns={10} />
+                </div>
               ) : (
-                <div className="border rounded-md overflow-hidden">
-                  <ScrollArea className="h-96 w-full">
-                    <div className="min-w-max overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead className="sticky left-0 bg-muted/50 z-20 border-r shadow-sm">
-                              Fecha Emisión
-                            </TableHead>
-                            <TableHead className="whitespace-nowrap">Documento</TableHead>
-                            <TableHead className="whitespace-nowrap">Emisor</TableHead>
-                            <TableHead className="whitespace-nowrap">Descripción</TableHead>
-                            <TableHead className="whitespace-nowrap">Moneda</TableHead>
-                            <TableHead className="text-right whitespace-nowrap">Renta Bruta</TableHead>
-                            <TableHead className="text-right whitespace-nowrap">Impuesto</TableHead>
-                            <TableHead className="text-right whitespace-nowrap">Renta Neta</TableHead>
-                            <TableHead className="text-center whitespace-nowrap">Estado</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {rheRecords.length === 0 ? (
-                            <TableRow>
-                              <TableCell colSpan={9} className="text-center py-8">
-                                <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                                <p className="text-gray-500">No se encontraron registros RHE</p>
-                              </TableCell>
+                <div className="border-t">
+                  <div className="overflow-hidden">
+                    <ScrollArea className="h-96 w-full">
+                      <div className="min-w-max">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="w-12 sticky left-0 bg-muted/50 z-20 border-r">
+                                <Checkbox
+                                  checked={currentRheData.length > 0 && selectedRheIds.length === currentRheData.length}
+                                  onCheckedChange={handleSelectAllRhe}
+                                />
+                              </TableHead>
+                              <TableHead className="sticky left-12 bg-muted/50 z-20 border-r shadow-sm">
+                                Fecha Emisión
+                              </TableHead>
+                              <TableHead className="whitespace-nowrap">Documento</TableHead>
+                              <TableHead className="whitespace-nowrap">Emisor</TableHead>
+                              <TableHead className="whitespace-nowrap">Descripción</TableHead>
+                              <TableHead className="whitespace-nowrap">Moneda</TableHead>
+                              <TableHead className="text-right whitespace-nowrap">Renta Bruta</TableHead>
+                              <TableHead className="text-right whitespace-nowrap">Impuesto</TableHead>
+                              <TableHead className="text-right whitespace-nowrap">Renta Neta</TableHead>
+                              <TableHead className="text-center whitespace-nowrap">Estado</TableHead>
                             </TableRow>
-                          ) : (
-                            rheRecords.map((record) => (
-                              <TableRow key={record.id} className="hover:bg-muted/30">
-                                <TableCell className="sticky left-0 bg-background z-10 border-r shadow-sm">
-                                  {formatDate(record.issueDate)}
+                          </TableHeader>
+                          <TableBody>
+                            {currentRheData.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={10} className="text-center py-8">
+                                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                                  <p className="text-gray-500">No se encontraron registros RHE</p>
                                 </TableCell>
-                                <TableCell>
-                                  <Badge variant="outline" className="font-mono text-xs">
-                                    {record.documentType} {record.documentNumber}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell style={{ maxWidth: "200px" }}>
-                                  <div className="truncate" title={record.issuerName}>
-                                    {record.issuerName}
-                                  </div>
-                                </TableCell>
-                                <TableCell style={{ maxWidth: "250px" }}>
-                                  <div className="truncate" title={record.description}>
-                                    {record.description}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="outline" className="text-xs">
-                                    {record.currency}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right font-mono whitespace-nowrap">
-                                  {formatCurrency(record.grossIncome, record.currency)}
-                                </TableCell>
-                                <TableCell className="text-right font-mono whitespace-nowrap">
-                                  {formatCurrency(record.incomeTax, record.currency)}
-                                </TableCell>
-                                <TableCell className="text-right font-mono whitespace-nowrap">
-                                  {formatCurrency(record.netIncome, record.currency)}
-                                </TableCell>
-                                <TableCell className="text-center">{getStatusBadge(record.status)}</TableCell>
                               </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </ScrollArea>
+                            ) : (
+                              currentRheData.map((record) => (
+                                <TableRow key={record.id} className="hover:bg-muted/30">
+                                  <TableCell className="sticky left-0 bg-background z-10 border-r">
+                                    <Checkbox
+                                      checked={selectedRheIds.includes(record.id)}
+                                      onCheckedChange={(checked) => handleSelectRhe(record.id, checked as boolean)}
+                                    />
+                                  </TableCell>
+                                  <TableCell className="sticky left-12 bg-background z-10 border-r shadow-sm">
+                                    {formatDate(record.issueDate)}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="font-mono text-xs">
+                                      {record.documentType} {record.documentNumber}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell style={{ maxWidth: "200px" }}>
+                                    <div className="truncate" title={record.issuerName}>
+                                      {record.issuerName}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell style={{ maxWidth: "250px" }}>
+                                    <div className="truncate" title={record.description}>
+                                      {record.description}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-xs">
+                                      {record.currency}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono whitespace-nowrap">
+                                    {formatCurrency(record.grossIncome, record.currency)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono whitespace-nowrap">
+                                    {formatCurrency(record.incomeTax, record.currency)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono whitespace-nowrap">
+                                    {formatCurrency(record.netIncome, record.currency)}
+                                  </TableCell>
+                                  <TableCell className="text-center">{getStatusBadge(record.status)}</TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </ScrollArea>
+                  </div>
+
+                  {rheRecords.length > 0 && (
+                    <PaginationControls
+                      currentPage={rhePage}
+                      totalPages={rheTotalPages}
+                      onPageChange={setRhePage}
+                      totalItems={rheRecords.length}
+                      itemName="registros RHE"
+                    />
+                  )}
                 </div>
               )}
             </CardContent>
@@ -346,91 +620,131 @@ export default function SunatPage() {
         <TabsContent value="invoices" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Receipt className="w-5 h-5" />
-                Facturas y Comprobantes ({invoicesLoading ? "..." : invoices.length})
-              </CardTitle>
-              <CardDescription>Gestiona las facturas importadas desde SUNAT</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Receipt className="w-5 h-5" />
+                    Facturas y Comprobantes ({invoicesLoading ? "..." : invoices.length})
+                  </CardTitle>
+                  <CardDescription>Gestiona las facturas importadas desde SUNAT</CardDescription>
+                </div>
+                {selectedInvoiceIds.length > 0 && (
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    {selectedInvoiceIds.length} seleccionados
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
               {invoicesError && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{invoicesError}</AlertDescription>
-                </Alert>
+                <div className="p-6">
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{invoicesError}</AlertDescription>
+                  </Alert>
+                </div>
               )}
 
               {invoicesLoading ? (
-                <TableSkeleton rows={8} columns={9} />
+                <div className="p-6">
+                  <TableSkeleton rows={8} columns={10} />
+                </div>
               ) : (
-                <div className="border rounded-md overflow-hidden">
-                  <ScrollArea className="h-96 w-full">
-                    <div className="min-w-max overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead className="sticky left-0 bg-muted/50 z-20 border-r shadow-sm">
-                              Fecha Emisión
-                            </TableHead>
-                            <TableHead className="whitespace-nowrap">Documento</TableHead>
-                            <TableHead className="whitespace-nowrap">Proveedor</TableHead>
-                            <TableHead className="whitespace-nowrap">RUC</TableHead>
-                            <TableHead className="text-right whitespace-nowrap">Base Imponible</TableHead>
-                            <TableHead className="text-right whitespace-nowrap">IGV</TableHead>
-                            <TableHead className="text-right whitespace-nowrap">Total</TableHead>
-                            <TableHead className="whitespace-nowrap">Moneda</TableHead>
-                            <TableHead className="text-center whitespace-nowrap">Estado</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {invoices.length === 0 ? (
-                            <TableRow>
-                              <TableCell colSpan={9} className="text-center py-8">
-                                <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                                <p className="text-gray-500">No se encontraron facturas</p>
-                              </TableCell>
+                <div className="border-t">
+                  <div className="overflow-hidden">
+                    <ScrollArea className="h-96 w-full">
+                      <div className="min-w-max">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="w-12 sticky left-0 bg-muted/50 z-20 border-r">
+                                <Checkbox
+                                  checked={
+                                    currentInvoiceData.length > 0 &&
+                                    selectedInvoiceIds.length === currentInvoiceData.length
+                                  }
+                                  onCheckedChange={handleSelectAllInvoices}
+                                />
+                              </TableHead>
+                              <TableHead className="sticky left-12 bg-muted/50 z-20 border-r shadow-sm">
+                                Fecha Emisión
+                              </TableHead>
+                              <TableHead className="whitespace-nowrap">Documento</TableHead>
+                              <TableHead className="whitespace-nowrap">Proveedor</TableHead>
+                              <TableHead className="whitespace-nowrap">RUC</TableHead>
+                              <TableHead className="text-right whitespace-nowrap">Base Imponible</TableHead>
+                              <TableHead className="text-right whitespace-nowrap">IGV</TableHead>
+                              <TableHead className="text-right whitespace-nowrap">Total</TableHead>
+                              <TableHead className="whitespace-nowrap">Moneda</TableHead>
+                              <TableHead className="text-center whitespace-nowrap">Estado</TableHead>
                             </TableRow>
-                          ) : (
-                            invoices.map((invoice) => (
-                              <TableRow key={invoice.id} className="hover:bg-muted/30">
-                                <TableCell className="sticky left-0 bg-background z-10 border-r shadow-sm">
-                                  {formatDate(invoice.issueDate)}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="outline" className="font-mono text-xs">
-                                    {invoice.documentType} {invoice.series}-{invoice.documentNumber}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell style={{ maxWidth: "200px" }}>
-                                  <div className="truncate" title={invoice.customerName || "N/A"}>
-                                    {invoice.customerName || "N/A"}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="font-mono">{invoice.identityDocumentNumber || "N/A"}</TableCell>
-                                <TableCell className="text-right font-mono whitespace-nowrap">
-                                  {formatCurrency(invoice.taxableBase, invoice.currency)}
-                                </TableCell>
-                                <TableCell className="text-right font-mono whitespace-nowrap">
-                                  {formatCurrency(invoice.igv, invoice.currency)}
-                                </TableCell>
-                                <TableCell className="text-right font-mono whitespace-nowrap">
-                                  {formatCurrency(invoice.total, invoice.currency)}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="outline" className="text-xs">
-                                    {invoice.currency}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  {getStatusBadge(invoice.invoiceStatus || "N/A")}
+                          </TableHeader>
+                          <TableBody>
+                            {currentInvoiceData.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={10} className="text-center py-8">
+                                  <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                                  <p className="text-gray-500">No se encontraron facturas</p>
                                 </TableCell>
                               </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </ScrollArea>
+                            ) : (
+                              currentInvoiceData.map((invoice) => (
+                                <TableRow key={invoice.id} className="hover:bg-muted/30">
+                                  <TableCell className="sticky left-0 bg-background z-10 border-r">
+                                    <Checkbox
+                                      checked={selectedInvoiceIds.includes(invoice.id)}
+                                      onCheckedChange={(checked) => handleSelectInvoice(invoice.id, checked as boolean)}
+                                    />
+                                  </TableCell>
+                                  <TableCell className="sticky left-12 bg-background z-10 border-r shadow-sm">
+                                    {formatDate(invoice.issueDate)}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="font-mono text-xs">
+                                      {invoice.documentType} {invoice.series}-{invoice.documentNumber}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell style={{ maxWidth: "200px" }}>
+                                    <div className="truncate" title={invoice.customerName || "N/A"}>
+                                      {invoice.customerName || "N/A"}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="font-mono">{invoice.identityDocumentNumber || "N/A"}</TableCell>
+                                  <TableCell className="text-right font-mono whitespace-nowrap">
+                                    {formatCurrency(invoice.taxableBase, invoice.currency)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono whitespace-nowrap">
+                                    {formatCurrency(invoice.igv, invoice.currency)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono whitespace-nowrap">
+                                    {formatCurrency(invoice.total, invoice.currency)}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-xs">
+                                      {invoice.currency}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    {getStatusBadge(invoice.invoiceStatus || "N/A")}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </ScrollArea>
+                  </div>
+
+                  {invoices.length > 0 && (
+                    <PaginationControls
+                      currentPage={invoicePage}
+                      totalPages={invoiceTotalPages}
+                      onPageChange={setInvoicePage}
+                      totalItems={invoices.length}
+                      itemName="facturas"
+                    />
+                  )}
                 </div>
               )}
             </CardContent>

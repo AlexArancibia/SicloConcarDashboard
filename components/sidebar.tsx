@@ -15,6 +15,7 @@ import {
   Home,
   LogOut,
   Shield,
+  BookText,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -142,6 +143,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </NavItem>
               <NavItem href="/conciliations" icon={GitMerge}>
                 Conciliación
+              </NavItem>
+              <NavItem href="/accounting" icon={BookText}>
+                Contabilidad
               </NavItem>
             </SidebarMenu>
           </SidebarGroupContent>
