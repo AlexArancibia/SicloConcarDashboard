@@ -7,5 +7,5 @@ interface DocumentDetailProps {
 
 export default function DocumentDetail({ params }: DocumentDetailProps) {
   const resolvedParams = use(params)
-  return <DocumentDetailPage documentId={resolvedParams.id} />
+  return <DocumentDetailPage params={resolvedParams} />
 }
