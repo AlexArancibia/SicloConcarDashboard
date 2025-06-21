@@ -1,6 +1,7 @@
 import { create } from "zustand"
-import type { Bank, PaginationDto, PaginatedResponse } from "@/types"
+import type { Bank  } from "@/types/bank-accounts"
 import apiClient from "@/lib/axiosConfig"
+import { PaginatedResponse, PaginationDto } from "@/types/suppliers"
 
 interface BanksState {
   banks: Bank[]

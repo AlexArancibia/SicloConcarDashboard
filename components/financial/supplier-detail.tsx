@@ -25,8 +25,8 @@ import { useSuppliersStore } from "@/stores/suppliers-store"
 import { useDocumentsStore } from "@/stores/documents-store"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
 import { useAuthStore } from "@/stores/authStore"
-import type { Supplier, SupplierType, SupplierStatus } from "@/types"
-import type { DocumentStatus } from "@/types"
+import type { Supplier, SupplierType, SupplierStatus } from "@/types/suppliers"
+import type { DocumentStatus } from "@/types/documents"
 
 interface SupplierDetailPageProps {
   id: string

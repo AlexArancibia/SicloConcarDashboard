@@ -11,8 +11,9 @@ import { useToast } from "@/hooks/use-toast"
 import { useDocumentsStore } from "@/stores/documents-store"
 import { useSuppliersStore } from "@/stores/suppliers-store"
 import { useTaxSchemesStore } from "@/stores/tax-schemes-store"
-import type { CreateDocumentDto, CreateSupplierDto, DocumentType, SupplierType } from "@/types"
+import type { CreateDocumentDto, DocumentType,  } from "@/types/documents"
 import { useAuthStore } from "@/stores/authStore"
+import { CreateSupplierDto, SupplierType } from "@/types/suppliers"
 
 interface XMLImportModalProps {
   open: boolean
