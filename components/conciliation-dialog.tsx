@@ -22,15 +22,15 @@ import { useAccountingAccountsStore } from "@/stores/accounting-accounts-store"
 import { useCostCentersStore } from "@/stores/cost-centers-store"
 import { useAuthStore } from "@/stores/authStore"
 import type {
-  Document,
-  Transaction,
-  BankAccount,
   CreateConciliationDto,
   ExpenseType,
   ConciliationItem,
   UpdateConciliationDto,
   CreateConciliationItemDto,
-} from "@/types"
+} from "@/types/conciliation"
+import { Transaction } from "@/types/transactions"
+import { BankAccount } from "@/types/bank-accounts"
+import { Document } from "@/types/documents"
 
 const DEBUG_MODE = true
 

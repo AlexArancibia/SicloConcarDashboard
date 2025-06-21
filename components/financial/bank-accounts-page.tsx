@@ -46,7 +46,7 @@ import { useBankAccountsStore } from "@/stores/bank-accounts-store"
 import { useBanksStore } from "@/stores/bank-store"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
 import { FiltersBar } from "@/components/ui/filters-bar"
-import type { BankAccount, BankAccountType, CreateBankAccountDto, UpdateBankAccountDto } from "@/types"
+import type { BankAccount, BankAccountType, CreateBankAccountDto, UpdateBankAccountDto } from "@/types/bank-accounts"
 import { useAuthStore } from "@/stores/authStore"
 
 // Agregar esta función helper después de las importaciones y antes del componente

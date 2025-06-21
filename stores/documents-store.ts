@@ -17,7 +17,7 @@ import type {
   DocumentCostCenterLink,
   DocumentLine,
   DocumentPaymentTerm,
-} from "@/types"
+} from "@/types/documents"
 import apiClient from "@/lib/axiosConfig"
 import { PaginatedResponse } from "@/types/documents"
 

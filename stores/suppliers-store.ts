@@ -8,7 +8,7 @@ import type {
   CreateSupplierDto,
   UpdateSupplierDto,
   SupplierStats,
-} from "@/types"
+} from "@/types/suppliers"
 import apiClient from "@/lib/axiosConfig"
 
 interface SuppliersState {

@@ -6,11 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Building2, Eye, Edit, Plus, Phone, Mail, FileText, ChevronLeft, ChevronRight } from "lucide-react"
-import { useSuppliersStore } from "@/stores/suppliers-store"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
 import { FiltersBar } from "@/components/ui/filters-bar"
 import { useAuthStore } from "@/stores/authStore"
-import type { SupplierType, SupplierStatus } from "@/types"
+import type { SupplierType, SupplierStatus } from "@/types/suppliers"
+import { useSuppliersStore } from "@/stores/suppliers-store"
 
 const SupplierTypeLabels: Record<SupplierType, string> = {
   INDIVIDUAL: "Persona Natural",

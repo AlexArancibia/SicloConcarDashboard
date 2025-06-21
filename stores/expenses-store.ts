@@ -10,7 +10,7 @@ import {
   ExpenseStats,
   ExpenseSummary,
   PaginationDto,
-} from "@/types"
+} from "@/types/expenses"
 import apiClient from "@/lib/axiosConfig"
 
 interface ExpensesState {

@@ -1,4 +1,4 @@
-import type { DocumentType, DocumentLine } from "@/types"
+import { DocumentLine, DocumentType } from "@/types/documents"
 
 export interface ParsedXMLDocument {
   companyId: string

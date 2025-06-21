@@ -10,7 +10,7 @@ import { useDocumentsStore } from "@/stores/documents-store"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
 import { FiltersBar } from "@/components/ui/filters-bar"
 import { useToast } from "@/hooks/use-toast"
-import type { DocumentStatus, DocumentType } from "@/types"
+import type { DocumentStatus, DocumentType } from "@/types/documents"
 import { useAuthStore } from "@/stores/authStore"
 import XMLImportModal from "./xml-import-modal"
 

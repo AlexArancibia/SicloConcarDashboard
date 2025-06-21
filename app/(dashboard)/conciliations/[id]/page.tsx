@@ -18,7 +18,8 @@ import { useTransactionsStore } from "@/stores/transactions-store"
 import { useBankAccountsStore } from "@/stores/bank-accounts-store"
 import { useAuthStore } from "@/stores/authStore"
 import { ConciliationDialog } from "@/components/conciliation-dialog"
-import type { Document, Transaction, DocumentStatus, DocumentType } from "@/types"
+import type { Document, DocumentStatus, DocumentType } from "@/types/documents"
+import { Transaction } from "@/types/transactions"
 
 const DEBUG_MODE = true
 

@@ -22,7 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 import { useDocumentsStore } from "@/stores/documents-store"
-import type { DocumentStatus, DocumentType, Document } from "@/types"
+import type { DocumentStatus, DocumentType, Document } from "@/types/documents"
 import { useAuthStore } from "@/stores/authStore"
 
 interface DocumentDetailPageProps {

@@ -28,8 +28,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { useTransactionsStore } from "@/stores/transactions-store"
 import { useBankAccountsStore } from "@/stores/bank-accounts-store"
-import type { TransactionType, CreateTransactionDto } from "@/types"
-import type { BankAccount } from "@/types"
+import type { TransactionType, CreateTransactionDto } from "@/types/transactions"
+import type { BankAccount } from "@/types/bank-accounts"
 import * as XLSX from "xlsx"
 import { useAuthStore } from "@/stores/authStore"
 

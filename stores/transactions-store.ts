@@ -9,7 +9,7 @@ import type {
   ImportTransactionsResult,
   TransactionStats,
   PaginationDto,
-} from "@/types"
+} from "@/types/transactions"
 import apiClient from "@/lib/axiosConfig"
 
 interface TransactionsState {

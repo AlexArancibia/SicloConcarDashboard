@@ -19,7 +19,7 @@ import type {
   PendingDocument,
   UnmatchedTransaction,
   PaginationDto,
-} from "@/types"
+} from "@/types/conciliation"
 import apiClient from "@/lib/axiosConfig"
 
 interface ConciliationsState {

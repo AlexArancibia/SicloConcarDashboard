@@ -9,7 +9,8 @@ import type {
   UpdateSunatRheDto,
   UpdateSunatInvoiceDto,
 } from "@/types/sunat"
-import { PaginatedResponse } from "@/types"
+import { PaginatedResponse } from "./suppliers-store"
+ 
 
 interface SunatStore {
   // RHE State
