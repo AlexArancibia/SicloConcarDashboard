@@ -3,16 +3,24 @@ import type { Company } from "./auth"
 
 // Actualizar los enums para que coincidan con el schema de Prisma
 export type TransactionType =
-  | "DEBIT"
-  | "CREDIT"
-  | "TRANSFER"
-  | "FEE"
-  | "INTEREST"
-  | "DETRACTION"
-  | "ITF"
-  | "PAYMENT"
-  | "DEPOSIT"
-  | "WITHDRAWAL"
+  | "PAYROLL_SALARY"         // Sueldos
+  | "PAYROLL_CTS"            // CTS
+  | "PAYROLL_BONUS"          // Gratificaciones o bonos
+  | "PAYROLL_AFP"            // Aportes a AFP
+  | "TAX_PAYMENT"            // Impuesto SUNAT (IGV, Renta, etc.)
+  | "TAX_ITF"                // Impuesto a las transacciones financieras
+  | "TAX_DETRACTION"         // Pagos de detracción
+  | "EXPENSE_UTILITIES"      // Servicios básicos: Luz, Agua, Internet, etc.
+  | "EXPENSE_INSURANCE"      // Seguro (ej: MAPFRE)
+  | "EXPENSE_COMMISSIONS"    // Comisiones, mantenimiento, portes, etc.
+  | "EXPENSE_PURCHASE"       // Pagos generales a proveedores
+  | "EXPENSE_OTHER"          // Otros gastos no clasificados
+  | "TRANSFER_INBANK"        // Transferencia a terceros dentro del mismo banco
+  | "TRANSFER_EXTERNAL"      // Transferencia interbancaria (CCE)
+  | "WITHDRAWAL_CASH"        // Retiros en efectivo
+  | "ADJUSTMENT"             // Ajustes o regularizaciones
+  | "REFUND";                // Devoluciones
+
 export type TransactionStatus = "PENDING" | "PROCESSED" | "RECONCILED" | "CANCELLED"
 
 // ============================================================================

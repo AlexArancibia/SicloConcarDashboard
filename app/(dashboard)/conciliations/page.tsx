@@ -475,18 +475,25 @@ export default function ConciliationsPage() {
       type: "select" as const,
       placeholder: "Tipo de transacción",
       options: [
-        { value: "all", label: "Todos los tipos" },
-        { value: "DEBIT", label: "Débito" },
-        { value: "CREDIT", label: "Crédito" },
-        { value: "TRANSFER", label: "Transferencia" },
-        { value: "FEE", label: "Comisión" },
-        { value: "INTEREST", label: "Interés" },
-        { value: "DETRACTION", label: "Detracción" },
-        { value: "ITF", label: "ITF" },
-        { value: "PAYMENT", label: "Pago" },
-        { value: "DEPOSIT", label: "Depósito" },
-        { value: "WITHDRAWAL", label: "Retiro" },
-      ],
+  { value: "all", label: "Todos los tipos" },
+  { value: "PAYROLL_SALARY", label: "Sueldo" },
+  { value: "PAYROLL_CTS", label: "CTS" },
+  { value: "PAYROLL_BONUS", label: "Gratificación / Bono" },
+  { value: "PAYROLL_AFP", label: "Aporte AFP" },
+  { value: "TAX_PAYMENT", label: "Pago de impuestos (SUNAT)" },
+  { value: "TAX_ITF", label: "ITF" },
+  { value: "TAX_DETRACTION", label: "Detracción" },
+  { value: "EXPENSE_UTILITIES", label: "Servicios (Luz, Agua, Internet...)" },
+  { value: "EXPENSE_INSURANCE", label: "Seguro" },
+  { value: "EXPENSE_COMMISSIONS", label: "Comisiones y mantenimiento" },
+  { value: "EXPENSE_PURCHASE", label: "Pago a proveedor" },
+  { value: "EXPENSE_OTHER", label: "Otro gasto" },
+  { value: "TRANSFER_INBANK", label: "Transferencia misma cuenta" },
+  { value: "TRANSFER_EXTERNAL", label: "Transferencia interbancaria" },
+  { value: "WITHDRAWAL_CASH", label: "Retiro en efectivo" },
+  { value: "ADJUSTMENT", label: "Ajuste / Regularización" },
+  { value: "REFUND", label: "Devolución" },
+],
       className: "min-w-40",
     },
     {
@@ -682,7 +689,7 @@ export default function ConciliationsPage() {
                             </td>
                             <td className="p-3 text-sm">{formatDate(transaction.transactionDate)}</td>
                             <td className="p-3 text-right">
-                              <div className="font-bold text-sm">{formatCurrency(transaction.amount)}</div>
+                              <div className="font-semibold text-sm">{formatCurrency(transaction.amount)}</div>
                               <Badge variant="outline" className="text-xs mt-1">
                                 {transaction.transactionType}
                               </Badge>
@@ -1038,11 +1045,15 @@ export default function ConciliationsPage() {
                             </div>
                           )}
                         </td>
-                        <td className="p-3 text-center">
-                          <Button variant="ghost" size="sm">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </td>
+                       <td className="p-3 text-center">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => window.location.href = `/conciliations/${conciliation.id}`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </td>
                       </tr>
                     ))}
                   </tbody>

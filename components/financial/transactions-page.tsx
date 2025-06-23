@@ -127,22 +127,100 @@ export default function TransactionsPage() {
 
   // Actualizar la función getTypeBadge para incluir los nuevos tipos
   const getTypeBadge = (type: TransactionType) => {
-    const typeConfig: Record<TransactionType, { color: string; label: string; icon: any }> = {
-      DEBIT: { color: "bg-red-500/10 text-red-600 border-red-500/20", label: "Débito", icon: TrendingDown },
-      CREDIT: { color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", label: "Crédito", icon: TrendingUp },
-      TRANSFER: { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", label: "Transferencia", icon: TrendingUp },
-      FEE: { color: "bg-orange-500/10 text-orange-600 border-orange-500/20", label: "Comisión", icon: TrendingDown },
-      INTEREST: { color: "bg-green-500/10 text-green-600 border-green-500/20", label: "Interés", icon: TrendingUp },
-      DETRACTION: {
-        color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-        label: "Detracción",
-        icon: TrendingDown,
-      },
-      ITF: { color: "bg-pink-500/10 text-pink-600 border-pink-500/20", label: "ITF", icon: TrendingDown },
-      PAYMENT: { color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20", label: "Pago", icon: TrendingDown },
-      DEPOSIT: { color: "bg-teal-500/10 text-teal-600 border-teal-500/20", label: "Depósito", icon: TrendingUp },
-      WITHDRAWAL: { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", label: "Retiro", icon: TrendingDown },
-    }
+  const typeConfig: Record<TransactionType, { color: string; label: string; icon: any }> = {
+    PAYROLL_SALARY: {
+      color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+      label: "Sueldo",
+      icon: TrendingDown,
+    },
+    PAYROLL_CTS: {
+      color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+      label: "CTS",
+      icon: TrendingDown,
+    },
+    PAYROLL_BONUS: {
+      color: "bg-pink-500/10 text-pink-600 border-pink-500/20",
+      label: "Grati / Bono",
+      icon: TrendingDown,
+    },
+    PAYROLL_AFP: {
+      color: "bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20",
+      label: "AFP",
+      icon: TrendingDown,
+    },
+
+    TAX_PAYMENT: {
+      color: "bg-gray-500/10 text-gray-600 border-gray-500/20",
+      label: "Pago SUNAT",
+      icon: TrendingDown,
+    },
+    TAX_ITF: {
+      color: "bg-pink-500/10 text-pink-600 border-pink-500/20",
+      label: "ITF",
+      icon: TrendingDown,
+    },
+    TAX_DETRACTION: {
+      color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+      label: "Detracción",
+      icon: TrendingDown,
+    },
+
+    EXPENSE_UTILITIES: {
+      color: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+      label: "Servicios",
+      icon: TrendingDown,
+    },
+    EXPENSE_INSURANCE: {
+      color: "bg-sky-500/10 text-sky-600 border-sky-500/20",
+      label: "Seguro",
+      icon: TrendingDown,
+    },
+    EXPENSE_COMMISSIONS: {
+      color: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+      label: "Comisión / Mantenimiento",
+      icon: TrendingDown,
+    },
+    EXPENSE_PURCHASE: {
+      color: "bg-rose-500/10 text-rose-600 border-rose-500/20",
+      label: "Pago proveedor",
+      icon: TrendingDown,
+    },
+    EXPENSE_OTHER: {
+      color: "bg-red-500/10 text-red-600 border-red-500/20",
+      label: "Otro egreso",
+      icon: TrendingDown,
+    },
+
+    TRANSFER_INBANK: {
+      color: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20",
+      label: "Transf. mismo banco",
+      icon: TrendingDown,
+    },
+    TRANSFER_EXTERNAL: {
+      color: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+      label: "Transf. interbancaria",
+      icon: TrendingDown,
+    },
+
+    WITHDRAWAL_CASH: {
+      color: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+      label: "Retiro efectivo",
+      icon: TrendingDown,
+    },
+
+    ADJUSTMENT: {
+      color: "bg-zinc-500/10 text-zinc-600 border-zinc-500/20",
+      label: "Ajuste",
+      icon: TrendingDown,
+    },
+
+    REFUND: {
+      color: "bg-lime-500/10 text-lime-600 border-lime-500/20",
+      label: "Devolución",
+      icon: TrendingDown,
+    },
+  };
+
 
     const config = typeConfig[type]
     const IconComponent = config.icon
@@ -155,26 +233,7 @@ export default function TransactionsPage() {
   }
 
   // Actualizar la función getTransactionFlags para usar los nuevos tipos
-  const getTransactionFlags = (transaction: any) => {
-    const flags = []
-
-    // Ahora estos son tipos de transacción, no flags booleanos
-    if (transaction.transactionType === "ITF") {
-      flags.push({ label: "ITF", color: "bg-pink-500/10 text-pink-600" })
-    }
-    if (transaction.transactionType === "DETRACTION") {
-      flags.push({ label: "Detracción", color: "bg-purple-500/10 text-purple-600" })
-    }
-    if (transaction.transactionType === "FEE") {
-      flags.push({ label: "Comisión", color: "bg-orange-500/10 text-orange-600" })
-    }
-    if (transaction.transactionType === "TRANSFER") {
-      flags.push({ label: "Transferencia", color: "bg-blue-500/10 text-blue-600" })
-    }
-
-    return flags
-  }
-
+  
   const filteredTransactions = transactions.filter((transaction) => {
     const matchesSearch =
       transaction.description.toLowerCase().includes(filters.search.toLowerCase()) ||
@@ -226,19 +285,25 @@ export default function TransactionsPage() {
   ]
 
   // Actualizar las opciones de tipos de transacción para incluir los nuevos tipos
-  const typeOptions = [
-    { value: "DEBIT", label: "Débito" },
-    { value: "CREDIT", label: "Crédito" },
-    { value: "TRANSFER", label: "Transferencia" },
-    { value: "FEE", label: "Comisión" },
-    { value: "INTEREST", label: "Interés" },
-    { value: "DETRACTION", label: "Detracción" },
-    { value: "ITF", label: "ITF" },
-    { value: "PAYMENT", label: "Pago" },
-    { value: "DEPOSIT", label: "Depósito" },
-    { value: "WITHDRAWAL", label: "Retiro" },
-  ]
-
+const typeOptions = [
+  { value: "PAYROLL_SALARY", label: "Sueldo" },
+  { value: "PAYROLL_CTS", label: "CTS" },
+  { value: "PAYROLL_BONUS", label: "Gratificación / Bono" },
+  { value: "PAYROLL_AFP", label: "Aporte AFP" },
+  { value: "TAX_PAYMENT", label: "Pago de impuestos (SUNAT)" },
+  { value: "TAX_ITF", label: "ITF" },
+  { value: "TAX_DETRACTION", label: "Detracción" },
+  { value: "EXPENSE_UTILITIES", label: "Servicios (Luz, Agua, Internet...)" },
+  { value: "EXPENSE_INSURANCE", label: "Seguro" },
+  { value: "EXPENSE_COMMISSIONS", label: "Comisiones y mantenimiento" },
+  { value: "EXPENSE_PURCHASE", label: "Pago a proveedor" },
+  { value: "EXPENSE_OTHER", label: "Otro gasto" },
+  { value: "TRANSFER_INBANK", label: "Transferencia misma cuenta" },
+  { value: "TRANSFER_EXTERNAL", label: "Transferencia interbancaria" },
+  { value: "WITHDRAWAL_CASH", label: "Retiro en efectivo" },
+  { value: "ADJUSTMENT", label: "Ajuste / Regularización" },
+  { value: "REFUND", label: "Devolución" },
+]
   const handleSelectAll = () => {
     if (selectAll) {
       setSelectedTransactions([])
@@ -358,7 +423,7 @@ export default function TransactionsPage() {
           </Button>
           <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setImportModalOpen(true)}>
             <Upload className="w-4 h-4 mr-2" />
-            Importar Extracto
+            Importar Excel
           </Button>
         </div>
       </div>
