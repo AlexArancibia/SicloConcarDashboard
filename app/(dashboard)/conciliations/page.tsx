@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -8,7 +8,17 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
-import { AlertCircle, Download, Eye, ArrowRight, FileText, CreditCard, ChevronLeft, ChevronRight } from "lucide-react"
+import {
+  AlertCircle,
+  Download,
+  Eye,
+  ArrowRight,
+  FileText,
+  CreditCard,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+} from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FiltersBar } from "@/components/ui/filters-bar"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
@@ -19,7 +29,8 @@ import { useBankAccountsStore } from "@/stores/bank-accounts-store"
 import { useAuthStore } from "@/stores/authStore"
 import { ConciliationDialog } from "@/components/conciliation-dialog"
 import type { Document, DocumentStatus, DocumentType } from "@/types/documents"
-import { Transaction } from "@/types/transactions"
+import type { Transaction } from "@/types/transactions"
+import type { ConciliationType } from "@/types/conciliation"
 
 const DEBUG_MODE = true
 
@@ -31,9 +42,25 @@ const debugLog = (message: string, data?: any) => {
 
 export default function ConciliationsPage() {
   const { user } = useAuthStore()
-  const { conciliations, loading, error, fetchConciliations, deleteConciliation, clearError } = useConciliationsStore()
-  const { documents, fetchDocuments: fetchAllDocuments } = useDocumentsStore()
-  const { transactions, fetchTransactions: fetchAllTransactions } = useTransactionsStore()
+  const {
+    conciliations,
+    loading: conciliationsLoading,
+    error: conciliationsError,
+    fetchConciliations,
+    deleteConciliation,
+    clearError: clearConciliationsError,
+    validateConciliation,
+  } = useConciliationsStore()
+
+  const {
+    documents,
+    loading: documentsLoading,
+    fetchDocuments: fetchAllDocuments,
+    updateDocument,
+  } = useDocumentsStore()
+
+  const { transactions, loading: transactionsLoading, fetchTransactions: fetchAllTransactions } = useTransactionsStore()
+
   const { bankAccounts, fetchBankAccounts } = useBankAccountsStore()
 
   // State
@@ -49,7 +76,7 @@ export default function ConciliationsPage() {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [selectedDocuments, setSelectedDocuments] = useState<Document[]>([])
   const [documentConciliationAmounts, setDocumentConciliationAmounts] = useState<Record<string, number>>({})
-  const [conciliationType, setConciliationType] = useState<"DOCUMENTS" | "DETRACTIONS">("DOCUMENTS")
+  const [conciliationType, setConciliationType] = useState<ConciliationType>("DOCUMENTS")
 
   // Filters for transactions
   const [transactionFilters, setTransactionFilters] = useState({
@@ -72,6 +99,9 @@ export default function ConciliationsPage() {
     maxAmount: "",
   })
 
+  const loading = conciliationsLoading || documentsLoading || transactionsLoading
+  const error = conciliationsError
+
   // Load initial data
   useEffect(() => {
     if (user?.companyId) {
@@ -81,17 +111,45 @@ export default function ConciliationsPage() {
         fetchAllDocuments(user.companyId, { page: 1, limit: 1000 }),
         fetchAllTransactions(user.companyId, { page: 1, limit: 1000 }),
         fetchBankAccounts(user.companyId, { page: 1, limit: 100 }),
-      ])
+      ]).catch((error) => {
+        debugLog("Error loading initial data", error)
+      })
     }
-  }, [user?.companyId])
+  }, [user?.companyId, fetchConciliations, fetchAllDocuments, fetchAllTransactions, fetchBankAccounts])
 
-  // Get available documents for conciliation with filters
+  // Check if transaction is already conciliated
+  const isTransactionConciliated = useCallback(
+    (transactionId: string) => {
+      return conciliations.some(
+        (conciliation) => conciliation.transactionId === transactionId && conciliation.status !== "CANCELLED",
+      )
+    },
+    [conciliations],
+  )
+
+  // Get existing conciliation for transaction
+  const getExistingConciliation = useCallback(
+    (transactionId: string) => {
+      return conciliations.find(
+        (conciliation) => conciliation.transactionId === transactionId && conciliation.status !== "CANCELLED",
+      )
+    },
+    [conciliations],
+  )
+
+  // Get available transactions for conciliation with filters and business rules
   const { availableTransactions, totalTransactionPages } = useMemo(() => {
-    let filtered = transactions.filter(
-      (transaction) =>
-        transaction.status === "PENDING" &&
-        (transaction.pendingAmount === null || Number.parseFloat(transaction.pendingAmount || transaction.amount) > 0),
-    )
+    let filtered = transactions.filter((transaction) => {
+      // Basic availability criteria
+      const hasValidStatus = transaction.status === "PENDING"
+      const hasValidAmount =
+        transaction.pendingAmount === null || Number.parseFloat(transaction.pendingAmount || transaction.amount) > 0
+
+      // Business rule: exclude already conciliated transactions
+      const isNotConciliated = !isTransactionConciliated(transaction.id)
+
+      return hasValidStatus && hasValidAmount && isNotConciliated
+    })
 
     // Apply filters
     if (transactionFilters.search) {
@@ -142,15 +200,24 @@ export default function ConciliationsPage() {
     const endIndex = startIndex + transactionItemsPerPage
     const paginatedTransactions = filtered.slice(startIndex, endIndex)
 
-    debugLog("Available transactions for conciliation", { total: filtered.length, page: transactionPage })
-    return { availableTransactions: paginatedTransactions, totalTransactionPages: totalPages }
-  }, [transactions, transactionFilters, transactionPage, transactionItemsPerPage])
+    debugLog("Available transactions for conciliation", {
+      total: filtered.length,
+      page: transactionPage,
+      excludedConciliated: transactions.filter((t) => isTransactionConciliated(t.id)).length,
+    })
 
-  // Get available documents for conciliation with filters
+    return { availableTransactions: paginatedTransactions, totalTransactionPages: totalPages }
+  }, [transactions, transactionFilters, transactionPage, transactionItemsPerPage, isTransactionConciliated])
+
+  // Get available documents for conciliation with filters - FIXED: Removed restrictive accounting validation
   const { availableDocuments, totalDocumentPages } = useMemo(() => {
-    let filtered = documents.filter(
-      (doc) => doc.status === "APPROVED" && Number.parseFloat(doc.pendingAmount || "0") > 0,
-    )
+    let filtered = documents.filter((doc) => {
+      // Basic availability criteria - SIMPLIFIED
+      const hasValidStatus = doc.status === "APPROVED"
+      const hasValidAmount = Number.parseFloat(doc.pendingAmount || "0") > 0
+
+      return hasValidStatus && hasValidAmount
+    })
 
     // Apply filters
     if (documentFilters.search) {
@@ -209,18 +276,26 @@ export default function ConciliationsPage() {
     const endIndex = startIndex + documentItemsPerPage
     const paginatedDocuments = filtered.slice(startIndex, endIndex)
 
-    debugLog("Available documents for conciliation", { total: filtered.length, page: documentPage })
+    debugLog("Available documents for conciliation", {
+      total: filtered.length,
+      page: documentPage,
+      withoutAccounting: documents.filter(
+        (d) => d.status === "APPROVED" && (!d.accountLinks || d.accountLinks.length === 0),
+      ).length,
+    })
+
     return { availableDocuments: paginatedDocuments, totalDocumentPages: totalPages }
   }, [documents, documentFilters, conciliationType, documentPage, documentItemsPerPage])
 
-  // Get available detractions with filters
+  // Get available detractions with filters - FIXED: Removed restrictive accounting validation
   const { availableDetractions, totalDetractionPages } = useMemo(() => {
-    let filtered = documents.filter(
-      (doc) =>
-        doc.status === "APPROVED" &&
-        doc.detraction?.hasDetraction &&
-        Number.parseFloat(doc.detraction.pendingAmount || "0") > 0,
-    )
+    let filtered = documents.filter((doc) => {
+      const hasValidStatus = doc.status === "APPROVED"
+      const hasDetraction = doc.detraction?.hasDetraction
+      const hasValidAmount = Number.parseFloat(doc.detraction?.pendingAmount || "0") > 0
+
+      return hasValidStatus && hasDetraction && hasValidAmount
+    })
 
     // Apply same filters as documents
     if (documentFilters.search) {
@@ -267,7 +342,7 @@ export default function ConciliationsPage() {
 
     debugLog("Available detractions for conciliation", { total: filtered.length, page: documentPage })
     return { availableDetractions: paginatedDetractions, totalDetractionPages: totalPages }
-  }, [documents, documentFilters, conciliationType, documentPage, documentItemsPerPage])
+  }, [documents, documentFilters, documentPage, documentItemsPerPage])
 
   // Paginated conciliations
   const paginatedConciliations = useMemo(() => {
@@ -279,14 +354,24 @@ export default function ConciliationsPage() {
   const totalPages = Math.ceil(conciliations.length / itemsPerPage)
 
   const handleTransactionSelect = (transaction: Transaction) => {
+    // Business rule: Check if transaction is already conciliated
+    if (isTransactionConciliated(transaction.id)) {
+      const existingConciliation = getExistingConciliation(transaction.id)
+      alert(`Esta transacción ya está conciliada en la conciliación ${existingConciliation?.reference || existingConciliation?.id}. 
+             Para modificarla, debe editar o eliminar la conciliación existente.`)
+      return
+    }
+
     setSelectedTransaction(transaction)
     setSelectedDocuments([]) // Clear documents when changing transaction
     setDocumentConciliationAmounts({}) // Clear amounts
     debugLog("Transaction selected", { transactionId: transaction.id, amount: transaction.amount })
   }
 
-  const handleDocumentSelect = (document: Document) => {
+  // UPDATED: Handle document selection with improved accounting validation
+  const handleDocumentSelect = async (document: Document) => {
     const isSelected = selectedDocuments.some((doc) => doc.id === document.id)
+
     if (isSelected) {
       setSelectedDocuments((prev) => prev.filter((doc) => doc.id !== document.id))
       setDocumentConciliationAmounts((prev) => {
@@ -295,40 +380,30 @@ export default function ConciliationsPage() {
         return newAmounts
       })
     } else {
-      // Validate supplier compatibility
-      if (selectedDocuments.length > 0) {
+      // Business rule: Validate supplier compatibility for documents
+      if (selectedDocuments.length > 0 && conciliationType === "DOCUMENTS") {
         const firstSupplier = selectedDocuments[0].supplierId
-        if (conciliationType === "DOCUMENTS" && document.supplierId !== firstSupplier) {
-          alert("Los documentos deben ser del mismo proveedor")
+        if (document.supplierId !== firstSupplier) {
+          alert("Los documentos deben ser del mismo proveedor para conciliación de documentos")
           return
         }
       }
+
       setSelectedDocuments((prev) => [...prev, document])
+
       // Set default conciliation amount to full pending amount
       const defaultAmount =
         conciliationType === "DOCUMENTS"
           ? Number.parseFloat(document.pendingAmount || "0")
           : Number.parseFloat(document.detraction?.pendingAmount || "0")
+
       setDocumentConciliationAmounts((prev) => ({
         ...prev,
         [document.id]: defaultAmount,
       }))
     }
+
     debugLog("Document selection changed", { documentId: document.id, isSelected: !isSelected })
-  }
-
-  const handleConciliationAmountChange = (documentId: string, amount: number) => {
-    setDocumentConciliationAmounts((prev) => ({
-      ...prev,
-      [documentId]: amount,
-    }))
-  }
-
-  const handleConciliationTypeChange = (checked: boolean) => {
-    setConciliationType(checked ? "DETRACTIONS" : "DOCUMENTS")
-    setSelectedDocuments([]) // Clear selection when changing type
-    setDocumentConciliationAmounts({}) // Clear amounts
-    debugLog("Conciliation type changed", checked ? "DETRACTIONS" : "DOCUMENTS")
   }
 
   const handleCreateConciliation = () => {
@@ -336,8 +411,15 @@ export default function ConciliationsPage() {
       alert("Debe seleccionar una transacción")
       return
     }
+
     if (selectedDocuments.length === 0) {
       alert("Debe seleccionar al menos un documento")
+      return
+    }
+
+    // Business rule: Validate transaction is not already conciliated
+    if (isTransactionConciliated(selectedTransaction.id)) {
+      alert("Esta transacción ya está conciliada. No se puede conciliar nuevamente.")
       return
     }
 
@@ -347,15 +429,18 @@ export default function ConciliationsPage() {
       amounts: documentConciliationAmounts,
       type: conciliationType,
     })
+
     setShowConciliationDialog(true)
   }
 
   const handleTransactionFilterChange = (key: string, value: any) => {
     setTransactionFilters((prev) => ({ ...prev, [key]: value }))
+    setTransactionPage(1) // Reset to first page when filtering
   }
 
   const handleDocumentFilterChange = (key: string, value: any) => {
     setDocumentFilters((prev) => ({ ...prev, [key]: value }))
+    setDocumentPage(1) // Reset to first page when filtering
   }
 
   const handlePageChange = (newPage: number) => {
@@ -475,25 +560,25 @@ export default function ConciliationsPage() {
       type: "select" as const,
       placeholder: "Tipo de transacción",
       options: [
-  { value: "all", label: "Todos los tipos" },
-  { value: "PAYROLL_SALARY", label: "Sueldo" },
-  { value: "PAYROLL_CTS", label: "CTS" },
-  { value: "PAYROLL_BONUS", label: "Gratificación / Bono" },
-  { value: "PAYROLL_AFP", label: "Aporte AFP" },
-  { value: "TAX_PAYMENT", label: "Pago de impuestos (SUNAT)" },
-  { value: "TAX_ITF", label: "ITF" },
-  { value: "TAX_DETRACTION", label: "Detracción" },
-  { value: "EXPENSE_UTILITIES", label: "Servicios (Luz, Agua, Internet...)" },
-  { value: "EXPENSE_INSURANCE", label: "Seguro" },
-  { value: "EXPENSE_COMMISSIONS", label: "Comisiones y mantenimiento" },
-  { value: "EXPENSE_PURCHASE", label: "Pago a proveedor" },
-  { value: "EXPENSE_OTHER", label: "Otro gasto" },
-  { value: "TRANSFER_INBANK", label: "Transferencia misma cuenta" },
-  { value: "TRANSFER_EXTERNAL", label: "Transferencia interbancaria" },
-  { value: "WITHDRAWAL_CASH", label: "Retiro en efectivo" },
-  { value: "ADJUSTMENT", label: "Ajuste / Regularización" },
-  { value: "REFUND", label: "Devolución" },
-],
+        { value: "all", label: "Todos los tipos" },
+        { value: "PAYROLL_SALARY", label: "Sueldo" },
+        { value: "PAYROLL_CTS", label: "CTS" },
+        { value: "PAYROLL_BONUS", label: "Gratificación / Bono" },
+        { value: "PAYROLL_AFP", label: "Aporte AFP" },
+        { value: "TAX_PAYMENT", label: "Pago de impuestos (SUNAT)" },
+        { value: "TAX_ITF", label: "ITF" },
+        { value: "TAX_DETRACTION", label: "Detracción" },
+        { value: "EXPENSE_UTILITIES", label: "Servicios (Luz, Agua, Internet...)" },
+        { value: "EXPENSE_INSURANCE", label: "Seguro" },
+        { value: "EXPENSE_COMMISSIONS", label: "Comisiones y mantenimiento" },
+        { value: "EXPENSE_PURCHASE", label: "Pago a proveedor" },
+        { value: "EXPENSE_OTHER", label: "Otro gasto" },
+        { value: "TRANSFER_INBANK", label: "Transferencia misma cuenta" },
+        { value: "TRANSFER_EXTERNAL", label: "Transferencia interbancaria" },
+        { value: "WITHDRAWAL_CASH", label: "Retiro en efectivo" },
+        { value: "ADJUSTMENT", label: "Ajuste / Regularización" },
+        { value: "REFUND", label: "Devolución" },
+      ],
       className: "min-w-40",
     },
     {
@@ -562,6 +647,19 @@ export default function ConciliationsPage() {
     },
   ]
 
+  const handleConciliationTypeChange = (checked: boolean) => {
+    setConciliationType(checked ? "DETRACTIONS" : "DOCUMENTS")
+    setSelectedDocuments([]) // Clear selected documents when changing type
+    setDocumentConciliationAmounts({}) // Clear amounts
+  }
+
+  const handleConciliationAmountChange = (documentId: string, amount: number) => {
+    setDocumentConciliationAmounts((prev) => ({
+      ...prev,
+      [documentId]: amount,
+    }))
+  }
+
   if (error) {
     return (
       <div className="container mx-auto py-6">
@@ -569,7 +667,7 @@ export default function ConciliationsPage() {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             Error cargando conciliaciones: {error}
-            <Button variant="outline" size="sm" className="ml-2" onClick={clearError}>
+            <Button variant="outline" size="sm" className="ml-2" onClick={clearConciliationsError}>
               Reintentar
             </Button>
           </AlertDescription>
@@ -608,6 +706,18 @@ export default function ConciliationsPage() {
         </div>
       </div>
 
+      {/* Business Rules Alerts */}
+      {selectedTransaction && isTransactionConciliated(selectedTransaction.id) && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            Esta transacción ya está conciliada en la conciliación{" "}
+            {getExistingConciliation(selectedTransaction.id)?.reference}. Para modificarla, debe editar o eliminar la
+            conciliación existente.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Selection Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Transaction Selection */}
@@ -615,18 +725,12 @@ export default function ConciliationsPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <CreditCard className="h-4 w-4" />
-              Transacciones Disponibles (
-              {
-                transactions.filter(
-                  (transaction) =>
-                    transaction.status === "PENDING" &&
-                    (transaction.pendingAmount === null ||
-                      Number.parseFloat(transaction.pendingAmount || transaction.amount) > 0),
-                ).length
-              }
-              )
+              Transacciones Disponibles ({availableTransactions.length})
             </CardTitle>
-            <CardDescription className="text-xs">Selecciona una transacción bancaria</CardDescription>
+            <CardDescription className="text-xs">
+              Selecciona una transacción bancaria (excluye{" "}
+              {transactions.filter((t) => isTransactionConciliated(t.id)).length} ya conciliadas)
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Transaction Filters */}
@@ -656,7 +760,7 @@ export default function ConciliationsPage() {
                       {availableTransactions.length === 0 ? (
                         <tr>
                           <td colSpan={4} className="text-center py-8 text-muted-foreground">
-                            No se encontraron transacciones
+                            No se encontraron transacciones disponibles
                           </td>
                         </tr>
                       ) : (
@@ -664,19 +768,27 @@ export default function ConciliationsPage() {
                           <tr
                             key={transaction.id}
                             className={`border-b cursor-pointer transition-colors ${
-                              selectedTransaction?.id === transaction.id
-                                ? "bg-primary/5 border-primary/20"
-                                : "hover:bg-muted/50"
+                              isTransactionConciliated(transaction.id)
+                                ? "bg-green-50 border-green-200 opacity-60"
+                                : selectedTransaction?.id === transaction.id
+                                  ? "bg-primary/5 border-primary/20"
+                                  : "hover:bg-muted/50"
                             }`}
                             onClick={() => handleTransactionSelect(transaction)}
                           >
                             <td className="p-3">
-                              <input
-                                type="radio"
-                                checked={selectedTransaction?.id === transaction.id}
-                                onChange={() => {}}
-                                className="text-primary"
-                              />
+                              {isTransactionConciliated(transaction.id) ? (
+                                <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                                  Conciliada
+                                </Badge>
+                              ) : (
+                                <input
+                                  type="radio"
+                                  checked={selectedTransaction?.id === transaction.id}
+                                  onChange={() => {}}
+                                  className="text-primary"
+                                />
+                              )}
                             </td>
                             <td className="p-3">
                               <div className="font-medium text-sm">{transaction.description}</div>
@@ -736,23 +848,11 @@ export default function ConciliationsPage() {
             <CardTitle className="text-base flex items-center gap-2">
               <FileText className="h-4 w-4" />
               {conciliationType === "DOCUMENTS" ? "Documentos" : "Detracciones"} (
-              {
-                (conciliationType === "DOCUMENTS"
-                  ? documents.filter(
-                      (doc) => doc.status === "APPROVED" && Number.parseFloat(doc.pendingAmount || "0") > 0,
-                    )
-                  : documents.filter(
-                      (doc) =>
-                        doc.status === "APPROVED" &&
-                        doc.detraction?.hasDetraction &&
-                        Number.parseFloat(doc.detraction.pendingAmount || "0") > 0,
-                    )
-                ).length
-              }
-              )
+              {(conciliationType === "DOCUMENTS" ? availableDocuments : availableDetractions).length})
             </CardTitle>
             <CardDescription className="text-xs">
-              {selectedDocuments.length} seleccionado{selectedDocuments.length !== 1 ? "s" : ""}
+              {selectedDocuments.length} seleccionado{selectedDocuments.length !== 1 ? "s" : ""} • Asignación contable
+              en el diálogo de conciliación
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -784,7 +884,8 @@ export default function ConciliationsPage() {
                       {(conciliationType === "DOCUMENTS" ? availableDocuments : availableDetractions).length === 0 ? (
                         <tr>
                           <td colSpan={5} className="text-center py-8 text-muted-foreground">
-                            No se encontraron {conciliationType === "DOCUMENTS" ? "documentos" : "detracciones"}
+                            No se encontraron {conciliationType === "DOCUMENTS" ? "documentos" : "detracciones"}{" "}
+                            disponibles
                           </td>
                         </tr>
                       ) : (
@@ -796,6 +897,8 @@ export default function ConciliationsPage() {
                                 ? Number.parseFloat(document.pendingAmount || "0")
                                 : Number.parseFloat(document.detraction?.pendingAmount || "0")
                             const conciliationAmount = documentConciliationAmounts[document.id] || pendingAmount
+                            const hasAccounting = document.accountLinks && document.accountLinks.length > 0
+                            const hasCostCenters = document.costCenterLinks && document.costCenterLinks.length > 0
 
                             return (
                               <tr
@@ -818,6 +921,28 @@ export default function ConciliationsPage() {
                                       </div>
                                       <div className="text-xs text-muted-foreground">
                                         Vence: {formatDate(document.dueDate || document.issueDate)}
+                                      </div>
+                                      {/* Accounting indicators */}
+                                      <div className="flex gap-1 mt-1">
+                                        {hasAccounting ? (
+                                          <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                                            {document.accountLinks.length} Cta
+                                            {document.accountLinks.length !== 1 ? "s" : ""}
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="text-xs bg-orange-100 text-orange-800">
+                                            Sin Ctas
+                                          </Badge>
+                                        )}
+                                        {hasCostCenters ? (
+                                          <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800">
+                                            {document.costCenterLinks.length} CC
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="text-xs bg-gray-100 text-gray-600">
+                                            Sin CC
+                                          </Badge>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
@@ -963,9 +1088,6 @@ export default function ConciliationsPage() {
                 <Button onClick={handleCreateConciliation} className="mt-3 w-full" size="lg">
                   Conciliar
                 </Button>
-                {getDifference() > 5 && (
-                  <div className="text-xs text-orange-600 mt-1">Diferencia excede tolerancia (S/ 5.00)</div>
-                )}
               </div>
             </div>
           </CardContent>
@@ -1013,6 +1135,9 @@ export default function ConciliationsPage() {
                           <div className="text-xs text-muted-foreground">
                             {conciliation.totalDocuments} documento{conciliation.totalDocuments !== 1 ? "s" : ""}
                           </div>
+                          {conciliation.transactionId && (
+                            <div className="text-xs text-blue-600">Transacción vinculada</div>
+                          )}
                         </td>
                         <td className="p-3">{formatDate(conciliation.createdAt)}</td>
                         <td className="p-3">
@@ -1045,15 +1170,15 @@ export default function ConciliationsPage() {
                             </div>
                           )}
                         </td>
-                       <td className="p-3 text-center">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => window.location.href = `/conciliations/${conciliation.id}`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </td>
+                        <td className="p-3 text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => (window.location.href = `/conciliations/${conciliation.id}`)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

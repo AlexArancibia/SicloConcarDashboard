@@ -21,9 +21,16 @@ import {
   ArrowLeft,
   Download,
   Eye,
+  ReceiptText,
+  Banknote,
+  Percent,
 } from "lucide-react"
 import type { Conciliation } from "@/types/conciliation"
 import { useConciliationsStore } from "@/stores/conciliation-store"
+import Link from "next/link"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useToast } from "@/hooks/use-toast"
+import { DocumentStatus, DocumentType } from "@/types/documents" // Import DocumentType and DocumentStatus
 
 interface ConciliationDetailPageProps {
   params: { id: string }
@@ -60,6 +67,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
   const [conciliation, setConciliation] = useState<Conciliation | null>(null)
   const [loading, setLoading] = useState(true)
   const { getConciliationById, completeConciliation, performAutomaticConciliation } = useConciliationsStore()
+  const { toast } = useToast()
 
   useEffect(() => {
     const fetchConciliation = async () => {
@@ -67,8 +75,13 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
         setLoading(true)
         const data = await getConciliationById(params.id)
         setConciliation(data)
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching conciliation:", error)
+        toast({
+          title: "Error",
+          description: error.message || "Error al cargar la conciliación.",
+          variant: "destructive",
+        })
       } finally {
         setLoading(false)
       }
@@ -77,7 +90,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
     if (params.id) {
       fetchConciliation()
     }
-  }, [params.id, getConciliationById])
+  }, [params.id, getConciliationById, toast])
 
   const handleComplete = async () => {
     if (!conciliation) return
@@ -85,9 +98,18 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
       const updated = await completeConciliation(conciliation.id)
       if (updated) {
         setConciliation(updated)
+        toast({
+          title: "Éxito",
+          description: "Conciliación completada correctamente.",
+        })
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error completing conciliation:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Error al completar la conciliación.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -95,22 +117,33 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
     if (!conciliation) return
     try {
       await performAutomaticConciliation(conciliation.id)
-      const updated = await getConciliationById(conciliation.id)
+      const updated = await getConciliationById(conciliation.id) // Re-fetch to get updated data
       setConciliation(updated)
-    } catch (error) {
+      toast({
+        title: "Éxito",
+        description: "Conciliación automática realizada.",
+      })
+    } catch (error: any) {
       console.error("Error performing automatic conciliation:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Error al realizar la conciliación automática.",
+        variant: "destructive",
+      })
     }
   }
 
-  const formatCurrency = (amount: string | number) => {
+  const formatCurrency = (amount: string | number | null | undefined, currency = "PEN") => {
+    if (amount === null || amount === undefined) return "-"
     const num = typeof amount === "string" ? Number.parseFloat(amount) : amount
     return new Intl.NumberFormat("es-PE", {
       style: "currency",
-      currency: "PEN",
+      currency: currency,
     }).format(num)
   }
 
-  const formatDate = (date: string | Date) => {
+  const formatDate = (date: string | Date | null | undefined) => {
+    if (!date) return "-"
     return new Intl.DateTimeFormat("es-PE", {
       year: "numeric",
       month: "long",
@@ -118,7 +151,8 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
     }).format(new Date(date))
   }
 
-  const formatShortDate = (date: string | Date) => {
+  const formatShortDate = (date: string | Date | null | undefined) => {
+    if (!date) return "-"
     return new Intl.DateTimeFormat("es-PE", {
       year: "numeric",
       month: "short",
@@ -126,11 +160,75 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
     }).format(new Date(date))
   }
 
-  const getDifferenceIndicator = (difference: string) => {
-    const diff = Number.parseFloat(difference)
+  const getDifferenceIndicator = (difference: string | number | null | undefined) => {
+    if (difference === null || difference === undefined)
+      return { icon: Minus, color: "text-slate-600", bgColor: "bg-slate-50" }
+    const diff = typeof difference === "string" ? Number.parseFloat(difference) : difference
     if (diff > 0) return { icon: TrendingUp, color: "text-emerald-600", bgColor: "bg-emerald-50" }
     if (diff < 0) return { icon: TrendingDown, color: "text-red-600", bgColor: "bg-red-50" }
     return { icon: Minus, color: "text-slate-600", bgColor: "bg-slate-50" }
+  }
+
+  const getDocumentTypeBadge = (type: DocumentType) => {
+    const typeConfig = {
+      INVOICE: { class: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20", label: "Factura" },
+      CREDIT_NOTE: {
+        class: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+        label: "N. Crédito",
+      },
+      DEBIT_NOTE: {
+        class: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20",
+        label: "N. Débito",
+      },
+      RECEIPT: {
+        class: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+        label: "Recibo",
+      },
+      PURCHASE_ORDER: {
+        class: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20",
+        label: "O. Compra",
+      },
+      CONTRACT: {
+        class: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
+        label: "Contrato",
+      },
+    }
+
+    const config = typeConfig[type] || {
+      class: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
+      label: "Otro",
+    }
+
+    return (
+      <Badge variant="outline" className={config.class}>
+        {config.label}
+      </Badge>
+    )
+  }
+
+  const getDocumentStatusBadge = (status: DocumentStatus) => {
+    const statusConfig = {
+      DRAFT: { class: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20", label: "Borrador" },
+      PENDING: { class: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20", label: "Pendiente" },
+      APPROVED: { class: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20", label: "Aprobado" },
+      REJECTED: { class: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20", label: "Rechazado" },
+      PAID: { class: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20", label: "Pagado" },
+      CANCELLED: {
+        class: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
+        label: "Cancelado",
+      },
+    }
+
+    const config = statusConfig[status] || {
+      class: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
+      label: "Desconocido",
+    }
+
+    return (
+      <Badge variant="secondary" className={config.class}>
+        {config.label}
+      </Badge>
+    )
   }
 
   if (loading) {
@@ -156,10 +254,12 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
             </div>
             <h3 className="text-xl font-semibold text-slate-900 mb-2">Conciliación no encontrada</h3>
             <p className="text-slate-600 mb-6">La conciliación que buscas no existe o no tienes permisos para verla.</p>
-            <Button variant="outline" className="bg-white">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Volver al listado
-            </Button>
+            <Link href="/conciliations">
+              <Button variant="outline" className="bg-white">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Volver al listado
+              </Button>
+            </Link>
           </div>
         </div>
       </div>
@@ -171,16 +271,18 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
   const DifferenceIcon = differenceIndicator.icon
 
   return (
-    <div className="min-h-screen  ">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="container mx-auto  ">
+      <div className="bg-white border-b border-slate-200 py-4">
+        <div className="container mx-auto px-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Volver
-              </Button>
+              <Link href="/conciliations">
+                <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Volver
+                </Button>
+              </Link>
               <div className="h-6 w-px bg-slate-300" />
               <div>
                 <div className="flex items-center gap-3 mb-1">
@@ -200,10 +302,6 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
             </div>
 
             <div className="flex items-center gap-3">
-              <Button variant="outline" size="sm" className="bg-white">
-                <Eye className="h-4 w-4 mr-2" />
-                Ver Items
-              </Button>
               <Button variant="outline" size="sm" className="bg-white">
                 <Download className="h-4 w-4 mr-2" />
                 Exportar
@@ -402,6 +500,157 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
                         </p>
                       </div>
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Conciliation Items */}
+            <Card className="bg-white shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ReceiptText className="h-5 w-5 text-slate-600" />
+                  Documentos Conciliados ({conciliation.items?.length || 0})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {conciliation.items && conciliation.items.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Número</TableHead>
+                          <TableHead>Proveedor</TableHead>
+                          <TableHead className="text-right">Monto Doc.</TableHead>
+                          <TableHead className="text-right">Monto Conc.</TableHead>
+                          <TableHead className="text-right">Diferencia</TableHead>
+                          <TableHead className="text-center">Estado</TableHead>
+                          <TableHead className="text-center">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {conciliation.items.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell>{getDocumentTypeBadge(item.document?.documentType   )}</TableCell>
+                            <TableCell className="font-mono">{item.document?.fullNumber}</TableCell>
+                            <TableCell>{item.document?.supplier?.businessName || "N/A"}</TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(item.documentAmount, item.document?.currency)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(item.conciliatedAmount, item.document?.currency)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(item.difference, item.document?.currency)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {getDocumentStatusBadge(item.status as DocumentStatus)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Link href={`/documents/${item.document?.id}`}>
+                                <Button variant="ghost" size="sm" title="Ver Documento">
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-500">No hay documentos conciliados.</div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Conciliation Expenses */}
+            <Card className="bg-white shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Banknote className="h-5 w-5 text-slate-600" />
+                  Gastos Adicionales ({conciliation.expenses?.length || 0})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {conciliation.expenses && conciliation.expenses.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Descripción</TableHead>
+                          <TableHead className="text-right">Monto</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Cuenta Contable</TableHead>
+                          <TableHead>Fecha</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {conciliation.expenses.map((expense) => (
+                          <TableRow key={expense.id}>
+                            <TableCell>{expense.description || "N/A"}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
+                            <TableCell>{expense.expenseType}</TableCell>
+                            <TableCell>{expense.account?.accountName || "N/A"}</TableCell>
+                            <TableCell>{formatShortDate(expense.expenseDate)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-500">No hay gastos adicionales.</div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Accounting Summary */}
+            {conciliation.summary?.accountingSummary && (
+              <Card className="bg-white shadow-sm">
+                <CardHeader className="pb-4">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Percent className="h-5 w-5 text-slate-600" />
+                    Resumen Contable
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="font-semibold text-slate-800 mb-3">Distribución por Cuentas</h3>
+                    {Object.keys(conciliation.summary.accountingSummary.accountDistribution).length > 0 ? (
+                      <ul className="space-y-2">
+                        {Object.entries(conciliation.summary.accountingSummary.accountDistribution).map(
+                          ([accountName, amount]) => (
+                            <li key={accountName} className="flex justify-between items-center text-sm text-slate-700">
+                              <span>{accountName}</span>
+                              <span className="font-medium">{formatCurrency(amount)}</span>
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-slate-500">No hay distribución por cuentas.</p>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-800 mb-3">Distribución por Centros de Costo</h3>
+                    {Object.keys(conciliation.summary.accountingSummary.costCenterDistribution).length > 0 ? (
+                      <ul className="space-y-2">
+                        {Object.entries(conciliation.summary.accountingSummary.costCenterDistribution).map(
+                          ([costCenterName, amount]) => (
+                            <li
+                              key={costCenterName}
+                              className="flex justify-between items-center text-sm text-slate-700"
+                            >
+                              <span>{costCenterName}</span>
+                              <span className="font-medium">{formatCurrency(amount)}</span>
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-slate-500">No hay distribución por centros de costo.</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>

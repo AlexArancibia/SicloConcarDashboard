@@ -8,6 +8,7 @@ import type {
   UpdateConciliationDto,
   CreateConciliationItemDto,
   UpdateConciliationItemDto,
+  CreateConciliationExpenseDto,
   UpdateConciliationExpenseDto,
   ConciliationFiltersDto,
   ValidateConciliationDto,
@@ -27,6 +28,8 @@ interface ConciliationsState {
   currentConciliation: Conciliation | null
   conciliationItems: ConciliationItem[]
   conciliationExpenses: ConciliationExpense[]
+  pendingDocuments: PendingDocument[]
+  unmatchedTransactions: UnmatchedTransaction[]
   loading: boolean
   error: string | null
   pagination: {
@@ -56,7 +59,7 @@ interface ConciliationsState {
   getConciliationItemsByConciliation: (conciliationId: string) => Promise<void>
 
   // Métodos de ConciliationExpense
-  createConciliationExpense: (createExpenseDto: any) => Promise<ConciliationExpense | null>
+  createConciliationExpense: (createExpenseDto: CreateConciliationExpenseDto) => Promise<ConciliationExpense | null>
   getConciliationExpenseById: (id: string) => Promise<ConciliationExpense | null>
   updateConciliationExpense: (id: string, updateExpenseDto: UpdateConciliationExpenseDto) => Promise<void>
   deleteConciliationExpense: (id: string) => Promise<void>
@@ -87,13 +90,13 @@ interface ConciliationsState {
     startDate?: string,
     endDate?: string,
     bankAccountId?: string,
-  ) => Promise<PendingDocument[]>
+  ) => Promise<void>
   getUnmatchedTransactions: (
     companyId: string,
     startDate?: string,
     endDate?: string,
     bankAccountId?: string,
-  ) => Promise<UnmatchedTransaction[]>
+  ) => Promise<void>
 
   // Métodos utilitarios
   setCurrentConciliation: (conciliation: Conciliation | null) => void
@@ -106,6 +109,8 @@ export const useConciliationsStore = create<ConciliationsState>((set, get) => ({
   currentConciliation: null,
   conciliationItems: [],
   conciliationExpenses: [],
+  pendingDocuments: [],
+  unmatchedTransactions: [],
   loading: false,
   error: null,
   pagination: {
@@ -361,7 +366,7 @@ export const useConciliationsStore = create<ConciliationsState>((set, get) => ({
     }
   },
 
-  createConciliationExpense: async (createExpenseDto: any) => {
+  createConciliationExpense: async (createExpenseDto: CreateConciliationExpenseDto) => {
     set({ loading: true, error: null })
     try {
       const response = await apiClient.post<ConciliationExpense>("/conciliations/expenses", createExpenseDto)
@@ -579,14 +584,15 @@ export const useConciliationsStore = create<ConciliationsState>((set, get) => ({
         `/conciliations/company/${companyId}/pending-documents?${params.toString()}`,
       )
 
-      set({ loading: false })
-      return response.data
+      set({
+        pendingDocuments: response.data,
+        loading: false,
+      })
     } catch (error: any) {
       set({
         error: error.response?.data?.message || "Error fetching pending documents",
         loading: false,
       })
-      return []
     }
   },
 
@@ -602,14 +608,15 @@ export const useConciliationsStore = create<ConciliationsState>((set, get) => ({
         `/conciliations/company/${companyId}/unmatched-transactions?${params.toString()}`,
       )
 
-      set({ loading: false })
-      return response.data
+      set({
+        unmatchedTransactions: response.data,
+        loading: false,
+      })
     } catch (error: any) {
       set({
         error: error.response?.data?.message || "Error fetching unmatched transactions",
         loading: false,
       })
-      return []
     }
   },
 
@@ -623,6 +630,8 @@ export const useConciliationsStore = create<ConciliationsState>((set, get) => ({
       currentConciliation: null,
       conciliationItems: [],
       conciliationExpenses: [],
+      pendingDocuments: [],
+      unmatchedTransactions: [],
       pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
     })
   },
@@ -631,3 +640,4 @@ export const useConciliationsStore = create<ConciliationsState>((set, get) => ({
     set({ error: null })
   },
 }))
+  

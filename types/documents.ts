@@ -73,8 +73,8 @@ export interface Document extends BaseEntity {
   }
   lines?: DocumentLine[]
   paymentTerms?: DocumentPaymentTerm[]
-  accountLinks?: DocumentAccountLink[]
-  costCenterLinks?: DocumentCostCenterLink[]
+  accountLinks: DocumentAccountLink[]
+  costCenterLinks: DocumentCostCenterLink[]
   xmlData?: DocumentXmlData | null
   digitalSignature?: DocumentDigitalSignature | null
   detraction?: DocumentDetraction | null

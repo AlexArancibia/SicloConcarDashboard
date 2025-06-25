@@ -21,6 +21,7 @@ import { useConciliationsStore } from "@/stores/conciliation-store"
 import { useAccountingAccountsStore } from "@/stores/accounting-accounts-store"
 import { useCostCentersStore } from "@/stores/cost-centers-store"
 import { useAuthStore } from "@/stores/authStore"
+import { useDocumentsStore } from "@/stores/documents-store" // Asumiendo que este store existe
 import type {
   CreateConciliationDto,
   ExpenseType,
@@ -28,9 +29,9 @@ import type {
   UpdateConciliationDto,
   CreateConciliationItemDto,
 } from "@/types/conciliation"
-import { Transaction } from "@/types/transactions"
-import { BankAccount } from "@/types/bank-accounts"
-import { Document } from "@/types/documents"
+import type { Transaction } from "@/types/transactions"
+import type { BankAccount } from "@/types/bank-accounts"
+import type { Document, UpdateDocumentDto } from "@/types/documents" // Importar el DTO de documentos
 
 const DEBUG_MODE = true
 
@@ -97,6 +98,7 @@ export function ConciliationDialog({
   const { createConciliation, createConciliationItem, updateConciliation, loading } = useConciliationsStore()
   const { accountingAccounts, fetchAccountingAccounts } = useAccountingAccountsStore()
   const { costCenters, fetchCostCenters } = useCostCentersStore()
+  const { updateDocument } = useDocumentsStore() // Obtener la función updateDocument del store de documentos
 
   // State
   const [conciliationData, setConciliationData] = useState({
@@ -436,7 +438,7 @@ export function ConciliationDialog({
           documentAmount: Number.parseFloat(documentTotal.toFixed(2)),
           conciliatedAmount: Number.parseFloat(conciliationAmount.toFixed(2)),
           difference: Number.parseFloat(Math.abs(documentTotal - conciliationAmount).toFixed(2)),
-          distributionPercentage: Number.parseFloat(((conciliationAmount / documentTotal) ).toFixed(2)),
+          distributionPercentage: Number.parseFloat((conciliationAmount / documentTotal).toFixed(2)),
           detractionAmount: conciliationType === "DETRACTIONS" ? Number.parseFloat(conciliationAmount.toFixed(2)) : 0,
           retentionAmount: 0,
           status: conciliationAmount < documentTotal ? "PARTIAL" : "MATCHED",
@@ -705,7 +707,7 @@ export function ConciliationDialog({
           documentAmount: documentTotal,
           conciliatedAmount: conciliationAmount,
           difference: Math.abs(documentTotal - conciliationAmount),
-          distributionPercentage: (conciliationAmount / documentTotal) ,
+          distributionPercentage: conciliationAmount / documentTotal,
           detractionAmount: conciliationType === "DETRACTIONS" ? conciliationAmount : 0,
           retentionAmount: 0,
           status: conciliationAmount < documentTotal ? "PARTIAL" : "MATCHED",
@@ -726,8 +728,11 @@ export function ConciliationDialog({
       }
 
       // PASO 3: Actualizar documentos con cuentas contables y centros de costo
-      // (Este paso se haría mediante llamadas API separadas a los endpoints de documentos)
-      debugLog("Document updates would be processed here", generatePayloads.documentUpdates)
+      for (const docUpdate of generatePayloads.documentUpdates) {
+        debugLog("Updating document accounting info", docUpdate)
+        // El payload ya contiene updatedById y las propiedades accountLinks/costCenterLinks o lines
+        await updateDocument(docUpdate.documentId, docUpdate.payload as UpdateDocumentDto)
+      }
 
       // PASO 4: Actualizar el estado de la conciliación si todos los items se crearon
       if (createdItems.length === selectedDocuments.length) {
@@ -1467,163 +1472,166 @@ export function ConciliationDialog({
                     </div>
                   </ScrollArea>
                 </TabsContent>
-                </div>
+              </div>
 
-                
-<TabsContent value="developer" className="h-full m-0 p-0">
-  <div className="p-3 border-b bg-muted/30">
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <Database className="h-4 w-4 text-green-600" />
-        <span className="text-sm font-medium">Payloads de API</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <Badge variant="outline" className="text-xs">
-          {selectedDocuments.length} docs
-        </Badge>
-        <Badge variant="outline" className="text-xs">
-          {expenses.length} gastos
-        </Badge>
-        <Badge variant={totals.isBalanced ? "default" : "destructive"} className="text-xs">
-          {totals.isBalanced ? "Balanceado" : "Desbalanceado"}
-        </Badge>
-      </div>
-    </div>
-  </div>
-  <ScrollArea className="h-[calc(100%-60px)]">
-    <div className="p-4 space-y-4">
-      {/* 1. Creación de Conciliación */}
-      <Card>
-        <CardHeader className="py-2 px-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Badge variant="default" className="text-xs">POST</Badge>
-            Crear Conciliación
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-3">
-          <div className="text-xs space-y-1 mb-2">
-            <div>
-              <span className="text-muted-foreground">Endpoint:</span>
-              <span className="ml-1 font-mono">{generatePayloads.conciliationPayload.endpoint}</span>
-            </div>
-          </div>
-          <details className="cursor-pointer">
-            <summary className="text-xs text-muted-foreground hover:text-primary">
-              Ver payload completo
-            </summary>
-            <ScrollArea className="h-32 mt-2 border rounded bg-muted/20">
-              <pre className="p-2 text-xs whitespace-pre-wrap">
-                {JSON.stringify(generatePayloads.conciliationPayload.payload, null, 2)}
-              </pre>
-            </ScrollArea>
-          </details>
-        </CardContent>
-      </Card>
-
-      {/* 2. Creación de Items de Conciliación */}
-      <Card>
-        <CardHeader className="py-2 px-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Badge variant="default" className="text-xs">POST</Badge>
-            Crear Items de Conciliación ({generatePayloads.conciliationItems.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-3">
-          <div className="space-y-3">
-            {generatePayloads.conciliationItems.map((item, index) => {
-              const doc = selectedDocuments[index]
-              return (
-                <div key={index} className="border rounded p-2 bg-background">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium">{doc?.fullNumber}</span>
-                    <Badge variant="outline" className="text-xs">
-                      {item.payload.status}
-                    </Badge>
-                  </div>
-                  <div className="text-xs space-y-1 mb-2">
-                    <div>
-                      <span className="text-muted-foreground">Endpoint:</span>
-                      <span className="ml-1 font-mono">{item.endpoint}</span>
+              <TabsContent value="developer" className="h-full m-0 p-0">
+                <div className="p-3 border-b bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Database className="h-4 w-4 text-green-600" />
+                      <span className="text-sm font-medium">Payloads de API</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {selectedDocuments.length} docs
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {expenses.length} gastos
+                      </Badge>
+                      <Badge variant={totals.isBalanced ? "default" : "destructive"} className="text-xs">
+                        {totals.isBalanced ? "Balanceado" : "Desbalanceado"}
+                      </Badge>
                     </div>
                   </div>
-                  <details className="cursor-pointer">
-                    <summary className="text-xs text-muted-foreground hover:text-primary">
-                      Ver payload
-                    </summary>
-                    <ScrollArea className="h-24 mt-1 border rounded bg-muted/20">
-                      <pre className="p-2 text-xs whitespace-pre-wrap">
-                        {JSON.stringify(item.payload, null, 2)}
-                      </pre>
-                    </ScrollArea>
-                  </details>
                 </div>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                <ScrollArea className="h-[calc(100%-60px)]">
+                  <div className="p-4 space-y-4">
+                    {/* 1. Creación de Conciliación */}
+                    <Card>
+                      <CardHeader className="py-2 px-3">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Badge variant="default" className="text-xs">
+                            POST
+                          </Badge>
+                          Crear Conciliación
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-3">
+                        <div className="text-xs space-y-1 mb-2">
+                          <div>
+                            <span className="text-muted-foreground">Endpoint:</span>
+                            <span className="ml-1 font-mono">{generatePayloads.conciliationPayload.endpoint}</span>
+                          </div>
+                        </div>
+                        <details className="cursor-pointer">
+                          <summary className="text-xs text-muted-foreground hover:text-primary">
+                            Ver payload completo
+                          </summary>
+                          <ScrollArea className="h-32 mt-2 border rounded bg-muted/20">
+                            <pre className="p-2 text-xs whitespace-pre-wrap">
+                              {JSON.stringify(generatePayloads.conciliationPayload.payload, null, 2)}
+                            </pre>
+                          </ScrollArea>
+                        </details>
+                      </CardContent>
+                    </Card>
 
-      {/* 3. Actualizaciones de Documentos */}
-      <Card>
-        <CardHeader className="py-2 px-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">PUT</Badge>
-            Actualizar Documentos ({generatePayloads.documentUpdates.length})
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs">
-              Modo: {allocationMode === "document" ? "Documento" : "Ítem"}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="p-3">
-          <div className="space-y-3">
-            {generatePayloads.documentUpdates.map((update, index) => {
-              const doc = selectedDocuments.find((d) => d.id === update.documentId)
-              const hasLinks = allocationMode === "document"
-                ? (update.payload.accountLinks?.length || 0) > 0 ||
-                  (update.payload.costCenterLinks?.length || 0) > 0
-                : update.payload.lines?.some(
-                    (line: any) =>
-                      (line.accountLinks?.length || 0) > 0 ||
-                      (line.costCenterLinks?.length || 0) > 0,
-                  )
+                    {/* 2. Creación de Items de Conciliación */}
+                    <Card>
+                      <CardHeader className="py-2 px-3">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Badge variant="default" className="text-xs">
+                            POST
+                          </Badge>
+                          Crear Items de Conciliación ({generatePayloads.conciliationItems.length})
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-3">
+                        <div className="space-y-3">
+                          {generatePayloads.conciliationItems.map((item, index) => {
+                            const doc = selectedDocuments[index]
+                            return (
+                              <div key={index} className="border rounded p-2 bg-background">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-xs font-medium">{doc?.fullNumber}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {item.payload.status}
+                                  </Badge>
+                                </div>
+                                <div className="text-xs space-y-1 mb-2">
+                                  <div>
+                                    <span className="text-muted-foreground">Endpoint:</span>
+                                    <span className="ml-1 font-mono">{item.endpoint}</span>
+                                  </div>
+                                </div>
+                                <details className="cursor-pointer">
+                                  <summary className="text-xs text-muted-foreground hover:text-primary">
+                                    Ver payload
+                                  </summary>
+                                  <ScrollArea className="h-24 mt-1 border rounded bg-muted/20">
+                                    <pre className="p-2 text-xs whitespace-pre-wrap">
+                                      {JSON.stringify(item.payload, null, 2)}
+                                    </pre>
+                                  </ScrollArea>
+                                </details>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
 
-              return (
-                <div key={index} className="border rounded p-2 bg-background">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium">{doc?.fullNumber}</span>
-                    <Badge variant={hasLinks ? "default" : "secondary"} className="text-xs">
-                      {hasLinks ? "Con Enlaces" : "Sin Enlaces"}
-                    </Badge>
+                    {/* 3. Actualizaciones de Documentos */}
+                    <Card>
+                      <CardHeader className="py-2 px-3">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">
+                            PUT
+                          </Badge>
+                          Actualizar Documentos ({generatePayloads.documentUpdates.length})
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            Modo: {allocationMode === "document" ? "Documento" : "Ítem"}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-3">
+                        <div className="space-y-3">
+                          {generatePayloads.documentUpdates.map((update, index) => {
+                            const doc = selectedDocuments.find((d) => d.id === update.documentId)
+                            const hasLinks =
+                              allocationMode === "document"
+                                ? (update.payload.accountLinks?.length || 0) > 0 ||
+                                  (update.payload.costCenterLinks?.length || 0) > 0
+                                : update.payload.lines?.some(
+                                    (line: any) =>
+                                      (line.accountLinks?.length || 0) > 0 || (line.costCenterLinks?.length || 0) > 0,
+                                  )
+
+                            return (
+                              <div key={index} className="border rounded p-2 bg-background">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-xs font-medium">{doc?.fullNumber}</span>
+                                  <Badge variant={hasLinks ? "default" : "secondary"} className="text-xs">
+                                    {hasLinks ? "Con Enlaces" : "Sin Enlaces"}
+                                  </Badge>
+                                </div>
+                                <div className="text-xs space-y-1 mb-2">
+                                  <div>
+                                    <span className="text-muted-foreground">Endpoint:</span>
+                                    <span className="ml-1 font-mono">{update.endpoint}</span>
+                                  </div>
+                                </div>
+                                <details className="cursor-pointer">
+                                  <summary className="text-xs text-muted-foreground hover:text-primary">
+                                    Ver payload
+                                  </summary>
+                                  <ScrollArea className="h-24 mt-1 border rounded bg-muted/20">
+                                    <pre className="p-2 text-xs whitespace-pre-wrap">
+                                      {JSON.stringify(update.payload, null, 2)}
+                                    </pre>
+                                  </ScrollArea>
+                                </details>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                  <div className="text-xs space-y-1 mb-2">
-                    <div>
-                      <span className="text-muted-foreground">Endpoint:</span>
-                      <span className="ml-1 font-mono">{update.endpoint}</span>
-                    </div>
-                  </div>
-                  <details className="cursor-pointer">
-                    <summary className="text-xs text-muted-foreground hover:text-primary">
-                      Ver payload
-                    </summary>
-                    <ScrollArea className="h-24 mt-1 border rounded bg-muted/20">
-                      <pre className="p-2 text-xs whitespace-pre-wrap">
-                        {JSON.stringify(update.payload, null, 2)}
-                      </pre>
-                    </ScrollArea>
-                  </details>
-                </div>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  </ScrollArea>
-</TabsContent>
-
-              
+                </ScrollArea>
+              </TabsContent>
             </Tabs>
           </div>
         </div>
