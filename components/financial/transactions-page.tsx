@@ -1,699 +1,641 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   Upload,
   Download,
   CreditCard,
-  TrendingUp,
-  TrendingDown,
   Eye,
+  Edit,
   Trash2,
-  AlertCircle,
-  RefreshCw,
   ChevronLeft,
   ChevronRight,
+  MoreHorizontal,
+  TrendingUp,
+  TrendingDown,
+  AlertCircle,
+  RefreshCw,
   ChevronsLeft,
   ChevronsRight,
 } from "lucide-react"
 import { useTransactionsStore } from "@/stores/transactions-store"
-import { useBanksStore } from "@/stores/bank-store"
+import { useBankAccountsStore } from "@/stores/bank-accounts-store"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { FiltersBar } from "@/components/ui/filters-bar"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { TransactionStatus, TransactionType } from "@/types/transactions"
-import TransactionImportModal from "./transaction-import-modal"
+import { useToast } from "@/hooks/use-toast"
+import type { Transaction, TransactionStatus, TransactionType } from "@/types/transactions"
 import { useAuthStore } from "@/stores/authStore"
+import TransactionImportModal from "./transaction-import-modal"
+import { Checkbox } from "../ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function TransactionsPage() {
   const [filters, setFilters] = useState<{
     search: string
-    bankAccounts: string[]
-    status: TransactionStatus[]
-    types: TransactionType[]
-    dateRange: { from: Date | undefined; to: Date | undefined }
+    bankAccountId: string
+    status: string
+    type: string
+    dateFrom: string
+    dateTo: string
+    minAmount: string
+    maxAmount: string
   }>({
     search: "",
-    bankAccounts: [],
-    status: [],
-    types: [],
-    dateRange: { from: undefined, to: undefined },
+    bankAccountId: "all",
+    status: "all",
+    type: "all",
+    dateFrom: "",
+    dateTo: "",
+    minAmount: "",
+    maxAmount: "",
   })
 
   const [importModalOpen, setImportModalOpen] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(25)
-  const [selectedTransactions, setSelectedTransactions] = useState<string[]>([])
-  const [selectAll, setSelectAll] = useState(false)
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([])
 
-  // Stores
-  const { 
-    transactions, 
-    loading, 
-    error, 
-    fetchTransactions, 
-    clearError,
+  const { toast } = useToast()
+  const { company, user } = useAuthStore()
+
+  const {
+    transactions,
+    loading,
+    error,
     total,
     page,
     limit,
-    totalPages
+    totalPages,
+    fetchTransactions,
+    deleteTransaction,
+    clearError,
   } = useTransactionsStore()
-  const { banks, getActiveBanks, clearError: clearBanksError } = useBanksStore()
-  const { user } = useAuthStore()
 
-  // Cargar datos iniciales y cuando cambien los filtros
+  const { bankAccounts, fetchBankAccounts } = useBankAccountsStore()
+
+  // Función para cargar transacciones sin dependencias que causen loops
+ const loadTransactions = useCallback(async (currentPage?: number, currentFilters?: typeof filters, currentLimit?: number) => {
+  if (!company?.id) return
+
+  const pageToUse = currentPage ?? page
+  const filtersToUse = currentFilters ?? filters
+  const limitToUse = currentLimit ?? limit
+
+  const query = {
+    page: pageToUse,
+    limit: limitToUse,
+    ...(filtersToUse.search && { search: filtersToUse.search }),
+    ...(filtersToUse.bankAccountId !== "all" && { bankAccountId: filtersToUse.bankAccountId }),
+    ...(filtersToUse.status !== "all" && { status: filtersToUse.status as TransactionStatus }),
+    ...(filtersToUse.type !== "all" && { type: filtersToUse.type as TransactionType }),
+    ...(filtersToUse.dateFrom && { dateFrom: filtersToUse.dateFrom }),
+    ...(filtersToUse.dateTo && { dateTo: filtersToUse.dateTo }),
+    ...(filtersToUse.minAmount && { minAmount: filtersToUse.minAmount }),
+    ...(filtersToUse.maxAmount && { maxAmount: filtersToUse.maxAmount }),
+  }
+  await fetchTransactions(company.id, query)
+}, [company?.id, fetchTransactions]) // Removido page, limit y filters de las dependencias
+
+  // Cargar datos iniciales
   useEffect(() => {
-    if (user?.companyId) {
+    if (company?.id) {
+      fetchBankAccounts(company.id, { page: 1, limit: 100 })
       loadTransactions()
-      getActiveBanks()
     }
-  }, [user?.companyId, currentPage, itemsPerPage])
+  }, [company?.id, fetchBankAccounts, loadTransactions])
 
-  // Efecto para recargar cuando cambian los filtros
+  // Efecto para cambios de página - llamada directa sin dependencias problemáticas
   useEffect(() => {
-    if (user?.companyId) {
-      setCurrentPage(1) // Resetear a la primera página al cambiar filtros
-      loadTransactions()
+    if (company?.id) {
+      loadTransactions(page)
+    }
+  }, [page, company?.id]) // Removido loadTransactions de las dependencias
+
+  // Efecto para cambios de filtros - resetea página a 1
+  useEffect(() => {
+    if (company?.id) {
+      useTransactionsStore.setState({ page: 1 })
+      loadTransactions(1, filters)
     }
   }, [
     filters.search,
-    filters.bankAccounts,
+    filters.bankAccountId,
     filters.status,
-    filters.types,
-    filters.dateRange
-  ])
+    filters.type,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.minAmount,
+    filters.maxAmount,
+    company?.id
+  ]) // Removido loadTransactions de las dependencias
 
-  const loadTransactions = async () => {
-    if (!user?.companyId) return
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Error",
+        description: error,
+        variant: "destructive",
+      })
+      clearError()
+    }
+  }, [error, toast, clearError])
 
-    setRefreshing(true)
-    clearError()
-    clearBanksError()
+  const handleFilterChange = (key: string, value: any) => {
+    if (key === "dateRange" && typeof value === "object" && value !== null) {
+      setFilters((prev) => ({
+        ...prev,
+        dateFrom: value.from ? value.from.toISOString().split("T")[0] : "",
+        dateTo: value.to ? value.to.toISOString().split("T")[0] : "",
+      }))
+    } else {
+      setFilters((prev) => ({ ...prev, [key]: value }))
+    }
+  }
 
-    try {
-      const query = {
-        page: currentPage,
-        limit: itemsPerPage,
-        ...(filters.search && { search: filters.search }),
-        ...(filters.bankAccounts.length > 0 && { bankAccountId: filters.bankAccounts.join(',') }),
-        ...(filters.status.length > 0 && { status: filters.status.join(',') as TransactionStatus }),
-        ...(filters.types.length > 0 && { type: filters.types.join(',') }),
-        ...(filters.dateRange.from && { dateFrom: filters.dateRange.from.toISOString().split('T')[0] }),
-        ...(filters.dateRange.to && { dateTo: filters.dateRange.to.toISOString().split('T')[0] }),
+  const handleDeleteTransaction = async (transactionId: string) => {
+    if (confirm("¿Está seguro de que desea eliminar esta transacción?")) {
+      try {
+        await deleteTransaction(transactionId)
+        toast({
+          title: "Éxito",
+          description: "Transacción eliminada correctamente",
+        })
+        loadTransactions()
+      } catch (err: any) {
+        toast({
+          title: "Error",
+          description: err.message || "Error al eliminar la transacción",
+          variant: "destructive",
+        })
       }
-
-      await fetchTransactions(user.companyId, query)
-    } catch (error) {
-      console.error("Error loading transactions:", error)
-    } finally {
-      setRefreshing(false)
     }
   }
 
-  const handleImportComplete = async (hasSuccessfulImports: boolean) => {
-    if (hasSuccessfulImports && user?.companyId) {
-      await loadTransactions()
+  const handleBulkDelete = async () => {
+    if (selectedTransactionIds.length === 0) {
+      toast({ title: "Nada seleccionado", description: "Seleccione transacciones para eliminar." })
+      return
+    }
+    if (confirm(`¿Está seguro de que desea eliminar ${selectedTransactionIds.length} transacciones?`)) {
+      try {
+        for (const id of selectedTransactionIds) {
+          await deleteTransaction(id)
+        }
+        toast({
+          title: "Éxito",
+          description: `${selectedTransactionIds.length} transacciones eliminadas.`,
+        })
+        setSelectedTransactionIds([])
+        loadTransactions()
+      } catch (err: any) {
+        toast({
+          title: "Error",
+          description: err.message || "Error al eliminar transacciones.",
+          variant: "destructive",
+        })
+      }
     }
   }
 
-  const handleRefresh = async () => {
-    if (user?.companyId) {
-      await loadTransactions()
+  const handleImportComplete = () => {
+    loadTransactions()
+  }
+
+  // Función mejorada para cambio de página sin bucles
+  const handlePageChange = useCallback((newPage: number) => {
+    if (newPage !== page && newPage >= 1 && newPage <= totalPages) {
+      useTransactionsStore.setState({ page: newPage })
     }
+  }, [page, totalPages])
+
+  // Función para cambiar el límite de elementos por página
+  const handleLimitChange = useCallback((newLimit: string) => {
+    const limitValue = Number(newLimit)
+    useTransactionsStore.setState({ limit: limitValue, page: 1 })
+    loadTransactions(1)
+  }, [loadTransactions])
+
+  const getStatusBadge = (status: TransactionStatus) => {
+    const statusConfig: Record<TransactionStatus, { class: string; label: string }> = {
+      PENDING: { class: "bg-amber-500/10 text-amber-600 border-amber-500/20", label: "Pendiente" },
+      PROCESSED: { class: "bg-blue-500/10 text-blue-600 border-blue-500/20", label: "Procesado" },
+      RECONCILED: { class: "bg-green-500/10 text-green-600 border-green-500/20", label: "Conciliado" },
+      CANCELLED: { class: "bg-red-500/10 text-red-600 border-red-500/20", label: "Cancelado" },
+    }
+    const config = statusConfig[status] || { class: "bg-gray-500/10 text-gray-600", label: "Desconocido" }
+    return (
+      <Badge variant="secondary" className={config.class}>
+        {config.label}
+      </Badge>
+    )
   }
 
   const getTypeBadge = (type: TransactionType) => {
-    const typeConfig: Record<TransactionType, { color: string; label: string; icon: any }> = {
-      // INGRESOS
-      INCOME_SALARY: {
-        color: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-        label: "Sueldo",
-        icon: TrendingUp,
-      },
-      INCOME_BONUS: {
-        color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
-        label: "Bono",
-        icon: TrendingUp,
-      },
-      INCOME_INTEREST: {
-        color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-        label: "Interés",
-        icon: TrendingUp,
-      },
-      INCOME_INVESTMENT: {
-        color: "bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20",
-        label: "Inversión",
-        icon: TrendingUp,
-      },
-      INCOME_DIVIDENDS: {
-        color: "bg-pink-500/10 text-pink-600 border-pink-500/20",
-        label: "Dividendo",
-        icon: TrendingUp,
-      },
-      INCOME_SALES: {
-        color: "bg-rose-500/10 text-rose-600 border-rose-500/20",
-        label: "Venta",
-        icon: TrendingUp,
-      },
-      INCOME_SERVICES: {
-        color: "bg-red-500/10 text-red-600 border-red-500/20",
-        label: "Servicio",
-        icon: TrendingUp,
-      },
-      INCOME_TRANSFER: {
-        color: "bg-orange-500/10 text-orange-600 border-orange-500/20",
-        label: "Transferencia",
-        icon: TrendingUp,
-      },
-      INCOME_DEPOSIT: {
-        color: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-        label: "Depósito",
-        icon: TrendingUp,
-      },
-      INCOME_REFUND: {
-        color: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
-        label: "Reembolso",
-        icon: TrendingUp,
-      },
-      INCOME_ADJUSTMENT: {
-        color: "bg-lime-500/10 text-lime-600 border-lime-500/20",
-        label: "Ajuste",
-        icon: TrendingUp,
-      },
-      INCOME_TAX_REFUND: {
-        color: "bg-green-500/10 text-green-600 border-green-500/20",
-        label: "Devolución Imp.",
-        icon: TrendingUp,
-      },
-      INCOME_OTHER: {
-        color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
-        label: "Otro Ingreso",
-        icon: TrendingUp,
-      },
+    const isIncome = type.startsWith("INCOME_")
+    const genericTypeConfig: { [key: string]: { color: string; label: string; icon: any } } = {
+      INCOME_SALARY: { color: "bg-sky-500/10 text-sky-600", label: "Sueldo", icon: TrendingUp },
+      INCOME_BONUS: { color: "bg-teal-500/10 text-teal-600", label: "Bono", icon: TrendingUp },
+      INCOME_INTEREST: { color: "bg-cyan-500/10 text-cyan-600", label: "Interés", icon: TrendingUp },
+      INCOME_INVESTMENT: { color: "bg-blue-500/10 text-blue-600", label: "Inversión", icon: TrendingUp },
+      INCOME_DIVIDENDS: { color: "bg-indigo-500/10 text-indigo-600", label: "Dividendo", icon: TrendingUp },
+      INCOME_SALES: { color: "bg-violet-500/10 text-violet-600", label: "Venta", icon: TrendingUp },
+      INCOME_SERVICES: { color: "bg-purple-500/10 text-purple-600", label: "Servicio", icon: TrendingUp },
+      INCOME_TRANSFER: { color: "bg-fuchsia-500/10 text-fuchsia-600", label: "Transferencia Recibida", icon: TrendingUp },
+      INCOME_DEPOSIT: { color: "bg-pink-500/10 text-pink-600", label: "Depósito", icon: TrendingUp },
+      INCOME_REFUND: { color: "bg-rose-500/10 text-rose-600", label: "Reembolso Recibido", icon: TrendingUp },
+      INCOME_ADJUSTMENT: { color: "bg-lime-500/10 text-lime-600", label: "Ajuste (Ingreso)", icon: TrendingUp },
+      INCOME_TAX_REFUND: { color: "bg-emerald-500/10 text-emerald-600", label: "Devolución Imp.", icon: TrendingUp },
+      INCOME_OTHER: { color: "bg-green-500/10 text-green-600", label: "Otro Ingreso", icon: TrendingUp },
+      PAYROLL_SALARY: { color: "bg-sky-500/10 text-sky-700", label: "Sueldo", icon: TrendingDown },
+      PAYROLL_CTS: { color: "bg-teal-500/10 text-teal-700", label: "CTS", icon: TrendingDown },
+      PAYROLL_BONUS: { color: "bg-cyan-500/10 text-cyan-700", label: "Grati/Bono", icon: TrendingDown },
+      PAYROLL_AFP: { color: "bg-blue-500/10 text-blue-700", label: "AFP", icon: TrendingDown },
+      TAX_PAYMENT: { color: "bg-slate-500/10 text-slate-700", label: "Pago SUNAT", icon: TrendingDown },
+      TAX_ITF: { color: "bg-stone-500/10 text-stone-700", label: "ITF", icon: TrendingDown },
+      TAX_DETRACTION: { color: "bg-neutral-500/10 text-neutral-700", label: "Detracción", icon: TrendingDown },
+      EXPENSE_UTILITIES: { color: "bg-yellow-500/10 text-yellow-700", label: "Servicios", icon: TrendingDown },
+      EXPENSE_INSURANCE: { color: "bg-amber-500/10 text-amber-700", label: "Seguro", icon: TrendingDown },
+      EXPENSE_COMMISSIONS: { color: "bg-orange-500/10 text-orange-700", label: "Comisión", icon: TrendingDown },
+      EXPENSE_PURCHASE: { color: "bg-red-500/10 text-red-700", label: "Pago Proveedor", icon: TrendingDown },
+      EXPENSE_OTHER: { color: "bg-rose-500/10 text-rose-700", label: "Otro Gasto", icon: TrendingDown },
+      TRANSFER_INBANK: { color: "bg-pink-500/10 text-pink-700", label: "Transf. Mismo Banco", icon: TrendingDown },
+      TRANSFER_EXTERNAL: { color: "bg-fuchsia-500/10 text-fuchsia-700", label: "Transf. Interbancaria", icon: TrendingDown },
+      WITHDRAWAL_CASH: { color: "bg-purple-500/10 text-purple-700", label: "Retiro Efectivo", icon: TrendingDown },
+      ADJUSTMENT: { color: "bg-violet-500/10 text-violet-700", label: "Ajuste (Egreso)", icon: TrendingDown },
+      REFUND: { color: "bg-indigo-500/10 text-indigo-700", label: "Devolución Emitida", icon: TrendingDown },
+    }
 
-      // EGRESOS
-      PAYROLL_SALARY: {
-        color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
-        label: "Sueldo",
-        icon: TrendingDown,
-      },
-      PAYROLL_CTS: {
-        color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-        label: "CTS",
-        icon: TrendingDown,
-      },
-      PAYROLL_BONUS: {
-        color: "bg-pink-500/10 text-pink-600 border-pink-500/20",
-        label: "Grati/Bono",
-        icon: TrendingDown,
-      },
-      PAYROLL_AFP: {
-        color: "bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20",
-        label: "AFP",
-        icon: TrendingDown,
-      },
-      TAX_PAYMENT: {
-        color: "bg-gray-500/10 text-gray-600 border-gray-500/20",
-        label: "Pago SUNAT",
-        icon: TrendingDown,
-      },
-      TAX_ITF: {
-        color: "bg-pink-500/10 text-pink-600 border-pink-500/20",
-        label: "ITF",
-        icon: TrendingDown,
-      },
-      TAX_DETRACTION: {
-        color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-        label: "Detracción",
-        icon: TrendingDown,
-      },
-      EXPENSE_UTILITIES: {
-        color: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
-        label: "Servicios",
-        icon: TrendingDown,
-      },
-      EXPENSE_INSURANCE: {
-        color: "bg-sky-500/10 text-sky-600 border-sky-500/20",
-        label: "Seguro",
-        icon: TrendingDown,
-      },
-      EXPENSE_COMMISSIONS: {
-        color: "bg-orange-500/10 text-orange-600 border-orange-500/20",
-        label: "Comisión",
-        icon: TrendingDown,
-      },
-      EXPENSE_PURCHASE: {
-        color: "bg-rose-500/10 text-rose-600 border-rose-500/20",
-        label: "Pago proveedor",
-        icon: TrendingDown,
-      },
-      EXPENSE_OTHER: {
-        color: "bg-red-500/10 text-red-600 border-red-500/20",
-        label: "Otro gasto",
-        icon: TrendingDown,
-      },
-      TRANSFER_INBANK: {
-        color: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20",
-        label: "Transf. mismo banco",
-        icon: TrendingDown,
-      },
-      TRANSFER_EXTERNAL: {
-        color: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-        label: "Transf. interbancaria",
-        icon: TrendingDown,
-      },
-      WITHDRAWAL_CASH: {
-        color: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-        label: "Retiro efectivo",
-        icon: TrendingDown,
-      },
-      ADJUSTMENT: {
-        color: "bg-zinc-500/10 text-zinc-600 border-zinc-500/20",
-        label: "Ajuste",
-        icon: TrendingDown,
-      },
-      REFUND: {
-        color: "bg-lime-500/10 text-lime-600 border-lime-500/20",
-        label: "Devolución",
-        icon: TrendingDown,
-      },
-    };
-
-    const config = typeConfig[type]
+    const config = genericTypeConfig[type] || {
+      color: `border ${isIncome ? "border-green-500/20 bg-green-500/10 text-green-700" : "border-red-500/20 bg-red-500/10 text-red-700"}`,
+      label: type.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, l => l.toUpperCase()),
+      icon: isIncome ? TrendingUp : TrendingDown,
+    }
     const IconComponent = config.icon
     return (
-      <Badge variant="secondary" className={config.color}>
+      <Badge variant="outline" className={`${config.color} border`}>
         <IconComponent className="w-3 h-3 mr-1" />
         {config.label}
       </Badge>
     )
   }
 
-  const filteredTransactions = transactions.filter((transaction) => {
-    const matchesSearch =
-      transaction.description.toLowerCase().includes(filters.search.toLowerCase()) ||
-      (transaction.operationNumber && transaction.operationNumber.includes(filters.search)) ||
-      (transaction.reference && transaction.reference.toLowerCase().includes(filters.search.toLowerCase()))
-
-    const matchesBankAccount =
-      filters.bankAccounts.length === 0 || filters.bankAccounts.includes(transaction.bankAccountId)
-
-    const matchesStatus =
-      filters.status.length === 0 || filters.status.includes(transaction.status)
-
-    const matchesType =
-      filters.types.length === 0 || filters.types.includes(transaction.transactionType)
-
-    const matchesDate =
-      !filters.dateRange.from ||
-      (new Date(transaction.transactionDate) >= filters.dateRange.from &&
-        (!filters.dateRange.to || new Date(transaction.transactionDate) <= filters.dateRange.to))
-
-    return matchesSearch && matchesBankAccount && matchesStatus && matchesType && matchesDate
-  })
-
-  const sortedTransactions = [...filteredTransactions].sort((a, b) => {
-    const dateA = new Date(a.transactionDate)
-    const dateB = new Date(b.transactionDate)
-
-    if (dateA.getTime() === dateB.getTime() && a.operationTime && b.operationTime) {
-      return b.operationTime.localeCompare(a.operationTime)
-    }
-
-    return dateB.getTime() - dateA.getTime()
-  })
-
-  const paginatedTransactions = sortedTransactions.slice(
-    (page - 1) * limit,
-    page * limit
-  )
-
-  const statusOptions = [
-    { value: "PENDING", label: "Pendiente" },
-    { value: "PROCESSED", label: "Procesado" },
-    { value: "RECONCILED", label: "Conciliado" },
-    { value: "CANCELLED", label: "Cancelado" },
-  ]
-
-  const typeOptions = [
-    // INGRESOS
-    { value: "INCOME_SALARY", label: "Sueldo (Ingreso)" },
-    { value: "INCOME_BONUS", label: "Bono (Ingreso)" },
-    { value: "INCOME_INTEREST", label: "Interés (Ingreso)" },
-    { value: "INCOME_INVESTMENT", label: "Inversión (Ingreso)" },
-    { value: "INCOME_DIVIDENDS", label: "Dividendo (Ingreso)" },
-    { value: "INCOME_SALES", label: "Venta (Ingreso)" },
-    { value: "INCOME_SERVICES", label: "Servicio (Ingreso)" },
-    { value: "INCOME_TRANSFER", label: "Transferencia (Ingreso)" },
-    { value: "INCOME_DEPOSIT", label: "Depósito (Ingreso)" },
-    { value: "INCOME_REFUND", label: "Reembolso (Ingreso)" },
-    { value: "INCOME_ADJUSTMENT", label: "Ajuste (Ingreso)" },
-    { value: "INCOME_TAX_REFUND", label: "Devolución Imp. (Ingreso)" },
-    { value: "INCOME_OTHER", label: "Otro Ingreso" },
-    
-    // EGRESOS
-    { value: "PAYROLL_SALARY", label: "Sueldo (Egreso)" },
-    { value: "PAYROLL_CTS", label: "CTS (Egreso)" },
-    { value: "PAYROLL_BONUS", label: "Gratificación/Bono (Egreso)" },
-    { value: "PAYROLL_AFP", label: "AFP (Egreso)" },
-    { value: "TAX_PAYMENT", label: "Pago SUNAT (Egreso)" },
-    { value: "TAX_ITF", label: "ITF (Egreso)" },
-    { value: "TAX_DETRACTION", label: "Detracción (Egreso)" },
-    { value: "EXPENSE_UTILITIES", label: "Servicios (Egreso)" },
-    { value: "EXPENSE_INSURANCE", label: "Seguro (Egreso)" },
-    { value: "EXPENSE_COMMISSIONS", label: "Comisiones (Egreso)" },
-    { value: "EXPENSE_PURCHASE", label: "Pago proveedor (Egreso)" },
-    { value: "EXPENSE_OTHER", label: "Otro gasto (Egreso)" },
-    { value: "TRANSFER_INBANK", label: "Transf. mismo banco (Egreso)" },
-    { value: "TRANSFER_EXTERNAL", label: "Transf. interbancaria (Egreso)" },
-    { value: "WITHDRAWAL_CASH", label: "Retiro efectivo (Egreso)" },
-    { value: "ADJUSTMENT", label: "Ajuste (Egreso)" },
-    { value: "REFUND", label: "Devolución (Egreso)" },
-  ]
-
-  const handleSelectAll = () => {
-    if (selectAll) {
-      setSelectedTransactions([])
-    } else {
-      setSelectedTransactions(paginatedTransactions.map((t) => t.id))
-    }
-    setSelectAll(!selectAll)
-  }
-
-  const handleSelectTransaction = (transactionId: string) => {
-    setSelectedTransactions((prev) =>
-      prev.includes(transactionId) ? prev.filter((id) => id !== transactionId) : [...prev, transactionId],
-    )
-  }
-
-  const handleBulkDelete = async () => {
-    if (selectedTransactions.length === 0) return
-    console.log("Eliminar transacciones:", selectedTransactions)
-    setSelectedTransactions([])
-    setSelectAll(false)
-  }
-
-  const bankAccountOptions = transactions.reduce(
-    (acc, transaction) => {
-      const bankAccount = transaction.bankAccount
-      if (bankAccount && !acc.find((opt) => opt.value === bankAccount.id)) {
-        acc.push({
-          value: bankAccount.id,
-          label: `${bankAccount.bank.name} - ${bankAccount.accountNumber}`,
-        })
-      }
-      return acc
-    },
-    [] as Array<{ value: string; label: string }>,
-  )
-
   const filterConfigs = [
+    { key: "search", type: "search" as const, placeholder: "Descripción, Operación, Referencia..." },
     {
-      key: "search",
-      type: "search" as const,
-      placeholder: "Descripción, Operación, Referencia, Razón Social...",
-    },
-    {
-      key: "bankAccounts",
-      type: "multiselect" as const,
-      placeholder: "Cuentas bancarias",
-      options: bankAccountOptions,
+      key: "bankAccountId",
+      type: "select" as const,
+      placeholder: "Cuenta Bancaria",
+      options: [
+        { value: "all", label: "Todas las Cuentas" },
+        ...bankAccounts.map((acc) => ({ value: acc.id, label: `${acc.bank?.name} - ${acc.accountNumber} (${acc.currency})` })),
+      ],
       className: "min-w-48",
     },
     {
       key: "status",
-      type: "multiselect" as const,
+      type: "select" as const,
       placeholder: "Estado",
-      options: statusOptions,
-      className: "min-w-32",
+      options: [
+        { value: "all", label: "Todos los Estados" },
+        { value: "PENDING", label: "Pendiente" },
+        { value: "PROCESSED", label: "Procesado" },
+        { value: "RECONCILED", label: "Conciliado" },
+        { value: "CANCELLED", label: "Cancelado" },
+      ],
+      className: "min-w-36",
     },
     {
-      key: "types",
-      type: "multiselect" as const,
+      key: "type",
+      type: "select" as const,
       placeholder: "Tipo",
-      options: typeOptions,
-      className: "min-w-32",
+      options: [
+        { value: "all", label: "Todos los Tipos" },
+        { value: "INCOME_SALES", label: "Venta (Ingreso)" },
+        { value: "EXPENSE_PURCHASE", label: "Pago Proveedor (Egreso)" },
+        { value: "INCOME_SALARY", label: "Sueldo (Ingreso)" },
+        { value: "INCOME_BONUS", label: "Bono (Ingreso)" },
+        { value: "INCOME_INTEREST", label: "Interés (Ingreso)" },
+        { value: "INCOME_INVESTMENT", label: "Inversión (Ingreso)" },
+        { value: "INCOME_DIVIDENDS", label: "Dividendo (Ingreso)" },
+        { value: "INCOME_SERVICES", label: "Servicio (Ingreso)" },
+        { value: "INCOME_TRANSFER", label: "Transferencia (Ingreso)" },
+        { value: "INCOME_DEPOSIT", label: "Depósito (Ingreso)" },
+        { value: "INCOME_REFUND", label: "Reembolso (Ingreso)" },
+        { value: "INCOME_ADJUSTMENT", label: "Ajuste (Ingreso)" },
+        { value: "INCOME_TAX_REFUND", label: "Devolución Imp. (Ingreso)" },
+        { value: "INCOME_OTHER", label: "Otro Ingreso" },
+        { value: "PAYROLL_SALARY", label: "Sueldo (Egreso)" },
+        { value: "PAYROLL_CTS", label: "CTS (Egreso)" },
+        { value: "PAYROLL_BONUS", label: "Gratificación/Bono (Egreso)" },
+        { value: "PAYROLL_AFP", label: "AFP (Egreso)" },
+        { value: "TAX_PAYMENT", label: "Pago SUNAT (Egreso)" },
+        { value: "TAX_ITF", label: "ITF (Egreso)" },
+        { value: "TAX_DETRACTION", label: "Detracción (Egreso)" },
+        { value: "EXPENSE_UTILITIES", label: "Servicios (Egreso)" },
+        { value: "EXPENSE_INSURANCE", label: "Seguro (Egreso)" },
+        { value: "EXPENSE_COMMISSIONS", label: "Comisiones (Egreso)" },
+        { value: "EXPENSE_OTHER", label: "Otro gasto (Egreso)" },
+        { value: "TRANSFER_INBANK", label: "Transf. mismo banco (Egreso)" },
+        { value: "TRANSFER_EXTERNAL", label: "Transf. interbancaria (Egreso)" },
+        { value: "WITHDRAWAL_CASH", label: "Retiro efectivo (Egreso)" },
+        { value: "ADJUSTMENT", label: "Ajuste (Egreso)" },
+        { value: "REFUND", label: "Devolución (Egreso)" },
+      ],
+      className: "min-w-48",
     },
-    {
-      key: "dateRange",
-      type: "daterange" as const,
-      placeholder: "Período",
-    },
+    { key: "dateRange", type: "daterange" as const, placeholder: "Período Transacción" },
+    { key: "minAmount", type: "search" as const, placeholder: "Monto Mín.", className: "w-32" },
+    { key: "maxAmount", type: "search" as const, placeholder: "Monto Máx.", className: "w-32" },
   ]
 
-  const handleFilterChange = (key: string, value: any) => {
-    setFilters((prev) => ({ ...prev, [key]: value }))
+  const formatDate = (date: Date | string) => {
+    return new Date(date).toLocaleDateString("es-PE", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
   }
 
+  const formatCurrency = (amount: string | number, currencySymbol = "S/") => {
+    if (amount === null || amount === undefined) return `${currencySymbol} 0.00`
+    const numAmount = typeof amount === "string" ? Number.parseFloat(amount) : amount
+    return `${currencySymbol} ${numAmount.toLocaleString("es-PE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`
+  }
 
   return (
-    <div className="space-y-4">
-      {error && (
-        <Alert className="bg-red-500/10 border-red-500/30">
-          <AlertCircle className="h-4 w-4 text-red-500" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>Error al cargar transacciones: {error}</span>
-            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
-              Reintentar
+    <>
+      <div className="space-y-4">
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Error al cargar transacciones: {error}
+               <Button variant="outline" size="sm" className="ml-2" onClick={() => loadTransactions()}>
+                Reintentar
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Transacciones Bancarias</h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Administre las transacciones importadas desde los extractos bancarios.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm">
+              <Download className="w-4 h-4 mr-2" />
+              Exportar
             </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Transacciones Bancarias</h1>
-          <p className="text-muted-foreground">Administre las transacciones importadas desde los extractos bancarios</p>
-        </div>
-        <div className="flex gap-2">
-          {selectedTransactions.length > 0 && (
-            <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
-              <Trash2 className="w-4 h-4 mr-2" />
-              Eliminar ({selectedTransactions.length})
+            <Button size="sm" onClick={() => setImportModalOpen(true)}>
+              <Upload className="w-4 h-4 mr-2" />
+              Importar Excel/CSV
             </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing || loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
-            Actualizar
-          </Button>
-          <Button variant="outline" size="sm">
-            <Download className="w-4 h-4 mr-2" />
-            Exportar
-          </Button>
-          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setImportModalOpen(true)}>
-            <Upload className="w-4 h-4 mr-2" />
-            Importar Excel
-          </Button>
+          </div>
         </div>
-      </div>
 
-      <Card>
-        <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
-      </Card>
+        <Card>
+          <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
+        </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-emerald-600" />
-              Transacciones ({loading || refreshing ? "..." : total})
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Mostrar:</span>
-              <Select
-                value={itemsPerPage.toString()}
-                onValueChange={(value) => {
-                  setItemsPerPage(Number(value))
-                  setCurrentPage(1)
-                }}
-              >
-                <SelectTrigger className="w-20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading || refreshing ? (
-            <TableSkeleton rows={8} columns={9} />
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <div className="min-w-[1200px]">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-left p-3 w-12">
-                          <input
-                            type="checkbox"
-                            checked={selectAll}
-                            onChange={handleSelectAll}
-                            className="rounded border-gray-300"
-                          />
-                        </th>
-                        <th className="text-left p-3 text-card-foreground">Fecha/Hora</th>
-                        <th className="text-left p-3 text-card-foreground">Cuenta</th>
-                        <th className="text-left p-3 text-card-foreground">Operación</th>
-                        <th className="text-left p-3 text-card-foreground">Descripción</th>
-                        <th className="text-center p-3 text-card-foreground">Tipo</th>
-                        <th className="text-right p-3 text-card-foreground">Monto</th>
-                        <th className="text-right p-3 text-card-foreground">Saldo</th>
-                        <th className="text-center p-3 text-card-foreground">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedTransactions.map((transaction) => (
-                        <tr key={transaction.id} className="border-b border-border hover:bg-muted/30">
-                          <td className="p-3">
-                            <input
-                              type="checkbox"
-                              checked={selectedTransactions.includes(transaction.id)}
-                              onChange={() => handleSelectTransaction(transaction.id)}
-                              className="rounded border-gray-300"
-                            />
-                          </td>
-                          <td className="p-3">
-                            <div>
-                              <p className="text-card-foreground text-sm">
-                                {new Date(transaction.transactionDate).toLocaleDateString("es-PE", {
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
-                                })}
-                              </p>
-                              {transaction.operationTime && (
-                                <p className="text-xs text-muted-foreground">{transaction.operationTime}</p>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <div>
-                              <p className="font-mono text-card-foreground text-xs">
-                                {transaction.bankAccount?.accountNumber || "N/A"}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {transaction.bankAccount?.bank?.name || "N/A"}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <p className="font-mono text-card-foreground text-sm">
-                              {transaction.operationNumber || "N/A"}
-                            </p>
-                            {transaction.branch && (
-                              <p className="text-xs text-muted-foreground">Suc: {transaction.branch}</p>
-                            )}
-                          </td>
-                          <td className="p-3 max-w-64 truncate text-card-foreground" title={transaction.description}>
-                            {transaction.description}
-                            {transaction.reference && (
-                              <p className="text-xs text-muted-foreground">Ref: {transaction.reference}</p>
-                            )}
-                          </td>
-                          <td className="p-3 text-center">{getTypeBadge(transaction.transactionType)}</td>
-                          <td className="p-3 text-right font-mono text-card-foreground">
-                            {transaction.bankAccount?.currencyRef?.symbol || "PEN"}{" "}
-                            {Number.parseFloat(transaction.amount).toLocaleString("es-PE", {
-                              minimumFractionDigits: 2,
-                            })}
-                          </td>
-                          <td className="p-3 text-right font-mono text-card-foreground">
-                            {transaction.bankAccount?.currencyRef?.symbol || "PEN"}{" "}
-                            {Number.parseFloat(transaction.balance).toLocaleString("es-PE", {
-                              minimumFractionDigits: 2,
-                            })}
-                          </td>
-                          <td className="p-3">
-                            <div className="flex items-center justify-center gap-1">
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                                onClick={() => handleSelectTransaction(transaction.id)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                Transacciones ({loading ? "..." : total})
+                {selectedTransactionIds.length > 0 && (
+                  <span className="text-sm text-primary font-medium ml-2">
+                    ({selectedTransactionIds.length} seleccionado(s))
+                  </span>
+                )}
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                {selectedTransactionIds.length > 0 && (
+                  <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Eliminar ({selectedTransactionIds.length})
+                  </Button>
+                )}
+                <Button variant="outline" size="sm"  onClick={() => loadTransactions()} disabled={loading}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                  Actualizar
+                </Button>
+                <Select
+                  value={limit.toString()}
+                  onValueChange={(value) => {
+                    useTransactionsStore.setState({ limit: Number(value), page: 1 })
+                    loadTransactions()
+                  }}
+                >
+                  <SelectTrigger className="w-24">
+                    <SelectValue placeholder="Mostrar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <div className="text-sm text-muted-foreground">
-                    Mostrando {(page - 1) * limit + 1} a {Math.min(page * limit, total)} de {total} transacciones
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={page === 1}>
-                      <ChevronsLeft className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(page - 1)}
-                      disabled={page === 1}
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </Button>
-                    <span className="text-sm">
-                      Página {page} de {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(page + 1)}
-                      disabled={page === totalPages}
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(totalPages)}
-                      disabled={page === totalPages}
-                    >
-                      <ChevronsRight className="w-4 h-4" />
-                    </Button>
-                  </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading && transactions.length === 0 ? (
+              <TableSkeleton rows={limit} columns={9} />
+            ) : (
+              <>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12 px-2">
+                          <Checkbox
+                            checked={
+                              transactions.length > 0 && selectedTransactionIds.length === transactions.length
+                            }
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedTransactionIds(transactions.map((t) => t.id))
+                              } else {
+                                setSelectedTransactionIds([])
+                              }
+                            }}
+                            aria-label="Seleccionar todas las transacciones"
+                          />
+                        </TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Cuenta Bancaria</TableHead>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead>Referencia/Operación</TableHead>
+                        <TableHead className="text-center">Tipo</TableHead>
+                        <TableHead className="text-right">Monto</TableHead>
+                        <TableHead className="text-right">Saldo</TableHead>
+                        <TableHead className="text-center">Estado</TableHead>
+                        <TableHead className="text-center">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {transactions.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={10} className="h-24 text-center">
+                            No se encontraron transacciones con los filtros aplicados.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        transactions.map((transaction) => (
+                          <TableRow
+                            key={transaction.id}
+                            data-state={selectedTransactionIds.includes(transaction.id) && "selected"}
+                          >
+                            <TableCell className="px-2">
+                              <Checkbox
+                                checked={selectedTransactionIds.includes(transaction.id)}
+                                onCheckedChange={(checked) => {
+                                  setSelectedTransactionIds((prev) =>
+                                    checked ? [...prev, transaction.id] : prev.filter((id) => id !== transaction.id),
+                                  )
+                                }}
+                                aria-label={`Seleccionar transacción ${transaction.description}`}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {formatDate(transaction.transactionDate)}
+                              {transaction.operationTime && <div className="text-xs text-muted-foreground">{transaction.operationTime}</div>}
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium">{transaction.bankAccount?.alias || transaction.bankAccount?.accountNumber}</div>
+                              <div className="text-xs text-muted-foreground">{transaction.bankAccount?.bank?.name} ({transaction.bankAccount?.currencyRef?.code})</div>
+                            </TableCell>
+                            <TableCell className="max-w-xs truncate" title={transaction.description}>
+                              {transaction.description}
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-mono text-xs">{transaction.operationNumber}</div>
+                              {transaction.reference && <div className="text-xs text-muted-foreground truncate" title={transaction.reference}>Ref: {transaction.reference}</div>}
+                            </TableCell>
+                            <TableCell className="text-center">{getTypeBadge(transaction.transactionType)}</TableCell>
+                            <TableCell className="text-right font-mono">
+                              {formatCurrency(transaction.amount, transaction.bankAccount?.currencyRef?.symbol)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {formatCurrency(transaction.balance, transaction.bankAccount?.currencyRef?.symbol)}
+                            </TableCell>
+                            <TableCell className="text-center">{getStatusBadge(transaction.status)}</TableCell>
+                            <TableCell className="text-center">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" className="h-8 w-8 p-0">
+                                    <span className="sr-only">Abrir menú</span>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`#`}>
+                                      <Eye className="mr-2 h-4 w-4" /> Ver Detalles
+                                    </Link>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`#`}>
+                                      <Edit className="mr-2 h-4 w-4" /> Editar
+                                    </Link>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteTransaction(transaction.id)}
+                                    className="text-red-600 focus:text-red-600"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
-              )}
 
-              {filteredTransactions.length === 0 && !error && (
-                <div className="text-center py-8">
-                  <CreditCard className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No se encontraron transacciones con los filtros aplicados</p>
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 py-4">
+                    <div className="text-sm text-muted-foreground">
+                      Mostrando {(page - 1) * limit + 1} a{" "}
+                      {Math.min(page * limit, total)} de {total} transacciones
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handlePageChange(1)}
+                        disabled={page <= 1 || loading}
+                        className="h-8 w-8"
+                      >
+                        <ChevronsLeft className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handlePageChange(page - 1)}
+                        disabled={page <= 1 || loading}
+                        className="h-8 w-8"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <span className="text-sm px-2">
+                        Página {page} de {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handlePageChange(page + 1)}
+                        disabled={page >= totalPages || loading}
+                        className="h-8 w-8"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handlePageChange(totalPages)}
+                        disabled={page >= totalPages || loading}
+                        className="h-8 w-8"
+                      >
+                        <ChevronsRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
       <TransactionImportModal
         open={importModalOpen}
         onOpenChange={setImportModalOpen}
         onImportComplete={handleImportComplete}
       />
-    </div>
+    </>
   )
 }

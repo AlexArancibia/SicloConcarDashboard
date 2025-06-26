@@ -1359,31 +1359,4 @@ export default function ConciliationsPage() {
     </div>
   )
 }
-
-// function handleBulkDelete<T>(
-//   selectedIds: string[],
-//   deleteFunction: (id: string) => Promise<void>,
-//   fetchFunction: () => Promise<void>,
-//   setSelectedIds: (ids: string[]) => void,
-//   toast: any, // Consider using the actual toast type from useToast
-//   itemName: string = "elemento"
-// ) {
-//   if (selectedIds.length === 0) {
-//     toast({ title: "Nada seleccionado", description: `Por favor, seleccione al menos un ${itemName} para eliminar.`, variant: "warning" });
-//     return;
-//   }
-
-//   if (confirm(`¿Está seguro de que desea eliminar ${selectedIds.length} ${itemName}(s) seleccionado(s)? Esta acción no se puede deshacer.`)) {
-//     Promise.all(selectedIds.map(id => deleteFunction(id)))
-//       .then(() => {
-//         toast({ title: "Éxito", description: `${selectedIds.length} ${itemName}(s) eliminado(s) correctamente.` });
-//         setSelectedIds([]);
-//         fetchFunction(); // Refresh data
-//       })
-//       .catch((error) => {
-//         console.error(`Error eliminando ${itemName}(s):`, error);
-//         toast({ title: "Error", description: `Error al eliminar los ${itemName}(s). Es posible que algunos no se hayan eliminado.`, variant: "destructive" });
-//         fetchFunction(); // Refresh data even on error to see which ones failed
-//       });
-//   }
-// }
+ 

@@ -24,7 +24,7 @@ export default function RootLayout({
  
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={inter.className + " bg-blue-50/30"}>
         <ThemeProvider>
           <SidebarProvider>
                     <AppSidebar />
@@ -34,8 +34,8 @@ export default function RootLayout({
              
               <div className="flex-1 bg-sidebar p-8">
  
-  
                 {children}
+                
                 <Toaster />      
  
 

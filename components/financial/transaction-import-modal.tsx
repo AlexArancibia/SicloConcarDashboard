@@ -32,6 +32,7 @@ import type { TransactionType, CreateTransactionDto } from "@/types/transactions
 import type { BankAccount } from "@/types/bank-accounts"
 import * as XLSX from "xlsx"
 import { useAuthStore } from "@/stores/authStore"
+import { classifyTransaction } from "@/lib/transactionClassifier"
 
 interface TransactionImportModalProps {
   open: boolean
@@ -500,109 +501,10 @@ export default function TransactionImportModal({ open, onOpenChange, onImportCom
           // Reemplazar la sección de clasificación automática:
 
           // Determinar el tipo de transacción basado en el monto y descripción
-        let transactionType: TransactionType = "EXPENSE_OTHER"; // Default
 
-const descLower = description.toLowerCase();
 
-// Impuestos
-if (
-  descLower.includes("itf") ||
-  descLower.includes("impuesto") ||
-  descLower.includes("sunat") ||
-  descLower.includes("igv") ||
-  descLower.includes("pago impues")
-) {
-  transactionType = "TAX_PAYMENT";
-
-// Detracciones
-} else if (
-  (descLower.includes("detr") || descLower.includes("pago detrac")) &&
-  !descLower.includes("comis pago detraccion") // Excluimos comisiones por detracción
-) {
-  transactionType = "TAX_DETRACTION";
-
-// Planilla - sueldos, CTS, AFP, bonos
-} else if (descLower.includes("haber")) {
-  transactionType = "PAYROLL_SALARY";
-} else if (descLower.includes("cts")) {
-  transactionType = "PAYROLL_CTS";
-} else if (descLower.includes("grati") || descLower.includes("bono")) {
-  transactionType = "PAYROLL_BONUS";
-} else if (
-  descLower.includes("afp") ||
-  descLower.includes("prima") ||
-  descLower.includes("integra") ||
-  descLower.includes("habitat") ||
-  descLower.includes("profut")
-) {
-  transactionType = "PAYROLL_AFP";
-
-// Servicios públicos
-} else if (
-  descLower.includes("claro") ||
-  descLower.includes("luz") ||
-  descLower.includes("servicio")
-) {
-  transactionType = "EXPENSE_UTILITIES";
-
-// Seguros
-} else if (
-  descLower.includes("mapfre") ||
-  descLower.includes("seguro")
-) {
-  transactionType = "EXPENSE_INSURANCE";
-
-// Comisiones y mantenimiento
-} else if (
-  descLower.includes("comis") ||
-  descLower.includes("manten") ||
-  descLower.includes("fee") ||
-  descLower.includes("portes") ||
-  descLower.includes("comis pago detraccion") // Ahora está aquí
-) {
-  transactionType = "EXPENSE_COMMISSIONS";
-
-// Transferencias interbancarias (CCE u otros bancos)
-} else if (
-  descLower.includes("cce") ||
-  descLower.includes("transf.bco") ||
-  descLower.includes("interbank") ||
-  descLower.includes("scotiabank") ||
-  descLower.includes("citibank") ||
-  descLower.includes("bbva") ||
-  descLower.includes("tran.ctas.terc")
-) {
-  transactionType = "TRANSFER_EXTERNAL";
-
-// Transferencias a otras cuentas dentro del mismo banco (ej: "A 193 90389121 0")
-} else if (/a\s+\d{2,}/.test(descLower)) {
-  transactionType = "TRANSFER_INBANK";
-
-// Efectivo
-} else if (
-  descLower.includes("efec") ||
-  descLower.includes("entr.efec")
-) {
-  transactionType = "WITHDRAWAL_CASH";
-
-// Reembolsos o devoluciones
-} else if (
-  descLower.includes("devol") ||
-  descLower.includes("reembol")
-) {
-  transactionType = "REFUND";
-
-// Ajustes
-} else if (
-  descLower.includes("ajuste") ||
-  descLower.includes("regulariz")
-) {
-  transactionType = "ADJUSTMENT";
-
-// Fallback
-} else {
-  transactionType = "EXPENSE_OTHER";
-}
+        const transactionType = classifyTransaction(description, amount);
+ 
 
           // Crear el objeto de transacción (actualizar para remover los flags booleanos)
           const transaction: ParsedTransaction = {
