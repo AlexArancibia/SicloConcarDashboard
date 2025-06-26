@@ -219,6 +219,73 @@ export default function TransactionsPage() {
       label: "Devolución",
       icon: TrendingDown,
     },
+    INCOME_SALARY: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+ 
+    INCOME_BONUS: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+ 
+    INCOME_INTEREST: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+    INCOME_INVESTMENT: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+    INCOME_DIVIDENDS: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+    INCOME_SALES: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+    INCOME_SERVICES: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+    INCOME_TRANSFER: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+    INCOME_DEPOSIT: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+    INCOME_REFUND: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+    INCOME_ADJUSTMENT: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+    INCOME_TAX_REFUND: {
+      color: "",
+      label: "",
+      icon: undefined
+    },
+    INCOME_OTHER: {
+      color: "",
+      label: "",
+      icon: undefined
+    }
   };
 
 

@@ -90,11 +90,16 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
         `/documents/company/${companyId}?${params.toString()}`,
       )
 
-      const { data, pagination } = response.data
+      const { data, page, limit, total, totalPages } = response.data
 
       set({
         documents: data,
-        pagination,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages
+        },
         loading: false,
       })
     } catch (error: any) {
@@ -205,11 +210,16 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
         `/documents/company/${companyId}/supplier/${supplierId}?${params.toString()}`,
       )
 
-      const { data, pagination } = response.data
+      const { data, page, limit, total, totalPages } = response.data
 
       set({
         documents: data,
-        pagination,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages
+        },
         loading: false,
       })
     } catch (error: any) {
@@ -473,7 +483,15 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
   },
 
   clearDocuments: () => {
-    set({ documents: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 0 } })
+    set({ 
+      documents: [], 
+      pagination: { 
+        total: 0, 
+        page: 1, 
+        limit: 10, 
+        totalPages: 0 
+      } 
+    })
   },
 
   clearError: () => {

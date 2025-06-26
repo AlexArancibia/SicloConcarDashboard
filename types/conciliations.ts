@@ -1,4 +1,4 @@
-import type { BaseEntity } from "./common"
+import type { BaseEntity, PaginationDto } from "./common"
 import type { Company } from "./auth"
 
 // Enums basados en el schema de Prisma
@@ -11,6 +11,27 @@ export type ExpenseType = "OPERATIONAL" | "ADMINISTRATIVE" | "FINANCIAL" | "TAX"
 // ============================================================================
 // INTERFACES DE INFORMACIÓN CONTABLE
 // ============================================================================
+
+
+export interface ConciliationQueryDto extends PaginationDto {
+  status?: ConciliationStatus;
+  type?: ConciliationType;
+  dateFrom?: string;
+  dateTo?: string;
+  periodFrom?: string;
+  periodTo?: string;
+  search?: string;
+  bankAccountId?: string;
+  minDifference?: string;
+  maxDifference?: string;
+  minBankBalance?: string;
+  maxBankBalance?: string;
+  createdById?: string;
+  approvedById?: string;
+  hasTransaction?: boolean;
+}
+
+
 
 export interface AccountLink {
   id: string
@@ -510,11 +531,7 @@ export interface ConciliationExpense extends BaseEntity {
 // DTOs (Data Transfer Objects)
 // ============================================================================
 
-export interface PaginationDto {
-  page?: number
-  limit?: number
-}
-
+ 
 export interface ConciliationPaginatedResponse {
   data: Conciliation[]
   total: number
@@ -886,4 +903,21 @@ export interface UnmatchedTransaction {
       symbol: string
     }
   }
+}
+
+
+export interface ConciliationStats {
+  total: number;
+  completed: number;
+  inProgress: number;
+  pending: number;
+  completionRate: number;
+  totalConciliatedAmount: number;
+}
+
+export interface ExportConciliationResult {
+  format: "csv" | "excel";
+  data: Conciliation[];
+  filename: string;
+  totalRecords: number;
 }

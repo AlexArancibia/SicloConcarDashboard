@@ -25,7 +25,7 @@ import {
   Banknote,
   Percent,
 } from "lucide-react"
-import type { Conciliation } from "@/types/conciliation"
+import type { Conciliation } from "@/types/conciliations"
 import { useConciliationsStore } from "@/stores/conciliation-store"
 import Link from "next/link"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"

@@ -511,10 +511,10 @@ export interface BulkDeleteDocumentsDto {
 
 export interface PaginatedResponse<T> {
   data: T[]           // Array de elementos del tipo T
-  pagination: {       // Información de paginación
+ 
     page: number      // Página actual (1, 2, 3...)
     limit: number     // Elementos por página (10, 20, 50...)
     total: number     // Total de elementos en la base de datos
     totalPages: number // Total de páginas disponibles
-  }
+ 
 }

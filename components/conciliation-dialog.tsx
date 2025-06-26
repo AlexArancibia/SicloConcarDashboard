@@ -28,7 +28,7 @@ import type {
   ConciliationItem,
   UpdateConciliationDto,
   CreateConciliationItemDto,
-} from "@/types/conciliation"
+} from "@/types/conciliations"
 import type { Transaction } from "@/types/transactions"
 import type { BankAccount } from "@/types/bank-accounts"
 import type { Document, UpdateDocumentDto } from "@/types/documents" // Importar el DTO de documentos

@@ -30,7 +30,7 @@ import { useAuthStore } from "@/stores/authStore"
 import { ConciliationDialog } from "@/components/conciliation-dialog"
 import type { Document, DocumentStatus, DocumentType } from "@/types/documents"
 import type { Transaction } from "@/types/transactions"
-import type { ConciliationType } from "@/types/conciliation"
+import type { ConciliationType } from "@/types/conciliations"
 
 const DEBUG_MODE = true
 
