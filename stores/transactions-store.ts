@@ -14,12 +14,10 @@ interface TransactionsState {
   transactions: Transaction[];
   loading: boolean;
   error: string | null;
-  pagination: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 
   // Métodos principales
   fetchTransactions: (companyId: string, query?: TransactionQueryDto) => Promise<void>;
@@ -45,12 +43,10 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   transactions: [],
   loading: false,
   error: null,
-  pagination: {
-    total: 0,
-    page: 1,
-    limit: 10,
-    totalPages: 0,
-  },
+  total: 0,
+  page: 1,
+  limit: 10,
+  totalPages: 0,
 
   fetchTransactions: async (companyId: string, query: TransactionQueryDto = {}) => {
     set({ loading: true, error: null });
@@ -83,7 +79,10 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
 
       set({
         transactions: data,
-        pagination: { total, page, limit, totalPages },
+        total,
+        page,
+        limit,
+        totalPages,
         loading: false,
       });
     } catch (error: any) {
@@ -245,7 +244,13 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   },
 
   clearTransactions: () => {
-    set({ transactions: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 0 } });
+    set({ 
+      transactions: [], 
+      total: 0, 
+      page: 1, 
+      limit: 10, 
+      totalPages: 0 
+    });
   },
 
   clearError: () => {

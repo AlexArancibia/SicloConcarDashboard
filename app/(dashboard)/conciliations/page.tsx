@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+
 import {
   AlertCircle,
   Download,
@@ -18,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
+  Trash2,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FiltersBar } from "@/components/ui/filters-bar"
@@ -31,6 +34,7 @@ import { ConciliationDialog } from "@/components/conciliation-dialog"
 import type { Document, DocumentStatus, DocumentType } from "@/types/documents"
 import type { Transaction } from "@/types/transactions"
 import type { ConciliationType } from "@/types/conciliations"
+import { useToast } from "@/hooks/use-toast"
 
 const DEBUG_MODE = true
 
@@ -77,13 +81,15 @@ export default function ConciliationsPage() {
   const [selectedDocuments, setSelectedDocuments] = useState<Document[]>([])
   const [documentConciliationAmounts, setDocumentConciliationAmounts] = useState<Record<string, number>>({})
   const [conciliationType, setConciliationType] = useState<ConciliationType>("DOCUMENTS")
+  const [selectedConciliationIds, setSelectedConciliationIds] = useState<string[]>([])
 
   // Filters for transactions
   const [transactionFilters, setTransactionFilters] = useState({
     search: "",
     dateRange: { from: undefined as Date | undefined, to: undefined as Date | undefined },
     bankAccount: "",
-    type: "",
+    type: "", // Transaction type
+    status: "", // Transaction status
     minAmount: "",
     maxAmount: "",
   })
@@ -92,9 +98,10 @@ export default function ConciliationsPage() {
   const [documentFilters, setDocumentFilters] = useState({
     search: "",
     dateRange: { from: undefined as Date | undefined, to: undefined as Date | undefined },
-    supplier: "",
-    status: "",
-    type: "",
+    supplier: "", // Supplier name/RUC for search
+    status: "", // Document status
+    type: "", // Document type
+    currency: "", // Document currency
     minAmount: "",
     maxAmount: "",
   })
@@ -181,6 +188,10 @@ export default function ConciliationsPage() {
       filtered = filtered.filter((transaction) => transaction.transactionType === transactionFilters.type)
     }
 
+    if (transactionFilters.status && transactionFilters.status !== "all") {
+      filtered = filtered.filter((transaction) => transaction.status === transactionFilters.status)
+    }
+
     if (transactionFilters.minAmount) {
       filtered = filtered.filter(
         (transaction) =>
@@ -249,6 +260,10 @@ export default function ConciliationsPage() {
 
     if (documentFilters.type && documentFilters.type !== "all") {
       filtered = filtered.filter((doc) => doc.documentType === documentFilters.type)
+    }
+
+    if (documentFilters.currency && documentFilters.currency !== "all") {
+      filtered = filtered.filter((doc) => doc.currency === documentFilters.currency)
     }
 
     if (documentFilters.minAmount) {
@@ -582,6 +597,20 @@ export default function ConciliationsPage() {
       className: "min-w-40",
     },
     {
+      key: "status",
+      type: "select" as const,
+      placeholder: "Estado Transacción",
+      options: [
+        { value: "all", label: "Todos los estados" },
+        { value: "PENDING", label: "Pendiente" },
+        { value: "COMPLETED", label: "Completado" },
+        { value: "RECONCILED", label: "Conciliado" },
+        { value: "CANCELLED", label: "Cancelado" },
+        // Add other relevant transaction statuses from your types/transactions.ts if any
+      ],
+      className: "min-w-40",
+    },
+    {
       key: "minAmount",
       type: "search" as const,
       placeholder: "Monto mínimo",
@@ -630,6 +659,21 @@ export default function ConciliationsPage() {
         { value: "APPROVED", label: "Aprobado" },
         { value: "PENDING", label: "Pendiente" },
         { value: "PAID", label: "Pagado" },
+        { value: "CANCELLED", label: "Cancelado" },
+        { value: "DRAFT", label: "Borrador" },
+        { value: "REJECTED", label: "Rechazado" },
+      ],
+      className: "min-w-32",
+    },
+    {
+      key: "currency",
+      type: "select" as const,
+      placeholder: "Moneda",
+      options: [
+        { value: "all", label: "Todas las monedas" },
+        { value: "PEN", label: "Soles (PEN)" },
+        { value: "USD", label: "Dólares (USD)" },
+        // Add other currencies if used
       ],
       className: "min-w-32",
     },
@@ -659,6 +703,48 @@ export default function ConciliationsPage() {
       [documentId]: amount,
     }))
   }
+
+  const { toast } = useToast() // Make sure useToast is imported and used
+
+  const handleDeleteSelectedConciliations = async () => {
+    if (selectedConciliationIds.length === 0) {
+      toast({ title: "Nada seleccionado", description: "Por favor, seleccione al menos una conciliación para eliminar."});
+      return;
+    }
+
+    if (confirm(`¿Está seguro de que desea eliminar ${selectedConciliationIds.length} conciliacion(es) seleccionada(s)? Esta acción no se puede deshacer.`)) {
+      let successCount = 0;
+      let errorCount = 0;
+      
+      // Set loading state if you have one for the main table/actions
+      // setLoading(true); 
+
+      for (const id of selectedConciliationIds) {
+        try {
+          await deleteConciliation(id);
+          successCount++;
+        } catch (e) {
+          console.error(`Error eliminando conciliación ${id}:`, e);
+          errorCount++;
+        }
+      }
+
+      // setLoading(false);
+
+      if (successCount > 0) {
+        toast({ title: "Éxito", description: `${successCount} conciliacion(es) eliminada(s) correctamente.` });
+      }
+      if (errorCount > 0) {
+        toast({ title: "Error Parcial", description: `No se pudieron eliminar ${errorCount} conciliacion(es). Revise la consola para más detalles.`, variant: "destructive" });
+      }
+      
+      setSelectedConciliationIds([]); // Clear selection
+      // Re-fetch conciliations to update the list
+      if (user?.companyId) {
+        fetchConciliations(user.companyId, { page: currentPage, limit: itemsPerPage });
+      }
+    }
+  };
 
   if (error) {
     return (
@@ -745,96 +831,94 @@ export default function ConciliationsPage() {
             {loading ? (
               <TableSkeleton rows={5} columns={4} />
             ) : (
-              <div className="border rounded-lg">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left p-3 w-12"></th>
-                        <th className="text-left p-3">Descripción</th>
-                        <th className="text-left p-3">Fecha</th>
-                        <th className="text-right p-3">Monto</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {availableTransactions.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="text-center py-8 text-muted-foreground">
-                            No se encontraron transacciones disponibles
-                          </td>
-                        </tr>
-                      ) : (
-                        availableTransactions.map((transaction) => (
-                          <tr
-                            key={transaction.id}
-                            className={`border-b cursor-pointer transition-colors ${
-                              isTransactionConciliated(transaction.id)
-                                ? "bg-green-50 border-green-200 opacity-60"
-                                : selectedTransaction?.id === transaction.id
-                                  ? "bg-primary/5 border-primary/20"
-                                  : "hover:bg-muted/50"
-                            }`}
-                            onClick={() => handleTransactionSelect(transaction)}
-                          >
-                            <td className="p-3">
-                              {isTransactionConciliated(transaction.id) ? (
-                                <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-                                  Conciliada
-                                </Badge>
-                              ) : (
-                                <input
-                                  type="radio"
-                                  checked={selectedTransaction?.id === transaction.id}
-                                  onChange={() => {}}
-                                  className="text-primary"
-                                />
-                              )}
-                            </td>
-                            <td className="p-3">
-                              <div className="font-medium text-sm">{transaction.description}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {transaction.operationNumber} • {transaction.bankAccount?.bank?.name || "Banco"}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {transaction.bankAccount?.alias || transaction.bankAccount?.accountNumber}
-                              </div>
-                            </td>
-                            <td className="p-3 text-sm">{formatDate(transaction.transactionDate)}</td>
-                            <td className="p-3 text-right">
-                              <div className="font-semibold text-sm">{formatCurrency(transaction.amount)}</div>
-                              <Badge variant="outline" className="text-xs mt-1">
-                                {transaction.transactionType}
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead>Descripción</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {availableTransactions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="h-24 text-center">
+                          No se encontraron transacciones disponibles.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      availableTransactions.map((transaction) => (
+                        <TableRow
+                          key={transaction.id}
+                          data-state={selectedTransaction?.id === transaction.id && "selected"}
+                          onClick={() => handleTransactionSelect(transaction)}
+                          className={`cursor-pointer ${
+                            isTransactionConciliated(transaction.id)
+                              ? "opacity-60 bg-green-50 dark:bg-green-900/30"
+                              : ""
+                          }`}
+                        >
+                          <TableCell>
+                            {isTransactionConciliated(transaction.id) ? (
+                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-700 dark:text-green-100">
+                                Conciliada
                               </Badge>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                            ) : (
+                              <Input
+                                type="radio"
+                                name="selectedTransaction"
+                                checked={selectedTransaction?.id === transaction.id}
+                                readOnly
+                                className="h-4 w-4 text-primary accent-primary"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">{transaction.description}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {transaction.operationNumber} • {transaction.bankAccount?.bank?.name || "Banco"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {transaction.bankAccount?.alias || transaction.bankAccount?.accountNumber}
+                            </div>
+                          </TableCell>
+                          <TableCell>{formatDate(transaction.transactionDate)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="font-semibold">{formatCurrency(transaction.amount)}</div>
+                            <Badge variant="outline" className="text-xs mt-1">
+                              {transaction.transactionType}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
                 {totalTransactionPages > 1 && (
-                  <div className="flex items-center justify-between mt-4 px-3 pb-3">
-                    <div className="text-sm text-gray-500">
-                      Página {transactionPage} de {totalTransactionPages}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleTransactionPageChange(transactionPage - 1)}
-                        disabled={transactionPage <= 1}
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleTransactionPageChange(transactionPage + 1)}
-                        disabled={transactionPage >= totalTransactionPages}
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </Button>
-                    </div>
+                  <div className="flex items-center justify-end space-x-2 py-4 px-3 border-t">
+                     <div className="flex-1 text-sm text-muted-foreground">
+                        Página {transactionPage} de {totalTransactionPages}
+                      </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTransactionPageChange(transactionPage - 1)}
+                      disabled={transactionPage <= 1}
+                    >
+                      <ChevronLeft className="w-4 h-4 mr-1" />
+                      Anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTransactionPageChange(transactionPage + 1)}
+                      disabled={transactionPage >= totalTransactionPages}
+                    >
+                      Siguiente
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
                   </div>
                 )}
               </div>
@@ -868,168 +952,159 @@ export default function ConciliationsPage() {
             {loading ? (
               <TableSkeleton rows={5} columns={5} />
             ) : (
-              <div className="border rounded-lg">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left p-3 w-12"></th>
-                        <th className="text-left p-3">Documento</th>
-                        <th className="text-left p-3">Proveedor</th>
-                        <th className="text-right p-3">Pendiente</th>
-                        <th className="text-right p-3">Conciliar</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(conciliationType === "DOCUMENTS" ? availableDocuments : availableDetractions).length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="text-center py-8 text-muted-foreground">
-                            No se encontraron {conciliationType === "DOCUMENTS" ? "documentos" : "detracciones"}{" "}
-                            disponibles
-                          </td>
-                        </tr>
-                      ) : (
-                        (conciliationType === "DOCUMENTS" ? availableDocuments : availableDetractions).map(
-                          (document) => {
-                            const isSelected = selectedDocuments.some((doc) => doc.id === document.id)
-                            const pendingAmount =
-                              conciliationType === "DOCUMENTS"
-                                ? Number.parseFloat(document.pendingAmount || "0")
-                                : Number.parseFloat(document.detraction?.pendingAmount || "0")
-                            const conciliationAmount = documentConciliationAmounts[document.id] || pendingAmount
-                            const hasAccounting = document.accountLinks && document.accountLinks.length > 0
-                            const hasCostCenters = document.costCenterLinks && document.costCenterLinks.length > 0
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead>Documento</TableHead>
+                      <TableHead>Proveedor</TableHead>
+                      <TableHead className="text-right">Pendiente</TableHead>
+                      <TableHead className="text-right w-32">Conciliar</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(conciliationType === "DOCUMENTS" ? availableDocuments : availableDetractions).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center">
+                          No se encontraron {conciliationType === "DOCUMENTS" ? "documentos" : "detracciones"} disponibles.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      (conciliationType === "DOCUMENTS" ? availableDocuments : availableDetractions).map(
+                        (document) => {
+                          const isSelected = selectedDocuments.some((doc) => doc.id === document.id)
+                          const pendingAmount =
+                            conciliationType === "DOCUMENTS"
+                              ? Number.parseFloat(document.pendingAmount || "0")
+                              : Number.parseFloat(document.detraction?.pendingAmount || "0")
+                          const conciliationAmount = documentConciliationAmounts[document.id] || pendingAmount
+                          const hasAccounting = document.accountLinks && document.accountLinks.length > 0
+                          const hasCostCenters = document.costCenterLinks && document.costCenterLinks.length > 0
 
-                            return (
-                              <tr
-                                key={document.id}
-                                className={`border-b cursor-pointer transition-colors ${
-                                  isSelected ? "bg-primary/5 border-primary/20" : "hover:bg-muted/50"
-                                }`}
-                                onClick={() => handleDocumentSelect(document)}
-                              >
-                                <td className="p-3">
-                                  <Checkbox checked={isSelected} onChange={() => {}} />
-                                </td>
-                                <td className="p-3">
-                                  <div className="flex items-center gap-2">
-                                    {getTypeBadge(document.documentType)}
-                                    <div>
-                                      <div className="font-medium text-sm">{document.fullNumber}</div>
-                                      <div className="text-xs text-muted-foreground">
-                                        Emisión: {formatDate(document.issueDate)}
-                                      </div>
-                                      <div className="text-xs text-muted-foreground">
-                                        Vence: {formatDate(document.dueDate || document.issueDate)}
-                                      </div>
-                                      {/* Accounting indicators */}
-                                      <div className="flex gap-1 mt-1">
-                                        {hasAccounting ? (
-                                          <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-                                            {document.accountLinks.length} Cta
-                                            {document.accountLinks.length !== 1 ? "s" : ""}
-                                          </Badge>
-                                        ) : (
-                                          <Badge variant="outline" className="text-xs bg-orange-100 text-orange-800">
-                                            Sin Ctas
-                                          </Badge>
-                                        )}
-                                        {hasCostCenters ? (
-                                          <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800">
-                                            {document.costCenterLinks.length} CC
-                                          </Badge>
-                                        ) : (
-                                          <Badge variant="outline" className="text-xs bg-gray-100 text-gray-600">
-                                            Sin CC
-                                          </Badge>
-                                        )}
-                                      </div>
+                          return (
+                            <TableRow
+                              key={document.id}
+                              data-state={isSelected && "selected"}
+                              onClick={() => handleDocumentSelect(document)}
+                              className="cursor-pointer"
+                            >
+                              <TableCell>
+                                <Checkbox checked={isSelected} aria-label="Seleccionar documento" />
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-start gap-2">
+                                  {getTypeBadge(document.documentType)}
+                                  <div>
+                                    <div className="font-medium">{document.fullNumber}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      Emisión: {formatDate(document.issueDate)}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      Vence: {formatDate(document.dueDate || document.issueDate)}
+                                    </div>
+                                    <div className="flex gap-1 mt-1">
+                                      {hasAccounting ? (
+                                        <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-700 dark:text-green-100">
+                                          {document.accountLinks.length} Cta{document.accountLinks.length !== 1 ? "s" : ""}
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="outline" className="text-xs bg-orange-100 text-orange-800 dark:bg-orange-700 dark:text-orange-100">
+                                          Sin Ctas
+                                        </Badge>
+                                      )}
+                                      {hasCostCenters ? (
+                                        <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-700 dark:text-blue-100">
+                                          {document.costCenterLinks.length} CC
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="outline" className="text-xs bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                          Sin CC
+                                        </Badge>
+                                      )}
                                     </div>
                                   </div>
-                                </td>
-                                <td className="p-3">
-                                  <div className="text-sm truncate max-w-32" title={document.supplier?.businessName}>
-                                    {document.supplier?.businessName}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground font-mono">
-                                    {document.supplier?.documentNumber}
-                                  </div>
-                                  {getStatusBadge(document.status)}
-                                </td>
-                                <td className="p-3 text-right">
-                                  <div className="font-bold text-sm">{formatCurrency(pendingAmount)}</div>
-                                  {document.detraction?.hasDetraction && conciliationType === "DOCUMENTS" && (
-                                    <Badge variant="secondary" className="text-xs mt-1">
-                                      Det: {formatCurrency(document.detraction.pendingAmount)}
-                                    </Badge>
-                                  )}
-                                  {document.hasRetention && (
-                                    <Badge variant="outline" className="text-xs mt-1">
-                                      Ret: {formatCurrency(document.retentionAmount)}
-                                    </Badge>
-                                  )}
-                                </td>
-                                <td className="p-3 text-right">
-                                  {isSelected ? (
-                                    <div className="space-y-1">
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        max={pendingAmount}
-                                        value={conciliationAmount}
-                                        onChange={(e) => {
-                                          e.stopPropagation()
-                                          handleConciliationAmountChange(
-                                            document.id,
-                                            Number.parseFloat(e.target.value) || 0,
-                                          )
-                                        }}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="h-8 text-xs text-right w-24"
-                                      />
-                                      <div className="text-xs text-muted-foreground">
-                                        {((conciliationAmount / pendingAmount) * 100).toFixed(1)}%
-                                      </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="truncate max-w-xs" title={document.supplier?.businessName}>
+                                  {document.supplier?.businessName}
+                                </div>
+                                <div className="text-xs text-muted-foreground font-mono">
+                                  {document.supplier?.documentNumber}
+                                </div>
+                                {getStatusBadge(document.status)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="font-bold">{formatCurrency(pendingAmount)}</div>
+                                {document.detraction?.hasDetraction && conciliationType === "DOCUMENTS" && (
+                                  <Badge variant="secondary" className="text-xs mt-1">
+                                    Det: {formatCurrency(document.detraction.pendingAmount)}
+                                  </Badge>
+                                )}
+                                {document.hasRetention && (
+                                  <Badge variant="outline" className="text-xs mt-1">
+                                    Ret: {formatCurrency(document.retentionAmount)}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {isSelected ? (
+                                  <div className="space-y-1">
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max={pendingAmount}
+                                      value={conciliationAmount}
+                                      onChange={(e) => {
+                                        e.stopPropagation()
+                                        handleConciliationAmountChange(
+                                          document.id,
+                                          Number.parseFloat(e.target.value) || 0,
+                                        )
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="h-8 text-xs text-right w-24"
+                                    />
+                                    <div className="text-xs text-muted-foreground">
+                                      {pendingAmount > 0 ? ((conciliationAmount / pendingAmount) * 100).toFixed(1) + "%" : "0.0%"}
                                     </div>
-                                  ) : (
-                                    <div className="text-xs text-muted-foreground">-</div>
-                                  )}
-                                </td>
-                              </tr>
-                            )
-                          },
-                        )
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-muted-foreground">-</div>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        },
+                      )
+                    )}
+                  </TableBody>
+                </Table>
                 {(conciliationType === "DOCUMENTS" ? totalDocumentPages : totalDetractionPages) > 1 && (
-                  <div className="flex items-center justify-between mt-4 px-3 pb-3">
-                    <div className="text-sm text-gray-500">
-                      Página {documentPage} de{" "}
-                      {conciliationType === "DOCUMENTS" ? totalDocumentPages : totalDetractionPages}
+                  <div className="flex items-center justify-end space-x-2 py-4 px-3 border-t">
+                    <div className="flex-1 text-sm text-muted-foreground">
+                      Página {documentPage} de {conciliationType === "DOCUMENTS" ? totalDocumentPages : totalDetractionPages}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDocumentPageChange(documentPage - 1)}
-                        disabled={documentPage <= 1}
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDocumentPageChange(documentPage + 1)}
-                        disabled={
-                          documentPage >= (conciliationType === "DOCUMENTS" ? totalDocumentPages : totalDetractionPages)
-                        }
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDocumentPageChange(documentPage - 1)}
+                      disabled={documentPage <= 1}
+                    >
+                      <ChevronLeft className="w-4 h-4 mr-1" />
+                      Anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDocumentPageChange(documentPage + 1)}
+                      disabled={documentPage >= (conciliationType === "DOCUMENTS" ? totalDocumentPages : totalDetractionPages)}
+                    >
+                      Siguiente
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
                   </div>
                 )}
               </div>
@@ -1100,7 +1175,24 @@ export default function ConciliationsPage() {
           <div className="flex justify-between items-center">
             <div>
               <CardTitle>Conciliaciones Existentes</CardTitle>
-              <CardDescription>{conciliations.length} conciliaciones registradas</CardDescription>
+              <CardDescription>
+                {conciliations.length} conciliaciones registradas.{" "}
+                {selectedConciliationIds.length > 0 && (
+                  <span className="text-primary font-medium">{selectedConciliationIds.length} seleccionada(s)</span>
+                )}
+              </CardDescription>
+            </div>
+            <div>
+              {selectedConciliationIds.length > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDeleteSelectedConciliations}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Eliminar Seleccionadas ({selectedConciliationIds.length})
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -1114,96 +1206,127 @@ export default function ConciliationsPage() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-3">Referencia</th>
-                      <th className="text-left p-3">Fecha</th>
-                      <th className="text-left p-3">Banco</th>
-                      <th className="text-center p-3">Tipo</th>
-                      <th className="text-center p-3">Estado</th>
-                      <th className="text-right p-3">Monto</th>
-                      <th className="text-center p-3">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={
+                            paginatedConciliations.length > 0 &&
+                            selectedConciliationIds.length === paginatedConciliations.length
+                          }
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedConciliationIds(paginatedConciliations.map((c) => c.id))
+                            } else {
+                              setSelectedConciliationIds([])
+                            }
+                          }}
+                          aria-label="Seleccionar todas las conciliaciones en esta página"
+                        />
+                      </TableHead>
+                      <TableHead>Referencia</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Banco</TableHead>
+                      <TableHead className="text-center">Tipo</TableHead>
+                      <TableHead className="text-center">Estado</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                      <TableHead className="text-center">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {paginatedConciliations.map((conciliation) => (
-                      <tr key={conciliation.id} className="border-b hover:bg-muted/50">
-                        <td className="p-3">
+                      <TableRow 
+                        key={conciliation.id}
+                        data-state={selectedConciliationIds.includes(conciliation.id) && "selected"}
+                      >
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedConciliationIds.includes(conciliation.id)}
+                            onCheckedChange={(checked) => {
+                              setSelectedConciliationIds((prev) =>
+                                checked ? [...prev, conciliation.id] : prev.filter((id) => id !== conciliation.id),
+                              )
+                            }}
+                            aria-label={`Seleccionar conciliación ${conciliation.reference || conciliation.id}`}
+                          />
+                        </TableCell>
+                        <TableCell>
                           <div className="font-medium">{conciliation.reference || "Sin referencia"}</div>
                           <div className="text-xs text-muted-foreground">
                             {conciliation.totalDocuments} documento{conciliation.totalDocuments !== 1 ? "s" : ""}
                           </div>
                           {conciliation.transactionId && (
-                            <div className="text-xs text-blue-600">Transacción vinculada</div>
+                            <div className="text-xs text-blue-600 dark:text-blue-400">Transacción vinculada</div>
                           )}
-                        </td>
-                        <td className="p-3">{formatDate(conciliation.createdAt)}</td>
-                        <td className="p-3">
-                          <div className="text-sm">{conciliation.bankAccount?.bank?.name || "Banco"}</div>
+                        </TableCell>
+                        <TableCell>{formatDate(conciliation.createdAt)}</TableCell>
+                        <TableCell>
+                          <div>{conciliation.bankAccount?.bank?.name || "Banco"}</div>
                           <div className="text-xs text-muted-foreground">
                             {conciliation.bankAccount?.alias || conciliation.bankAccount?.accountNumber}
                           </div>
-                        </td>
-                        <td className="p-3 text-center">
+                        </TableCell>
+                        <TableCell className="text-center">
                           <Badge variant="outline">{conciliation.type}</Badge>
-                        </td>
-                        <td className="p-3 text-center">
+                        </TableCell>
+                        <TableCell className="text-center">
                           <Badge
                             className={
                               conciliation.status === "COMPLETED"
-                                ? "bg-green-100 text-green-800"
+                                ? "bg-green-100 text-green-800 dark:bg-green-700 dark:text-green-100"
                                 : conciliation.status === "PENDING"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-blue-100 text-blue-800"
+                                  ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-600 dark:text-yellow-100"
+                                  : "bg-blue-100 text-blue-800 dark:bg-blue-700 dark:text-blue-100"
                             }
                           >
                             {conciliation.status}
                           </Badge>
-                        </td>
-                        <td className="p-3 text-right">
+                        </TableCell>
+                        <TableCell className="text-right">
                           <div className="font-medium">{formatCurrency(conciliation.totalAmount)}</div>
                           {Number.parseFloat(conciliation.difference) !== 0 && (
-                            <div className="text-xs text-orange-600">
+                            <div className="text-xs text-orange-600 dark:text-orange-400">
                               Dif: {formatCurrency(conciliation.difference)}
                             </div>
                           )}
-                        </td>
-                        <td className="p-3 text-center">
+                        </TableCell>
+                        <TableCell className="text-center">
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
                             onClick={() => (window.location.href = `/conciliations/${conciliation.id}`)}
+                            title="Ver Detalle"
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
 
               {/* Pagination */}
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-6">
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-muted-foreground">
                     Mostrando {(currentPage - 1) * itemsPerPage + 1} a{" "}
                     {Math.min(currentPage * itemsPerPage, conciliations.length)} de {conciliations.length}{" "}
                     conciliaciones
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center space-x-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage <= 1}
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      <ChevronLeft className="w-4 h-4 mr-1" />
                       Anterior
                     </Button>
-                    <span className="text-sm">
+                     <span className="text-sm text-muted-foreground">
                       Página {currentPage} de {totalPages}
                     </span>
                     <Button
@@ -1213,7 +1336,7 @@ export default function ConciliationsPage() {
                       disabled={currentPage >= totalPages}
                     >
                       Siguiente
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="w-4 h-4 ml-1" />
                     </Button>
                   </div>
                 </div>
@@ -1236,3 +1359,31 @@ export default function ConciliationsPage() {
     </div>
   )
 }
+
+// function handleBulkDelete<T>(
+//   selectedIds: string[],
+//   deleteFunction: (id: string) => Promise<void>,
+//   fetchFunction: () => Promise<void>,
+//   setSelectedIds: (ids: string[]) => void,
+//   toast: any, // Consider using the actual toast type from useToast
+//   itemName: string = "elemento"
+// ) {
+//   if (selectedIds.length === 0) {
+//     toast({ title: "Nada seleccionado", description: `Por favor, seleccione al menos un ${itemName} para eliminar.`, variant: "warning" });
+//     return;
+//   }
+
+//   if (confirm(`¿Está seguro de que desea eliminar ${selectedIds.length} ${itemName}(s) seleccionado(s)? Esta acción no se puede deshacer.`)) {
+//     Promise.all(selectedIds.map(id => deleteFunction(id)))
+//       .then(() => {
+//         toast({ title: "Éxito", description: `${selectedIds.length} ${itemName}(s) eliminado(s) correctamente.` });
+//         setSelectedIds([]);
+//         fetchFunction(); // Refresh data
+//       })
+//       .catch((error) => {
+//         console.error(`Error eliminando ${itemName}(s):`, error);
+//         toast({ title: "Error", description: `Error al eliminar los ${itemName}(s). Es posible que algunos no se hayan eliminado.`, variant: "destructive" });
+//         fetchFunction(); // Refresh data even on error to see which ones failed
+//       });
+//   }
+// }

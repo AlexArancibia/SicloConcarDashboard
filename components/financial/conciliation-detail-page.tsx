@@ -532,7 +532,15 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
                       <TableBody>
                         {conciliation.items.map((item) => (
                           <TableRow key={item.id}>
-                            <TableCell>{getDocumentTypeBadge(item.document?.documentType   )}</TableCell>
+                            <TableCell>
+                              {item.document?.documentType ? (
+                                getDocumentTypeBadge(item.document.documentType as DocumentType)
+                              ) : (
+                                <Badge variant="outline" className="bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20">
+                                  N/A
+                                </Badge>
+                              )}
+                            </TableCell>
                             <TableCell className="font-mono">{item.document?.fullNumber}</TableCell>
                             <TableCell>{item.document?.supplier?.businessName || "N/A"}</TableCell>
                             <TableCell className="text-right">

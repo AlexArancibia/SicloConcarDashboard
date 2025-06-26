@@ -5,35 +5,58 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Upload, Download, FileText, Eye, Edit, Trash2, ChevronLeft, ChevronRight } from "lucide-react"
+import { Upload, Download, FileText, Eye, Edit, Trash2, ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
 import { useDocumentsStore } from "@/stores/documents-store"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { FiltersBar } from "@/components/ui/filters-bar"
 import { useToast } from "@/hooks/use-toast"
 import type { DocumentStatus, DocumentType } from "@/types/documents"
 import { useAuthStore } from "@/stores/authStore"
 import XMLImportModal from "./xml-import-modal"
+import { Checkbox } from "../ui/checkbox"
 
 export default function DocumentsPage() {
   const [filters, setFilters] = useState<{
     search: string
-    type: string
-    status: string
-    dateRange: { from: Date | undefined; to: Date | undefined }
+    type: string // DocumentType
+    status: string // DocumentStatus
+    dateRange: { from: Date | undefined; to: Date | undefined } // IssueDate
+    dueDateRange: { from: Date | undefined; to: Date | undefined } // DueDate
+    currency: string
+    minAmount: string
+    maxAmount: string
+    hasRetention: string // "yes", "no", "all"
+    hasDetraction: string // "yes", "no", "all"
   }>({
     search: "",
     type: "",
     status: "",
     dateRange: { from: undefined, to: undefined },
+    dueDateRange: { from: undefined, to: undefined },
+    currency: "",
+    minAmount: "",
+    maxAmount: "",
+    hasRetention: "all",
+    hasDetraction: "all",
   })
   const [currentPage, setCurrentPage] = useState(1)
   const [xmlImportOpen, setXmlImportOpen] = useState(false)
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
 
   const { toast } = useToast()
-  const { company } = useAuthStore()
+  const { company, user } = useAuthStore() // Assuming user has updatedById
 
   // Zustand store
-  const { documents, loading, error, pagination, fetchDocuments, deleteDocument, clearError } = useDocumentsStore()
+  const { documents, loading, error, pagination, fetchDocuments, deleteDocument, bulkDeleteDocuments, clearError } = useDocumentsStore()
 
   // Initial load
   useEffect(() => {
@@ -58,7 +81,18 @@ export default function DocumentsPage() {
       setCurrentPage(1)
       loadDocuments()
     }
-  }, [filters.search, filters.type, filters.status, filters.dateRange])
+  }, [
+    filters.search, 
+    filters.type, 
+    filters.status, 
+    filters.dateRange, 
+    filters.dueDateRange, 
+    filters.currency, 
+    filters.minAmount, 
+    filters.maxAmount, 
+    filters.hasRetention, 
+    filters.hasDetraction
+  ])
 
   useEffect(() => {
     if (error) {
@@ -90,6 +124,13 @@ export default function DocumentsPage() {
         ...(filters.status && filters.status !== "all" && { status: filters.status as DocumentStatus }),
         ...(filters.dateRange.from && { issueDateFrom: filters.dateRange.from.toISOString().split("T")[0] }),
         ...(filters.dateRange.to && { issueDateTo: filters.dateRange.to.toISOString().split("T")[0] }),
+        ...(filters.dueDateRange.from && { dueDateFrom: filters.dueDateRange.from.toISOString().split("T")[0] }),
+        ...(filters.dueDateRange.to && { dueDateTo: filters.dueDateRange.to.toISOString().split("T")[0] }),
+        ...(filters.currency && filters.currency !== "all" && { currency: filters.currency }),
+        ...(filters.minAmount && { minAmount: parseFloat(filters.minAmount) }),
+        ...(filters.maxAmount && { maxAmount: parseFloat(filters.maxAmount) }),
+        ...(filters.hasRetention !== "all" && { hasRetention: filters.hasRetention === "yes" }),
+        ...(filters.hasDetraction !== "all" && { hasDetraction: filters.hasDetraction === "yes" }),
       }
 
       console.log("Query being sent:", query)
@@ -225,6 +266,56 @@ export default function DocumentsPage() {
       type: "daterange" as const,
       placeholder: "Período de emisión",
     },
+    {
+      key: "dueDateRange",
+      type: "daterange" as const,
+      placeholder: "Período de vencimiento",
+    },
+    {
+      key: "currency",
+      type: "select" as const,
+      placeholder: "Moneda",
+      options: [
+        { value: "all", label: "Todas" },
+        { value: "PEN", label: "PEN" },
+        { value: "USD", label: "USD" },
+      ],
+      className: "min-w-28",
+    },
+    {
+      key: "minAmount",
+      type: "search" as const,
+      placeholder: "Monto Mín.",
+      className: "w-32",
+    },
+    {
+      key: "maxAmount",
+      type: "search" as const,
+      placeholder: "Monto Máx.",
+      className: "w-32",
+    },
+    {
+      key: "hasRetention",
+      type: "select" as const,
+      placeholder: "Retención",
+      options: [
+        { value: "all", label: "Ambos" },
+        { value: "yes", label: "Sí" },
+        { value: "no", label: "No" },
+      ],
+      className: "min-w-28",
+    },
+    {
+      key: "hasDetraction",
+      type: "select" as const,
+      placeholder: "Detracción",
+      options: [
+        { value: "all", label: "Ambos" },
+        { value: "yes", label: "Sí" },
+        { value: "no", label: "No" },
+      ],
+      className: "min-w-28",
+    },
   ]
 
   const handlePageChange = (newPage: number) => {
@@ -244,6 +335,34 @@ export default function DocumentsPage() {
     const symbol = currency === "USD" ? "$" : "S/"
     return `${symbol} ${numAmount.toLocaleString("es-PE", { minimumFractionDigits: 2 })}`
   }
+
+  const handleDeleteSelectedDocuments = async () => {
+    if (selectedDocumentIds.length === 0) {
+      toast({ title: "Nada seleccionado", description: "Por favor, seleccione al menos un documento para eliminar."  });
+      return;
+    }
+
+    if (confirm(`¿Está seguro de que desea eliminar ${selectedDocumentIds.length} documento(s) seleccionado(s)? Esta acción no se puede deshacer.`)) {
+      try {
+        // Assuming user.id is available for updatedById. Adjust if not.
+        // If user or user.id is not available, you might need to pass a default or handle it differently in the store.
+        const updatedById = user?.id 
+        if (!updatedById) {
+            toast({ title: "Error de autenticación", description: "No se pudo identificar al usuario para la operación.", variant: "destructive" });
+            return;
+        }
+
+        await bulkDeleteDocuments({ documentIds: selectedDocumentIds });
+        toast({ title: "Éxito", description: `${selectedDocumentIds.length} documento(s) eliminado(s) correctamente.` });
+        setSelectedDocumentIds([]);
+        loadDocuments(); // Refresh data
+      } catch (error: any) {
+        console.error("Error eliminando documentos:", error);
+        toast({ title: "Error", description: error.response?.data?.message || "Error al eliminar los documentos. Es posible que algunos no se hayan eliminado.", variant: "destructive" });
+        loadDocuments(); // Refresh data even on error
+      }
+    }
+  };
 
   console.log("Render state:", {
     loading,
@@ -284,100 +403,162 @@ export default function DocumentsPage() {
         {/* Documents Table */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Documentos ({loading ? "..." : pagination.total})
-            </CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Documentos ({loading ? "..." : pagination.total})
+                {selectedDocumentIds.length > 0 && (
+                  <span className="text-sm text-primary font-medium ml-2">
+                    ({selectedDocumentIds.length} seleccionado(s))
+                  </span>
+                )}
+              </CardTitle>
+              <div>
+                {selectedDocumentIds.length > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDeleteSelectedDocuments}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Eliminar Seleccionados ({selectedDocumentIds.length})
+                  </Button>
+                )}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
               <TableSkeleton rows={8} columns={14} />
             ) : (
               <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-3">Tipo</th>
-                        <th className="text-left p-3">Serie - Número</th>
-                        <th className="text-left p-3">Fecha Emisión</th>
-                        <th className="text-left p-3">Fecha Vencimiento</th>
-                        <th className="text-left p-3">Proveedor</th>
-                        <th className="text-left p-3">RUC</th>
-                        <th className="text-right p-3">Subtotal</th>
-                        <th className="text-right p-3">IGV</th>
-                        <th className="text-right p-3">Total</th>
-                        <th className="text-right p-3">Detracción</th>
-                        <th className="text-right p-3">Neto a Pagar</th>
-                        <th className="text-center p-3">Estado</th>
-                        <th className="text-center p-3">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {documents.map((doc) => (
-                        <tr key={doc.id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
-                          <td className="p-3">{getTypeBadge(doc.documentType)}</td>
-                          <td className="p-3 font-mono">{doc.fullNumber}</td>
-                          <td className="p-3">{formatDate(doc.issueDate)}</td>
-                          <td className="p-3">{doc.dueDate ? formatDate(doc.dueDate) : "-"}</td>
-                          <td className="p-3 max-w-48 truncate" title={doc.supplier?.businessName || ""}>
-                            {doc.supplier?.businessName || "Sin proveedor"}
-                          </td>
-                          <td className="p-3 font-mono">{doc.supplier?.documentNumber || "Sin RUC"}</td>
-                          <td className="p-3 text-right font-mono">{formatCurrency(doc.subtotal, doc.currency)}</td>
-                          <td className="p-3 text-right font-mono">{formatCurrency(doc.igv, doc.currency)}</td>
-                          <td className="p-3 text-right font-mono font-semibold">
-                            {formatCurrency(doc.total, doc.currency)}
-                          </td>
-                          <td className="p-3 text-right font-mono">
-                            {doc.detraction?.amount && Number.parseFloat(doc.detraction.amount) > 0
-                              ? formatCurrency(doc.detraction.amount, doc.currency)
-                              : "-"}
-                          </td>
-                          <td className="p-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">
-                            {formatCurrency(doc.netPayableAmount, doc.currency)}
-                          </td>
-                          <td className="p-3 text-center">{getStatusBadge(doc.status)}</td>
-                          <td className="p-3">
-                            <div className="flex items-center justify-center gap-1">
-                              <Link href={`/documents/${doc.id}`}>
-                                <Button variant="ghost" size="sm" title="Ver detalles">
-                                  <Eye className="w-4 h-4" />
-                                </Button>
-                              </Link>
-                              <Link href={`/documents/${doc.id}/edit`}>
-                                <Button variant="ghost" size="sm" title="Editar">
-                                  <Edit className="w-4 h-4" />
-                                </Button>
-                              </Link>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title="Eliminar"
-                                onClick={() => handleDeleteDocument(doc.id)}
-                                className="text-red-600 hover:text-red-700"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12 px-2">
+                           <Checkbox
+                            checked={
+                              documents.length > 0 &&
+                              selectedDocumentIds.length === documents.length 
+                              // This checks against all loaded documents. 
+                              // For true paginated select-all, this logic would need to fetch all IDs or handle server-side.
+                              // For now, it selects all on the current page.
+                            }
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedDocumentIds(documents.map((d) => d.id))
+                              } else {
+                                setSelectedDocumentIds([])
+                              }
+                            }}
+                            aria-label="Seleccionar todos los documentos en esta página"
+                          />
+                        </TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Serie - Número</TableHead>
+                        <TableHead>Fecha Emisión</TableHead>
+                        <TableHead>Fecha Vencimiento</TableHead>
+                        <TableHead>Proveedor</TableHead>
+                        <TableHead>RUC</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
+                        <TableHead className="text-right">IGV</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right">Detracción</TableHead>
+                        <TableHead className="text-right">Neto a Pagar</TableHead>
+                        <TableHead className="text-center">Estado</TableHead>
+                        <TableHead className="text-center">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {documents.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={13} className="h-24 text-center">
+                            No se encontraron documentos con los filtros aplicados.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        documents.map((doc) => (
+                          <TableRow 
+                            key={doc.id}
+                            data-state={selectedDocumentIds.includes(doc.id) && "selected"}
+                          >
+                            <TableCell className="px-2">
+                              <Checkbox
+                                checked={selectedDocumentIds.includes(doc.id)}
+                                onCheckedChange={(checked) => {
+                                  setSelectedDocumentIds((prev) =>
+                                    checked ? [...prev, doc.id] : prev.filter((id) => id !== doc.id),
+                                  )
+                                }}
+                                aria-label={`Seleccionar documento ${doc.fullNumber}`}
+                              />
+                            </TableCell>
+                            <TableCell>{getTypeBadge(doc.documentType)}</TableCell>
+                            <TableCell className="font-mono">{doc.fullNumber}</TableCell>
+                            <TableCell>{formatDate(doc.issueDate)}</TableCell>
+                            <TableCell>{doc.dueDate ? formatDate(doc.dueDate) : "-"}</TableCell>
+                            <TableCell className="max-w-xs truncate" title={doc.supplier?.businessName || ""}>
+                              {doc.supplier?.businessName || "Sin proveedor"}
+                            </TableCell>
+                            <TableCell className="font-mono">{doc.supplier?.documentNumber || "Sin RUC"}</TableCell>
+                            <TableCell className="text-right font-mono">
+                              {formatCurrency(doc.subtotal, doc.currency)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">{formatCurrency(doc.igv, doc.currency)}</TableCell>
+                            <TableCell className="text-right font-mono font-semibold">
+                              {formatCurrency(doc.total, doc.currency)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {doc.detraction?.amount && Number.parseFloat(doc.detraction.amount) > 0
+                                ? formatCurrency(doc.detraction.amount, doc.currency)
+                                : "-"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono font-semibold text-green-600 dark:text-green-400">
+                              {formatCurrency(doc.netPayableAmount, doc.currency)}
+                            </TableCell>
+                            <TableCell className="text-center">{getStatusBadge(doc.status)}</TableCell>
+                            <TableCell className="text-center">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" className="h-8 w-8 p-0">
+                                    <span className="sr-only">Abrir menú</span>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/documents/${doc.id}`}>
+                                      <Eye className="mr-2 h-4 w-4" /> Ver Detalles
+                                    </Link>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/documents/${doc.id}/edit`}>
+                                      <Edit className="mr-2 h-4 w-4" /> Editar
+                                    </Link>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteDocument(doc.id)}
+                                    className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-700/20 dark:focus:text-red-500"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
-
-                {documents.length === 0 && (
-                  <div className="text-center py-8">
-                    <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">No se encontraron documentos con los filtros aplicados</p>
-                  </div>
-                )}
 
                 {/* Pagination */}
                 {pagination.totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-6">
-                    <div className="text-sm text-gray-500">
+                  <div className="flex items-center justify-end space-x-2 py-4">
+                    <div className="flex-1 text-sm text-muted-foreground">
                       Mostrando {(pagination.page - 1) * pagination.limit + 1} a{" "}
                       {Math.min(pagination.page * pagination.limit, pagination.total)} de {pagination.total} documentos
                     </div>

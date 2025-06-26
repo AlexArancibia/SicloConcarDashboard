@@ -46,248 +46,243 @@ export default function TransactionsPage() {
 
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-
-  // Paginación
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
-
-  // Stores
-  const { transactions, loading, error, fetchTransactions, clearError } = useTransactionsStore()
-  const { banks, getActiveBanks, clearError: clearBanksError } = useBanksStore()
-  const { user } = useAuthStore()
-
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([])
   const [selectAll, setSelectAll] = useState(false)
 
-  const [loadingAll, setLoadingAll] = useState(false)
-  const [allDataLoaded, setAllDataLoaded] = useState(false)
+  // Stores
+  const { 
+    transactions, 
+    loading, 
+    error, 
+    fetchTransactions, 
+    clearError,
+    total,
+    page,
+    limit,
+    totalPages
+  } = useTransactionsStore()
+  const { banks, getActiveBanks, clearError: clearBanksError } = useBanksStore()
+  const { user } = useAuthStore()
 
-  // Cargar datos al montar el componente
+  // Cargar datos iniciales y cuando cambien los filtros
   useEffect(() => {
     if (user?.companyId) {
-      console.log("Cargando datos para companyId:", user.companyId)
-      // Cargar con límite más alto inicialmente
-      fetchTransactions(user.companyId, { page: 1, limit: 100 })
+      loadTransactions()
       getActiveBanks()
     }
-  }, [user?.companyId, fetchTransactions, getActiveBanks])
+  }, [user?.companyId, currentPage, itemsPerPage])
 
-  const handleFilterChange = (key: string, value: any) => {
-    setFilters((prev) => ({ ...prev, [key]: value }))
-    setCurrentPage(1) // Reset a la primera página cuando se cambian filtros
+  // Efecto para recargar cuando cambian los filtros
+  useEffect(() => {
+    if (user?.companyId) {
+      setCurrentPage(1) // Resetear a la primera página al cambiar filtros
+      loadTransactions()
+    }
+  }, [
+    filters.search,
+    filters.bankAccounts,
+    filters.status,
+    filters.types,
+    filters.dateRange
+  ])
+
+  const loadTransactions = async () => {
+    if (!user?.companyId) return
+
+    setRefreshing(true)
+    clearError()
+    clearBanksError()
+
+    try {
+      const query = {
+        page: currentPage,
+        limit: itemsPerPage,
+        ...(filters.search && { search: filters.search }),
+        ...(filters.bankAccounts.length > 0 && { bankAccountId: filters.bankAccounts.join(',') }),
+        ...(filters.status.length > 0 && { status: filters.status.join(',') as TransactionStatus }),
+        ...(filters.types.length > 0 && { type: filters.types.join(',') }),
+        ...(filters.dateRange.from && { dateFrom: filters.dateRange.from.toISOString().split('T')[0] }),
+        ...(filters.dateRange.to && { dateTo: filters.dateRange.to.toISOString().split('T')[0] }),
+      }
+
+      await fetchTransactions(user.companyId, query)
+    } catch (error) {
+      console.error("Error loading transactions:", error)
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   const handleImportComplete = async (hasSuccessfulImports: boolean) => {
-    console.log("Import completed, hasSuccessfulImports:", hasSuccessfulImports)
-
-    // Solo actualizar si hubo importaciones exitosas
     if (hasSuccessfulImports && user?.companyId) {
-      setRefreshing(true)
-      try {
-        await fetchTransactions(user.companyId)
-        console.log("Transacciones actualizadas después de importación exitosa")
-      } catch (error) {
-        console.error("Error al actualizar transacciones:", error)
-      } finally {
-        setRefreshing(false)
-      }
+      await loadTransactions()
     }
   }
 
   const handleRefresh = async () => {
     if (user?.companyId) {
-      setRefreshing(true)
-      clearError() // Limpiar errores previos
-      clearBanksError() // Limpiar errores de banks
-      try {
-        await fetchTransactions(user.companyId)
-        await getActiveBanks()
-      } catch (error) {
-        console.error("Error al refrescar datos:", error)
-      } finally {
-        setRefreshing(false)
-      }
+      await loadTransactions()
     }
   }
 
-  const handleLoadAllData = async () => {
-    if (user?.companyId) {
-      setLoadingAll(true)
-      try {
-        // Cargar con un límite alto para obtener todos los datos
-        await fetchTransactions(user.companyId, { page: 1, limit: 1000 })
-        setAllDataLoaded(true)
-      } catch (error) {
-        console.error("Error al cargar todos los datos:", error)
-      } finally {
-        setLoadingAll(false)
-      }
-    }
-  }
-
-  // Actualizar la función getTypeBadge para incluir los nuevos tipos
   const getTypeBadge = (type: TransactionType) => {
-  const typeConfig: Record<TransactionType, { color: string; label: string; icon: any }> = {
-    PAYROLL_SALARY: {
-      color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
-      label: "Sueldo",
-      icon: TrendingDown,
-    },
-    PAYROLL_CTS: {
-      color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-      label: "CTS",
-      icon: TrendingDown,
-    },
-    PAYROLL_BONUS: {
-      color: "bg-pink-500/10 text-pink-600 border-pink-500/20",
-      label: "Grati / Bono",
-      icon: TrendingDown,
-    },
-    PAYROLL_AFP: {
-      color: "bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20",
-      label: "AFP",
-      icon: TrendingDown,
-    },
+    const typeConfig: Record<TransactionType, { color: string; label: string; icon: any }> = {
+      // INGRESOS
+      INCOME_SALARY: {
+        color: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+        label: "Sueldo",
+        icon: TrendingUp,
+      },
+      INCOME_BONUS: {
+        color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+        label: "Bono",
+        icon: TrendingUp,
+      },
+      INCOME_INTEREST: {
+        color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+        label: "Interés",
+        icon: TrendingUp,
+      },
+      INCOME_INVESTMENT: {
+        color: "bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20",
+        label: "Inversión",
+        icon: TrendingUp,
+      },
+      INCOME_DIVIDENDS: {
+        color: "bg-pink-500/10 text-pink-600 border-pink-500/20",
+        label: "Dividendo",
+        icon: TrendingUp,
+      },
+      INCOME_SALES: {
+        color: "bg-rose-500/10 text-rose-600 border-rose-500/20",
+        label: "Venta",
+        icon: TrendingUp,
+      },
+      INCOME_SERVICES: {
+        color: "bg-red-500/10 text-red-600 border-red-500/20",
+        label: "Servicio",
+        icon: TrendingUp,
+      },
+      INCOME_TRANSFER: {
+        color: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+        label: "Transferencia",
+        icon: TrendingUp,
+      },
+      INCOME_DEPOSIT: {
+        color: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+        label: "Depósito",
+        icon: TrendingUp,
+      },
+      INCOME_REFUND: {
+        color: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+        label: "Reembolso",
+        icon: TrendingUp,
+      },
+      INCOME_ADJUSTMENT: {
+        color: "bg-lime-500/10 text-lime-600 border-lime-500/20",
+        label: "Ajuste",
+        icon: TrendingUp,
+      },
+      INCOME_TAX_REFUND: {
+        color: "bg-green-500/10 text-green-600 border-green-500/20",
+        label: "Devolución Imp.",
+        icon: TrendingUp,
+      },
+      INCOME_OTHER: {
+        color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+        label: "Otro Ingreso",
+        icon: TrendingUp,
+      },
 
-    TAX_PAYMENT: {
-      color: "bg-gray-500/10 text-gray-600 border-gray-500/20",
-      label: "Pago SUNAT",
-      icon: TrendingDown,
-    },
-    TAX_ITF: {
-      color: "bg-pink-500/10 text-pink-600 border-pink-500/20",
-      label: "ITF",
-      icon: TrendingDown,
-    },
-    TAX_DETRACTION: {
-      color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-      label: "Detracción",
-      icon: TrendingDown,
-    },
-
-    EXPENSE_UTILITIES: {
-      color: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
-      label: "Servicios",
-      icon: TrendingDown,
-    },
-    EXPENSE_INSURANCE: {
-      color: "bg-sky-500/10 text-sky-600 border-sky-500/20",
-      label: "Seguro",
-      icon: TrendingDown,
-    },
-    EXPENSE_COMMISSIONS: {
-      color: "bg-orange-500/10 text-orange-600 border-orange-500/20",
-      label: "Comisión / Mantenimiento",
-      icon: TrendingDown,
-    },
-    EXPENSE_PURCHASE: {
-      color: "bg-rose-500/10 text-rose-600 border-rose-500/20",
-      label: "Pago proveedor",
-      icon: TrendingDown,
-    },
-    EXPENSE_OTHER: {
-      color: "bg-red-500/10 text-red-600 border-red-500/20",
-      label: "Otro egreso",
-      icon: TrendingDown,
-    },
-
-    TRANSFER_INBANK: {
-      color: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20",
-      label: "Transf. mismo banco",
-      icon: TrendingDown,
-    },
-    TRANSFER_EXTERNAL: {
-      color: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-      label: "Transf. interbancaria",
-      icon: TrendingDown,
-    },
-
-    WITHDRAWAL_CASH: {
-      color: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-      label: "Retiro efectivo",
-      icon: TrendingDown,
-    },
-
-    ADJUSTMENT: {
-      color: "bg-zinc-500/10 text-zinc-600 border-zinc-500/20",
-      label: "Ajuste",
-      icon: TrendingDown,
-    },
-
-    REFUND: {
-      color: "bg-lime-500/10 text-lime-600 border-lime-500/20",
-      label: "Devolución",
-      icon: TrendingDown,
-    },
-    INCOME_SALARY: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
- 
-    INCOME_BONUS: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
- 
-    INCOME_INTEREST: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
-    INCOME_INVESTMENT: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
-    INCOME_DIVIDENDS: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
-    INCOME_SALES: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
-    INCOME_SERVICES: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
-    INCOME_TRANSFER: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
-    INCOME_DEPOSIT: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
-    INCOME_REFUND: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
-    INCOME_ADJUSTMENT: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
-    INCOME_TAX_REFUND: {
-      color: "",
-      label: "",
-      icon: undefined
-    },
-    INCOME_OTHER: {
-      color: "",
-      label: "",
-      icon: undefined
-    }
-  };
-
+      // EGRESOS
+      PAYROLL_SALARY: {
+        color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+        label: "Sueldo",
+        icon: TrendingDown,
+      },
+      PAYROLL_CTS: {
+        color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+        label: "CTS",
+        icon: TrendingDown,
+      },
+      PAYROLL_BONUS: {
+        color: "bg-pink-500/10 text-pink-600 border-pink-500/20",
+        label: "Grati/Bono",
+        icon: TrendingDown,
+      },
+      PAYROLL_AFP: {
+        color: "bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20",
+        label: "AFP",
+        icon: TrendingDown,
+      },
+      TAX_PAYMENT: {
+        color: "bg-gray-500/10 text-gray-600 border-gray-500/20",
+        label: "Pago SUNAT",
+        icon: TrendingDown,
+      },
+      TAX_ITF: {
+        color: "bg-pink-500/10 text-pink-600 border-pink-500/20",
+        label: "ITF",
+        icon: TrendingDown,
+      },
+      TAX_DETRACTION: {
+        color: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+        label: "Detracción",
+        icon: TrendingDown,
+      },
+      EXPENSE_UTILITIES: {
+        color: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+        label: "Servicios",
+        icon: TrendingDown,
+      },
+      EXPENSE_INSURANCE: {
+        color: "bg-sky-500/10 text-sky-600 border-sky-500/20",
+        label: "Seguro",
+        icon: TrendingDown,
+      },
+      EXPENSE_COMMISSIONS: {
+        color: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+        label: "Comisión",
+        icon: TrendingDown,
+      },
+      EXPENSE_PURCHASE: {
+        color: "bg-rose-500/10 text-rose-600 border-rose-500/20",
+        label: "Pago proveedor",
+        icon: TrendingDown,
+      },
+      EXPENSE_OTHER: {
+        color: "bg-red-500/10 text-red-600 border-red-500/20",
+        label: "Otro gasto",
+        icon: TrendingDown,
+      },
+      TRANSFER_INBANK: {
+        color: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20",
+        label: "Transf. mismo banco",
+        icon: TrendingDown,
+      },
+      TRANSFER_EXTERNAL: {
+        color: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+        label: "Transf. interbancaria",
+        icon: TrendingDown,
+      },
+      WITHDRAWAL_CASH: {
+        color: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+        label: "Retiro efectivo",
+        icon: TrendingDown,
+      },
+      ADJUSTMENT: {
+        color: "bg-zinc-500/10 text-zinc-600 border-zinc-500/20",
+        label: "Ajuste",
+        icon: TrendingDown,
+      },
+      REFUND: {
+        color: "bg-lime-500/10 text-lime-600 border-lime-500/20",
+        label: "Devolución",
+        icon: TrendingDown,
+      },
+    };
 
     const config = typeConfig[type]
     const IconComponent = config.icon
@@ -299,8 +294,6 @@ export default function TransactionsPage() {
     )
   }
 
-  // Actualizar la función getTransactionFlags para usar los nuevos tipos
-  
   const filteredTransactions = transactions.filter((transaction) => {
     const matchesSearch =
       transaction.description.toLowerCase().includes(filters.search.toLowerCase()) ||
@@ -308,13 +301,13 @@ export default function TransactionsPage() {
       (transaction.reference && transaction.reference.toLowerCase().includes(filters.search.toLowerCase()))
 
     const matchesBankAccount =
-      filters.bankAccounts.length === 0 || (filters.bankAccounts as string[]).includes(transaction.bankAccountId)
+      filters.bankAccounts.length === 0 || filters.bankAccounts.includes(transaction.bankAccountId)
 
     const matchesStatus =
-      filters.status.length === 0 || (filters.status as TransactionStatus[]).includes(transaction.status)
+      filters.status.length === 0 || filters.status.includes(transaction.status)
 
     const matchesType =
-      filters.types.length === 0 || (filters.types as TransactionType[]).includes(transaction.transactionType)
+      filters.types.length === 0 || filters.types.includes(transaction.transactionType)
 
     const matchesDate =
       !filters.dateRange.from ||
@@ -324,12 +317,10 @@ export default function TransactionsPage() {
     return matchesSearch && matchesBankAccount && matchesStatus && matchesType && matchesDate
   })
 
-  // Ordenar por fecha y hora (más reciente primero)
   const sortedTransactions = [...filteredTransactions].sort((a, b) => {
     const dateA = new Date(a.transactionDate)
     const dateB = new Date(b.transactionDate)
 
-    // Si las fechas son iguales, ordenar por hora de operación
     if (dateA.getTime() === dateB.getTime() && a.operationTime && b.operationTime) {
       return b.operationTime.localeCompare(a.operationTime)
     }
@@ -337,12 +328,10 @@ export default function TransactionsPage() {
     return dateB.getTime() - dateA.getTime()
   })
 
-  // Cálculos de paginación
-  const totalItems = sortedTransactions.length
-  const totalPages = Math.ceil(totalItems / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
-  const paginatedTransactions = sortedTransactions.slice(startIndex, endIndex)
+  const paginatedTransactions = sortedTransactions.slice(
+    (page - 1) * limit,
+    page * limit
+  )
 
   const statusOptions = [
     { value: "PENDING", label: "Pendiente" },
@@ -351,26 +340,42 @@ export default function TransactionsPage() {
     { value: "CANCELLED", label: "Cancelado" },
   ]
 
-  // Actualizar las opciones de tipos de transacción para incluir los nuevos tipos
-const typeOptions = [
-  { value: "PAYROLL_SALARY", label: "Sueldo" },
-  { value: "PAYROLL_CTS", label: "CTS" },
-  { value: "PAYROLL_BONUS", label: "Gratificación / Bono" },
-  { value: "PAYROLL_AFP", label: "Aporte AFP" },
-  { value: "TAX_PAYMENT", label: "Pago de impuestos (SUNAT)" },
-  { value: "TAX_ITF", label: "ITF" },
-  { value: "TAX_DETRACTION", label: "Detracción" },
-  { value: "EXPENSE_UTILITIES", label: "Servicios (Luz, Agua, Internet...)" },
-  { value: "EXPENSE_INSURANCE", label: "Seguro" },
-  { value: "EXPENSE_COMMISSIONS", label: "Comisiones y mantenimiento" },
-  { value: "EXPENSE_PURCHASE", label: "Pago a proveedor" },
-  { value: "EXPENSE_OTHER", label: "Otro gasto" },
-  { value: "TRANSFER_INBANK", label: "Transferencia misma cuenta" },
-  { value: "TRANSFER_EXTERNAL", label: "Transferencia interbancaria" },
-  { value: "WITHDRAWAL_CASH", label: "Retiro en efectivo" },
-  { value: "ADJUSTMENT", label: "Ajuste / Regularización" },
-  { value: "REFUND", label: "Devolución" },
-]
+  const typeOptions = [
+    // INGRESOS
+    { value: "INCOME_SALARY", label: "Sueldo (Ingreso)" },
+    { value: "INCOME_BONUS", label: "Bono (Ingreso)" },
+    { value: "INCOME_INTEREST", label: "Interés (Ingreso)" },
+    { value: "INCOME_INVESTMENT", label: "Inversión (Ingreso)" },
+    { value: "INCOME_DIVIDENDS", label: "Dividendo (Ingreso)" },
+    { value: "INCOME_SALES", label: "Venta (Ingreso)" },
+    { value: "INCOME_SERVICES", label: "Servicio (Ingreso)" },
+    { value: "INCOME_TRANSFER", label: "Transferencia (Ingreso)" },
+    { value: "INCOME_DEPOSIT", label: "Depósito (Ingreso)" },
+    { value: "INCOME_REFUND", label: "Reembolso (Ingreso)" },
+    { value: "INCOME_ADJUSTMENT", label: "Ajuste (Ingreso)" },
+    { value: "INCOME_TAX_REFUND", label: "Devolución Imp. (Ingreso)" },
+    { value: "INCOME_OTHER", label: "Otro Ingreso" },
+    
+    // EGRESOS
+    { value: "PAYROLL_SALARY", label: "Sueldo (Egreso)" },
+    { value: "PAYROLL_CTS", label: "CTS (Egreso)" },
+    { value: "PAYROLL_BONUS", label: "Gratificación/Bono (Egreso)" },
+    { value: "PAYROLL_AFP", label: "AFP (Egreso)" },
+    { value: "TAX_PAYMENT", label: "Pago SUNAT (Egreso)" },
+    { value: "TAX_ITF", label: "ITF (Egreso)" },
+    { value: "TAX_DETRACTION", label: "Detracción (Egreso)" },
+    { value: "EXPENSE_UTILITIES", label: "Servicios (Egreso)" },
+    { value: "EXPENSE_INSURANCE", label: "Seguro (Egreso)" },
+    { value: "EXPENSE_COMMISSIONS", label: "Comisiones (Egreso)" },
+    { value: "EXPENSE_PURCHASE", label: "Pago proveedor (Egreso)" },
+    { value: "EXPENSE_OTHER", label: "Otro gasto (Egreso)" },
+    { value: "TRANSFER_INBANK", label: "Transf. mismo banco (Egreso)" },
+    { value: "TRANSFER_EXTERNAL", label: "Transf. interbancaria (Egreso)" },
+    { value: "WITHDRAWAL_CASH", label: "Retiro efectivo (Egreso)" },
+    { value: "ADJUSTMENT", label: "Ajuste (Egreso)" },
+    { value: "REFUND", label: "Devolución (Egreso)" },
+  ]
+
   const handleSelectAll = () => {
     if (selectAll) {
       setSelectedTransactions([])
@@ -388,15 +393,11 @@ const typeOptions = [
 
   const handleBulkDelete = async () => {
     if (selectedTransactions.length === 0) return
-
-    // Aquí implementarías la lógica de eliminación
     console.log("Eliminar transacciones:", selectedTransactions)
-    // Después de eliminar, limpiar selección
     setSelectedTransactions([])
     setSelectAll(false)
   }
 
-  // Crear opciones de cuentas bancarias desde banks
   const bankAccountOptions = transactions.reduce(
     (acc, transaction) => {
       const bankAccount = transaction.bankAccount
@@ -445,9 +446,13 @@ const typeOptions = [
     },
   ]
 
+  const handleFilterChange = (key: string, value: any) => {
+    setFilters((prev) => ({ ...prev, [key]: value }))
+  }
+
+
   return (
     <div className="space-y-4">
-      {/* Error Alert */}
       {error && (
         <Alert className="bg-red-500/10 border-red-500/30">
           <AlertCircle className="h-4 w-4 text-red-500" />
@@ -461,7 +466,6 @@ const typeOptions = [
         </Alert>
       )}
 
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Transacciones Bancarias</h1>
@@ -478,12 +482,6 @@ const typeOptions = [
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
             Actualizar
           </Button>
-          {!allDataLoaded && (
-            <Button variant="outline" size="sm" onClick={handleLoadAllData} disabled={loadingAll || loading}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${loadingAll ? "animate-spin" : ""}`} />
-              {loadingAll ? "Cargando..." : "Cargar Todos"}
-            </Button>
-          )}
           <Button variant="outline" size="sm">
             <Download className="w-4 h-4 mr-2" />
             Exportar
@@ -495,23 +493,16 @@ const typeOptions = [
         </div>
       </div>
 
-      {/* Filters */}
       <Card>
         <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
       </Card>
 
-      {/* Transactions Table */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-emerald-600" />
-              Transacciones ({loading || refreshing ? "..." : totalItems})
-              {allDataLoaded && (
-                <Badge variant="secondary" className="ml-2">
-                  Todos los datos cargados
-                </Badge>
-              )}
+              Transacciones ({loading || refreshing ? "..." : total})
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Mostrar:</span>
@@ -647,32 +638,31 @@ const typeOptions = [
                 </div>
               </div>
 
-              {/* Paginación */}
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4">
                   <div className="text-sm text-muted-foreground">
-                    Mostrando {startIndex + 1} a {Math.min(endIndex, totalItems)} de {totalItems} transacciones
+                    Mostrando {(page - 1) * limit + 1} a {Math.min(page * limit, total)} de {total} transacciones
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={page === 1}>
                       <ChevronsLeft className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(currentPage - 1)}
-                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(page - 1)}
+                      disabled={page === 1}
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </Button>
                     <span className="text-sm">
-                      Página {currentPage} de {totalPages}
+                      Página {page} de {totalPages}
                     </span>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(currentPage + 1)}
-                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(page + 1)}
+                      disabled={page === totalPages}
                     >
                       <ChevronRight className="w-4 h-4" />
                     </Button>
@@ -680,7 +670,7 @@ const typeOptions = [
                       variant="outline"
                       size="sm"
                       onClick={() => setCurrentPage(totalPages)}
-                      disabled={currentPage === totalPages}
+                      disabled={page === totalPages}
                     >
                       <ChevronsRight className="w-4 h-4" />
                     </Button>
@@ -699,7 +689,6 @@ const typeOptions = [
         </CardContent>
       </Card>
 
-      {/* Import Modal */}
       <TransactionImportModal
         open={importModalOpen}
         onOpenChange={setImportModalOpen}
