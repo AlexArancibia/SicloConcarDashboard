@@ -295,11 +295,18 @@ export interface Conciliation extends BaseEntity {
     document: {
       id: string
       fullNumber: string
-      documentType: string
+      code: string
       total: number
-      supplier: {
-        businessName: string
-        documentNumber: string
+      document: {
+        id:string
+        fullNumber:string
+        issueDate:Date
+        total:number
+        currency:string
+        supplier:{
+          id:string
+          businessName:string
+        }
       }
     }
   }>
@@ -643,6 +650,7 @@ export interface CreateConciliationDto {
   notes?: string
   createdById: string
   approvedById?: string
+  detractionIds?:string[]
   // Gastos adicionales con información contable
   expenses?: CreateConciliationExpenseDto[]
   // Items de conciliación (documentos ya tienen sus cuentas y centros de costo)

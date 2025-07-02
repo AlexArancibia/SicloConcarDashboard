@@ -53,6 +53,8 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
 
+  const [previewPayload, setPreviewPayload] = useState<{ content: string; fileName: string } | null>(null)
+
   const { toast } = useToast()
   const { createDocument, error: documentError, clearError: clearDocumentError } = useDocumentsStore()
   const {
@@ -263,34 +265,61 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
   }
 
   const togglePreview = async (index: number) => {
-    try {
-      // If already previewing, close preview
-      if (files[index].preview) {
-        setFiles((prev) => prev.map((f, i) => (i === index ? { ...f, preview: false } : f)))
-        setPreviewXml(null)
-        return
-      }
-
-      // Read file content
-      const fileContent = await files[index].file.text()
-
-      // Update file status
-      setFiles((prev) => prev.map((f, i) => (i === index ? { ...f, preview: true } : { ...f, preview: false })))
-
-      // Set preview content
-      setPreviewXml({
-        content: fileContent,
-        fileName: files[index].file.name,
-      })
-    } catch (error) {
-      console.error("Error reading file for preview:", error)
-      toast({
-        title: "Error al previsualizar",
-        description: "No se pudo leer el contenido del archivo XML",
-        variant: "destructive",
-      })
+  try {
+    // Si ya está en vista previa, cerrarla
+    if (files[index].preview) {
+      setFiles((prev) => prev.map((f, i) => (i === index ? { ...f, preview: false } : f)))
+      setPreviewPayload(null)
+      return
     }
+
+    // Leer contenido del archivo
+    const fileContent = await files[index].file.text()
+    
+    // Extraer información del proveedor
+    const supplierData = extractSupplierFromXML(fileContent)
+    if (!supplierData) {
+      throw new Error("No se pudo extraer información del proveedor")
+    }
+
+    // Usar un supplierId de prueba para la vista previa
+    const placeholderSupplierId = "preview-supplier-id"
+
+    // Parsear XML para obtener el payload COMPLETO
+    const documentPayload = parseXMLToDocument(
+      fileContent,
+      files[index].file.name,
+      placeholderSupplierId
+    )
+    
+    if (!documentPayload) {
+      throw new Error("No se pudo generar el payload del documento")
+    }
+
+    // Formatear el payload como JSON para visualización
+    const payloadString = JSON.stringify(documentPayload, null, 2)
+
+    // Actualizar estado de archivos y vista previa
+    setFiles((prev) =>
+      prev.map((f, i) =>
+        i === index ? { ...f, preview: true } : { ...f, preview: false }
+      )
+    )
+    setPreviewPayload({
+      content: payloadString,
+      fileName: files[index].file.name,
+    })
+  } catch (error) {
+    console.error("Error generando vista previa del payload:", error)
+    toast({
+      title: "Error al previsualizar",
+      description: "No se pudo generar el payload del documento: " + 
+        (error instanceof Error ? error.message : "Error desconocido"),
+      variant: "destructive",
+    })
   }
+}
+
 
   // Extract supplier information from XML
   const extractSupplierFromXML = (xmlContent: string): SupplierData | null => {
@@ -510,12 +539,12 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
       }
 
       // Amounts
-      const subtotal = getNumericValue(
+      let subtotal = getNumericValue(
         "cac\\:LegalMonetaryTotal cbc\\:LineExtensionAmount",
         "LegalMonetaryTotal LineExtensionAmount",
       )
-      const igv = getNumericValue("cac\\:TaxTotal cbc\\:TaxAmount", "TaxTotal TaxAmount")
-      const total = getNumericValue("cac\\:LegalMonetaryTotal cbc\\:PayableAmount", "LegalMonetaryTotal PayableAmount")
+      let igv = getNumericValue("cac\\:TaxTotal cbc\\:TaxAmount", "TaxTotal TaxAmount")
+      let total = getNumericValue("cac\\:LegalMonetaryTotal cbc\\:PayableAmount", "LegalMonetaryTotal PayableAmount")
       const otherTaxes = getNumericValue(
         "cac\\:LegalMonetaryTotal cbc\\:AllowanceTotalAmount",
         "LegalMonetaryTotal AllowanceTotalAmount",
@@ -545,7 +574,7 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
             hasRetention = retentionAmount > 0
           }
           if (percent) {
-            retentionPercentage = (Number.parseFloat(percent) || 0) / 100 // Convertir a 0-1
+            retentionPercentage = (Number.parseFloat(percent) || 0) / 100
           }
         }
         if (paymentTermsId.includes("detraccion")) {
@@ -565,7 +594,7 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
             detractionServiceCode = code
           }
           if (percent) {
-            detractionPercentage = (Number.parseFloat(percent) || 0) / 100 // Convertir a 0-1
+            detractionPercentage = (Number.parseFloat(percent) || 0) / 100
           }
           if (account) {
             detractionAccount = account
@@ -581,11 +610,11 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
 
       // Calculate percentages if not found
       if (hasRetention && retentionPercentage === 0 && subtotal > 0) {
-        retentionPercentage = retentionAmount / subtotal // Ya está en 0-1
+        retentionPercentage = retentionAmount / subtotal
       }
 
       if (hasDetraction && detractionPercentage === 0 && total > 0) {
-        detractionPercentage = detractionAmount / total // Ya está en 0-1
+        detractionPercentage = detractionAmount / total
       }
 
       // Check for RET 4TA in invoice lines (for recibos por honorarios)
@@ -593,30 +622,82 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
         "cac\\:InvoiceLine, InvoiceLine, cac\\:CreditNoteLine, CreditNoteLine, cac\\:DebitNoteLine, DebitNoteLine",
       )
 
+      // Variable para manejar RHE con retención
+      let isRHEWithRetention = false
+      let rheBaseAmount = 0
+
       Array.from(lineElements).forEach((line) => {
         try {
-          const taxCategoryId = line.querySelector("cac\\:TaxCategory cbc\\:ID, TaxCategory ID")?.textContent
+          const taxCategoryId = line.querySelector("cac\\:TaxCategory cbc\\:ID, TaxCategory ID")?.textContent?.trim()
           if (taxCategoryId === "RET 4TA") {
             hasRetention = true
+            isRHEWithRetention = true
             documentType = "RECEIPT"
             documentTypeDescription = "Recibo por Honorarios Electrónico"
 
-            // Extract retention amount and percentage
-            const taxAmount = line.querySelector("cac\\:TaxTotal cbc\\:TaxAmount, TaxTotal TaxAmount")?.textContent
-            const taxPercent = line.querySelector("cac\\:TaxCategory cbc\\:Percent, TaxCategory Percent")?.textContent
-
-            if (taxAmount) {
-              retentionAmount = Number.parseFloat(taxAmount) || 0
+            // Extraer porcentaje de retención correctamente desde TaxSubtotal
+            const taxPercentElement = line.querySelector("cac\\:TaxTotal cac\\:TaxSubtotal cbc\\:Percent, TaxTotal TaxSubtotal Percent")
+            if (taxPercentElement?.textContent) {
+              retentionPercentage = Number.parseFloat(taxPercentElement.textContent) / 100
             }
 
-            if (taxPercent) {
-              retentionPercentage = (Number.parseFloat(taxPercent) || 8) / 100 // Convertir a 0-1
+            // Extraer base imponible para retención
+            const taxableAmountElement = line.querySelector("cac\\:TaxTotal cac\\:TaxSubtotal cbc\\:TaxableAmount, TaxTotal TaxSubtotal TaxableAmount")
+            if (taxableAmountElement?.textContent) {
+              rheBaseAmount = Number.parseFloat(taxableAmountElement.textContent) || 0
+            }
+
+            // Extraer monto de retención correctamente
+            const taxAmountElement = line.querySelector("cac\\:TaxTotal cac\\:TaxSubtotal cbc\\:TaxAmount, TaxTotal TaxSubtotal TaxAmount")
+            if (taxAmountElement?.textContent) {
+              retentionAmount = Number.parseFloat(taxAmountElement.textContent) || 0
             }
           }
         } catch (e) {
           // Ignore errors in line processing
         }
       })
+
+      // Ajuste especial para RHE con retención
+      if (isRHEWithRetention) {
+        // Extraer base imponible del TaxTotal principal si no se encontró en la línea
+        if (rheBaseAmount <= 0) {
+          const mainTaxableAmount = getNumericValue("cac\\:TaxTotal cac\\:TaxSubtotal cbc\\:TaxableAmount")
+          if (mainTaxableAmount > 0) {
+            rheBaseAmount = mainTaxableAmount
+          }
+        }
+
+        // Calcular montos correctamente para RHE
+        if (rheBaseAmount > 0) {
+          // En RHE, el subtotal es la base imponible (rheBaseAmount)
+          subtotal = rheBaseAmount
+          
+          // Calcular retención si no está especificada
+          if (retentionAmount <= 0 && retentionPercentage > 0) {
+            retentionAmount = subtotal * retentionPercentage
+          }
+          
+          // El IGV es la retención
+          igv = retentionAmount
+          
+          // El total es la base menos la retención
+          total = subtotal - retentionAmount
+        } else {
+          // Si no tenemos base, usar el total + retención como base
+          if (total > 0 && retentionAmount > 0) {
+            subtotal = total + retentionAmount
+            rheBaseAmount = subtotal
+          }
+        }
+
+        if (retentionAmount === 0) {
+          subtotal = total
+      }
+
+      }
+
+      
 
       // QR Code and notes
       const noteElements = xmlDoc.querySelectorAll("cbc\\:Note, Note")
@@ -689,9 +770,9 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
 
         let taxSchemeId = ""
 
-        // Buscar tax scheme por ID del XML
+        // Buscar tax scheme por ID del XML usando taxSchemeId (no el id de la tabla)
         if (taxSchemeIdFromXml) {
-          const taxScheme = getTaxSchemeBySchemeId(taxSchemeIdFromXml)
+          const taxScheme = taxSchemes.find(s => s.taxSchemeId === taxSchemeIdFromXml)
           if (taxScheme) {
             taxSchemeId = taxScheme.id
             console.log(`✅ Tax scheme encontrado por ID XML "${taxSchemeIdFromXml}":`, taxScheme.taxSchemeName)
@@ -700,39 +781,90 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
           }
         }
 
-        // Si no se encuentra, buscar por categoría
+        // Si no se encuentra, buscar por categoría o nombre
         if (!taxSchemeId) {
           console.log("🔍 Buscando tax scheme por categoría...")
-          if (taxCategoryId === "S" || taxSchemeIdFromXml === "1000") {
-            const igvScheme = getTaxSchemeByName("IGV")
-            taxSchemeId = igvScheme?.id || ""
-            console.log("🏷️ Usando tax scheme IGV para línea gravada:", taxSchemeId)
-          } else if (taxCategoryId === "E" || taxSchemeIdFromXml === "9997") {
-            const exoneradoScheme = getTaxSchemeByName("Exonerado")
-            taxSchemeId = exoneradoScheme?.id || ""
-            console.log("🏷️ Usando tax scheme Exonerado:", taxSchemeId)
-          } else if (taxCategoryId === "O" || taxSchemeIdFromXml === "9998") {
-            const inafectoScheme = getTaxSchemeByName("Inafecto")
-            taxSchemeId = inafectoScheme?.id || ""
-            console.log("🏷️ Usando tax scheme Inafecto:", taxSchemeId)
-          } else {
-            const otrosScheme = getTaxSchemeByName("Otros")
-            taxSchemeId = otrosScheme?.id || ""
-            console.log("🏷️ Usando tax scheme Otros por defecto:", taxSchemeId)
+          
+          // Manejar casos específicos basados en taxCategoryId
+          if (taxCategoryId === "S") {
+            // Para gravado: buscar IGV (1000) o ISC (2000)
+            const igvScheme = taxSchemes.find(s => s.taxSchemeId === "1000")
+            if (igvScheme) {
+              taxSchemeId = igvScheme.id
+              console.log("🏷️ Usando tax scheme IGV para línea gravada:", taxSchemeId)
+            }
+          } else if (taxCategoryId === "E") {
+            const exoneradoScheme = taxSchemes.find(s => s.taxSchemeId === "9997")
+            if (exoneradoScheme) {
+              taxSchemeId = exoneradoScheme.id
+              console.log("🏷️ Usando tax scheme Exonerado:", taxSchemeId)
+            }
+          } else if (taxCategoryId === "O") {
+            const inafectoScheme = taxSchemes.find(s => s.taxSchemeId === "9998")
+            if (inafectoScheme) {
+              taxSchemeId = inafectoScheme.id
+              console.log("🏷️ Usando tax scheme Inafecto:", taxSchemeId)
+            }
+          } else if (taxCategoryId === "RET 4TA") {
+            // IMPORTANTE: Buscar por tipo de retención específico (Renta 8%)
+            const rentRetentionScheme = taxSchemes.find(s => 
+              s.taxSchemeName === "Retención Renta" && s.taxPercentage === 0.08
+            )
+            if (rentRetentionScheme) {
+              taxSchemeId = rentRetentionScheme.id
+              console.log("🏷️ Usando tax scheme Retención Renta para RHE:", taxSchemeId)
+            }
           }
+        }
+
+        // Si aún no se ha encontrado, usar el esquema "Otros" como valor por defecto
+        if (!taxSchemeId) {
+          const otrosScheme = taxSchemes.find(s => s.taxSchemeId === "9999")
+          taxSchemeId = otrosScheme?.id || ""
+          console.log("🏷️ Usando tax scheme Otros por defecto:", taxSchemeId)
+        }
+
+        // Extraer datos de la línea
+        const quantity = 
+          getLineNumber("cbc\\:InvoicedQuantity") ||
+          getLineNumber("InvoicedQuantity") ||
+          getLineNumber("cbc\\:CreditedQuantity") ||
+          getLineNumber("CreditedQuantity") ||
+          getLineNumber("cbc\\:DebitedQuantity") ||
+          getLineNumber("DebitedQuantity") ||
+          1
+
+        const unitPrice = 
+          getLineNumber("cac\\:Price cbc\\:PriceAmount") || 
+          getLineNumber("Price PriceAmount") ||
+          0
+
+        const lineTotal = 
+          getLineNumber("cbc\\:LineExtensionAmount") || 
+          getLineNumber("LineExtensionAmount") ||
+          (quantity * unitPrice)
+
+        // Manejo especial para RHE con retención
+        let igvAmount = 0
+        let taxableAmount = 0
+        let exemptAmount = 0
+        let inaffectedAmount = 0
+
+        if (taxCategoryId !== "RET 4TA") {
+          igvAmount = getLineNumber("cac\\:TaxTotal cbc\\:TaxAmount") || getLineNumber("TaxTotal TaxAmount") || 0
+          taxableAmount = getLineNumber("cac\\:TaxTotal cac\\:TaxSubtotal cbc\\:TaxableAmount") || 0
+          exemptAmount = taxCategoryId === "E" ? lineTotal : 0
+          inaffectedAmount = taxCategoryId === "O" ? lineTotal : 0
+        } else if (isRHEWithRetention) {
+          // Para líneas de retención en RHE
+          taxableAmount = rheBaseAmount
+          igvAmount = retentionAmount
         }
 
         const lineData = {
           description:
             getLineText("cac\\:Item cbc\\:Description") || getLineText("Item Description") || "Producto/Servicio",
-          quantity:
-            getLineNumber("cbc\\:InvoicedQuantity") ||
-            getLineNumber("InvoicedQuantity") ||
-            getLineNumber("cbc\\:CreditedQuantity") ||
-            getLineNumber("CreditedQuantity") ||
-            getLineNumber("cbc\\:DebitedQuantity") ||
-            getLineNumber("DebitedQuantity") ||
-            1,
+          quantity,
           productCode:
             getLineText("cac\\:Item cbc\\:SellersItemIdentification cbc\\:ID") ||
             getLineText("Item SellersItemIdentification ID") ||
@@ -742,10 +874,10 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
             getLineAttribute("cbc\\:CreditedQuantity", "unitCode") ||
             getLineAttribute("cbc\\:DebitedQuantity", "unitCode") ||
             "NIU",
-          unitPrice: getLineNumber("cac\\:Price cbc\\:PriceAmount") || getLineNumber("Price PriceAmount"),
-          unitPriceWithTax: 0, // Se calculará después
-          lineTotal: getLineNumber("cbc\\:LineExtensionAmount") || getLineNumber("LineExtensionAmount"),
-          igvAmount: getLineNumber("cac\\:TaxTotal cbc\\:TaxAmount") || getLineNumber("TaxTotal TaxAmount") || 0,
+          unitPrice,
+          unitPriceWithTax: unitPrice,
+          lineTotal,
+          igvAmount,
           taxExemptionCode:
             getLineText("cac\\:TaxTotal cac\\:TaxSubtotal cac\\:TaxCategory cbc\\:TaxExemptionReasonCode") ||
             getLineText("TaxTotal TaxSubtotal TaxCategory TaxExemptionReasonCode") ||
@@ -777,18 +909,9 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
           orderLineReference:
             getLineText("cac\\:OrderLineReference cbc\\:LineID") || getLineText("OrderLineReference LineID") || null,
           lineNotes: getLineText("cbc\\:Note") || getLineText("Note") || null,
-          taxableAmount:
-            getLineNumber("cac\\:TaxTotal cac\\:TaxSubtotal cbc\\:TaxableAmount") ||
-            getLineNumber("TaxTotal TaxSubtotal TaxableAmount") ||
-            0,
-          exemptAmount:
-            taxCategoryId === "E"
-              ? getLineNumber("cbc\\:LineExtensionAmount") || getLineNumber("LineExtensionAmount")
-              : 0,
-          inaffectedAmount:
-            taxCategoryId === "O"
-              ? getLineNumber("cbc\\:LineExtensionAmount") || getLineNumber("LineExtensionAmount")
-              : 0,
+          taxableAmount,
+          exemptAmount,
+          inaffectedAmount,
           xmlLineData: JSON.stringify({
             taxCategoryId,
             taxSchemeIdFromXml,
@@ -801,18 +924,12 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
           }),
         }
 
-        // Calcular unitPriceWithTax
-        if (lineData.unitPrice > 0 && lineData.igvAmount > 0) {
-          lineData.unitPriceWithTax = lineData.unitPrice + lineData.igvAmount / lineData.quantity
-        } else {
-          lineData.unitPriceWithTax = lineData.unitPrice
-        }
-
         console.log(`✅ Línea ${index + 1} procesada:`, {
           description: lineData.description,
           taxSchemeId: lineData.taxSchemeId,
           unitPrice: lineData.unitPrice,
           igvAmount: lineData.igvAmount,
+          taxableAmount: lineData.taxableAmount
         })
 
         return lineData
@@ -825,17 +942,18 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
           return !paymentTermsId.includes("retencion") && !paymentTermsId.includes("detraccion")
         })
         .map((element) => ({
-          amount: getNumericValue("cbc\\:Amount", "Amount") || total / 2, // Default split payment
+          amount: getNumericValue("cbc\\:Amount", "Amount") || total / 2,
           dueDate: new Date(getElementText("cbc\\:PaymentDueDate", "PaymentDueDate") || dueDate),
           description: getElementText("cbc\\:Note", "Note") || "Pago según términos acordados",
         }))
 
       // Si no hay payment terms, crear uno por defecto
       if (paymentTerms.length === 0) {
+        const termAmount = documentType === "RECEIPT" ? total : total
         paymentTerms.push({
-          amount: total,
+          amount: termAmount,
           dueDate: new Date(dueDate),
-          description: "Pago total",
+          description: documentType === "RECEIPT" ? "Pago por servicios profesionales" : "Pago total",
         })
       }
 
@@ -856,6 +974,7 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
         throw new Error("Información insuficiente en el XML: falta ID del documento o monto")
       }
 
+      
       // Generate hash
       const xmlHash = `${documentId}-${supplierId}-${total}`.replace(/\s/g, "")
 
@@ -874,7 +993,7 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
         exchangeRate,
         subtotal,
         igv,
-        otherTaxes,
+        otherTaxes: otherTaxes,
         total,
         hasRetention,
         retentionAmount: hasRetention ? retentionAmount : 0,
@@ -912,6 +1031,7 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
               hasDetraction,
               currency,
               exchangeRate,
+              isRHE: documentType === "RECEIPT" && (fileName.toUpperCase().includes("RH") || fileName.toUpperCase().includes("RHE")),
             },
           }),
         },
@@ -930,57 +1050,27 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
         paymentTerms,
       }
 
+      // Validar taxSchemeIds
+      const invalidLines = lines.filter(line => !line.taxSchemeId);
+      if (invalidLines.length > 0) {
+        console.error("❌ Líneas con taxSchemeId inválido:", invalidLines);
+        throw new Error("Algunas líneas tienen taxSchemeId inválido");
+      }
+
       console.log("📤 PAYLOAD COMPLETO PARA CREAR DOCUMENTO:")
-      console.log("=".repeat(80))
-      console.log("📋 Información básica:")
-      console.log("  - companyId:", companyId)
-      console.log("  - documentType:", documentType)
-      console.log("  - series:", series)
-      console.log("  - number:", number)
-      console.log("  - supplierId:", supplierId)
-      console.log("💰 Montos:")
-      console.log("  - subtotal:", subtotal)
-      console.log("  - igv:", igv)
-      console.log("  - total:", total)
-      console.log("  - exchangeRate:", exchangeRate)
-      console.log("🏷️ Retenciones:")
-      console.log("  - hasRetention:", hasRetention)
-      console.log("  - retentionAmount:", hasRetention ? retentionAmount : 0)
-      console.log("  - retentionPercentage:", hasRetention ? retentionPercentage : 0, "(0-1 format)")
-      console.log("💸 Detracciones:")
-      console.log("  - hasDetraction:", hasDetraction)
-      console.log("  - detractionAmount:", hasDetraction ? detractionAmount : 0)
-      console.log("  - detractionPercentage:", hasDetraction ? detractionPercentage : 0, "(0-1 format)")
-      console.log("  - detractionCode:", detractionCode)
-      console.log("📄 Líneas del documento:", lines.length)
+      console.log(JSON.stringify(documentPayload, null, 2))
+      
+      console.log("🔍 Tax Scheme IDs usados en líneas:")
       lines.forEach((line, index) => {
-        console.log(`  Línea ${index + 1}:`, {
-          description: line.description,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-          lineTotal: line.lineTotal,
-          igvAmount: line.igvAmount,
-          taxSchemeId: line.taxSchemeId,
-          productCode: line.productCode,
-        })
-      })
-      console.log("💳 Payment Terms:", paymentTerms.length)
-      paymentTerms.forEach((term, index) => {
-        console.log(`  Término ${index + 1}:`, {
-          amount: term.amount,
-          dueDate: term.dueDate,
-          description: term.description,
-        })
+        console.log(`  Línea ${index + 1}: ${line.taxSchemeId} | ${line.description}`)
       })
 
-      console.log("✅ Documento parseado correctamente con payload completo")
       return documentPayload
     } catch (error) {
       console.error("❌ Error parseando XML:", error)
       return null
     }
   }
-
   // Find or create supplier
   const findOrCreateSupplier = async (supplierData: SupplierData): Promise<string | null> => {
     console.log("🔍 Buscando o creando proveedor:", supplierData.documentNumber)
@@ -1425,27 +1515,32 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
             </div>
 
             {/* Right Panel - XML Preview */}
-            {previewXml && (
-              <div className="w-1/2 flex flex-col border-l pl-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium">Vista previa: {previewXml.fileName}</h3>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setPreviewXml(null)
-                      setFiles((prev) => prev.map((f) => ({ ...f, preview: false })))
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <pre className="text-xs bg-gray-50 p-3 rounded border h-full overflow-auto">{previewXml.content}</pre>
-                </div>
-              </div>
-            )}
+            {previewPayload && (
+  <div className="w-1/2 flex flex-col border-l pl-4">
+    <div className="flex items-center justify-between mb-2">
+      <h3 className="text-sm font-medium">
+        Vista previa: {previewPayload.fileName}
+      </h3>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          setPreviewPayload(null)
+          setFiles((prev) => prev.map((f) => ({ ...f, preview: false })))
+        }}
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+    <div className="flex-1 overflow-hidden">
+      <pre className="text-xs bg-gray-50 p-3 rounded border h-full overflow-auto">
+        {previewPayload.content}
+      </pre>
+    </div>
+  </div>
+)}
+
           </div>
         </DialogContent>
       </Dialog>

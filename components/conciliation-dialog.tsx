@@ -1003,7 +1003,7 @@ export function ConciliationDialog({
                         const pendingAmount =
                           conciliationType === "DOCUMENTS"
                             ? Number.parseFloat(document.pendingAmount || "0")
-                            : Number.parseFloat(document.detraction?.pendingAmount || "0")
+                            : Number.parseFloat(document.detraction?.amount || "0")
 
                         return (
                           <div

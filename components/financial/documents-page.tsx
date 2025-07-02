@@ -401,19 +401,17 @@ export default function DocumentsPage() {
         </Card>
 
         {/* Documents Table */}
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Documentos ({loading ? "..." : pagination.total})
+ 
+            <div className="flex justify-start items-center font-semibold">
+   
+                <FileText className="w-5 h-5 mr-2" />
+                  Documentos ({loading ? "..." : pagination.total})
                 {selectedDocumentIds.length > 0 && (
                   <span className="text-sm text-primary font-medium ml-2">
                     ({selectedDocumentIds.length} seleccionado(s))
                   </span>
                 )}
-              </CardTitle>
-              <div>
+               <div>
                 {selectedDocumentIds.length > 0 && (
                   <Button
                     variant="destructive"
@@ -426,8 +424,7 @@ export default function DocumentsPage() {
                 )}
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
+  
             {loading ? (
               <TableSkeleton rows={8} columns={14} />
             ) : (
@@ -465,7 +462,7 @@ export default function DocumentsPage() {
                         <TableHead className="text-right">IGV</TableHead>
                         <TableHead className="text-right">Total</TableHead>
                         <TableHead className="text-right">Detracción</TableHead>
-                        <TableHead className="text-right">Neto a Pagar</TableHead>
+                        <TableHead className="text-right">Pendiente</TableHead>
                         <TableHead className="text-center">Estado</TableHead>
                         <TableHead className="text-center">Acciones</TableHead>
                       </TableRow>
@@ -498,7 +495,7 @@ export default function DocumentsPage() {
                             <TableCell className="font-mono">{doc.fullNumber}</TableCell>
                             <TableCell>{formatDate(doc.issueDate)}</TableCell>
                             <TableCell>{doc.dueDate ? formatDate(doc.dueDate) : "-"}</TableCell>
-                            <TableCell className="max-w-xs truncate" title={doc.supplier?.businessName || ""}>
+                            <TableCell className="max-w-[200px] truncate" title={doc.supplier?.businessName || ""}>
                               {doc.supplier?.businessName || "Sin proveedor"}
                             </TableCell>
                             <TableCell className="font-mono">{doc.supplier?.documentNumber || "Sin RUC"}</TableCell>
@@ -515,7 +512,7 @@ export default function DocumentsPage() {
                                 : "-"}
                             </TableCell>
                             <TableCell className="text-right font-mono font-semibold text-green-600 dark:text-green-400">
-                              {formatCurrency(doc.netPayableAmount, doc.currency)}
+                              {formatCurrency(doc.pendingAmount, doc.currency)}
                             </TableCell>
                             <TableCell className="text-center">{getStatusBadge(doc.status)}</TableCell>
                             <TableCell className="text-center">
@@ -589,8 +586,7 @@ export default function DocumentsPage() {
                 )}
               </>
             )}
-          </CardContent>
-        </Card>
+   
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

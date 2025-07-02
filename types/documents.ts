@@ -181,8 +181,8 @@ export interface DocumentDetraction extends BaseEntity {
   paymentDate: Date | null
   paymentReference: string | null
   isConciliated: boolean
-  conciliatedAmount: string // Decimal en schema
-  pendingAmount: string // Decimal en schema
+  // conciliatedAmount: string // Decimal en schema
+  // pendingAmount: string // Decimal en schema
   conciliationId: string | null
 
   // Relaciones

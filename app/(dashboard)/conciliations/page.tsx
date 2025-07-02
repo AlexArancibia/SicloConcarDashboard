@@ -1,4 +1,4 @@
-"use client"
+ "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
@@ -35,6 +35,7 @@ import type { Document, DocumentStatus, DocumentType } from "@/types/documents"
 import type { Transaction } from "@/types/transactions"
 import type { ConciliationType } from "@/types/conciliations"
 import { useToast } from "@/hooks/use-toast"
+import { DetractionConciliationDialog } from "@/components/detraction-conciliation-dialog"
 
 const DEBUG_MODE = true
 
@@ -220,10 +221,10 @@ export default function ConciliationsPage() {
     return { availableTransactions: paginatedTransactions, totalTransactionPages: totalPages }
   }, [transactions, transactionFilters, transactionPage, transactionItemsPerPage, isTransactionConciliated])
 
-  // Get available documents for conciliation with filters - FIXED: Removed restrictive accounting validation
+  // Get available documents for conciliation with filters
   const { availableDocuments, totalDocumentPages } = useMemo(() => {
     let filtered = documents.filter((doc) => {
-      // Basic availability criteria - SIMPLIFIED
+      // Basic availability criteria
       const hasValidStatus = doc.status === "APPROVED"
       const hasValidAmount = Number.parseFloat(doc.pendingAmount || "0") > 0
 
@@ -268,20 +269,14 @@ export default function ConciliationsPage() {
 
     if (documentFilters.minAmount) {
       filtered = filtered.filter((doc) => {
-        const amount =
-          conciliationType === "DETRACTIONS"
-            ? Number.parseFloat(doc.detraction?.pendingAmount || "0")
-            : Number.parseFloat(doc.pendingAmount || "0")
+        const amount = Number.parseFloat(doc.pendingAmount || "0")
         return amount >= Number.parseFloat(documentFilters.minAmount)
       })
     }
 
     if (documentFilters.maxAmount) {
       filtered = filtered.filter((doc) => {
-        const amount =
-          conciliationType === "DETRACTIONS"
-            ? Number.parseFloat(doc.detraction?.pendingAmount || "0")
-            : Number.parseFloat(doc.pendingAmount || "0")
+        const amount = Number.parseFloat(doc.pendingAmount || "0")
         return amount <= Number.parseFloat(documentFilters.maxAmount)
       })
     }
@@ -300,16 +295,19 @@ export default function ConciliationsPage() {
     })
 
     return { availableDocuments: paginatedDocuments, totalDocumentPages: totalPages }
-  }, [documents, documentFilters, conciliationType, documentPage, documentItemsPerPage])
+  }, [documents, documentFilters, documentPage, documentItemsPerPage])
 
-  // Get available detractions with filters - FIXED: Removed restrictive accounting validation
+  // Get available detractions with filters - Updated for new schema
   const { availableDetractions, totalDetractionPages } = useMemo(() => {
     let filtered = documents.filter((doc) => {
       const hasValidStatus = doc.status === "APPROVED"
       const hasDetraction = doc.detraction?.hasDetraction
-      const hasValidAmount = Number.parseFloat(doc.detraction?.pendingAmount || "0") > 0
+      // Calculate pending amount based on new schema
+      const detractionAmount = Number.parseFloat(doc.detraction?.amount || "0")
+      const isConciliated = doc.detraction?.isConciliated || false
+      const hasValidAmount = hasDetraction && !isConciliated && detractionAmount > 0
 
-      return hasValidStatus && hasDetraction && hasValidAmount
+      return hasValidStatus && hasValidAmount
     })
 
     // Apply same filters as documents
@@ -338,14 +336,14 @@ export default function ConciliationsPage() {
 
     if (documentFilters.minAmount) {
       filtered = filtered.filter((doc) => {
-        const amount = Number.parseFloat(doc.detraction?.pendingAmount || "0")
+        const amount = Number.parseFloat(doc.detraction?.amount || "0")
         return amount >= Number.parseFloat(documentFilters.minAmount)
       })
     }
 
     if (documentFilters.maxAmount) {
       filtered = filtered.filter((doc) => {
-        const amount = Number.parseFloat(doc.detraction?.pendingAmount || "0")
+        const amount = Number.parseFloat(doc.detraction?.amount || "0")
         return amount <= Number.parseFloat(documentFilters.maxAmount)
       })
     }
@@ -383,7 +381,6 @@ export default function ConciliationsPage() {
     debugLog("Transaction selected", { transactionId: transaction.id, amount: transaction.amount })
   }
 
-  // UPDATED: Handle document selection with improved accounting validation
   const handleDocumentSelect = async (document: Document) => {
     const isSelected = selectedDocuments.some((doc) => doc.id === document.id)
 
@@ -406,11 +403,11 @@ export default function ConciliationsPage() {
 
       setSelectedDocuments((prev) => [...prev, document])
 
-      // Set default conciliation amount to full pending amount
+      // Set default conciliation amount
       const defaultAmount =
         conciliationType === "DOCUMENTS"
           ? Number.parseFloat(document.pendingAmount || "0")
-          : Number.parseFloat(document.detraction?.pendingAmount || "0")
+          : Number.parseFloat(document.detraction?.amount || "0")
 
       setDocumentConciliationAmounts((prev) => ({
         ...prev,
@@ -975,9 +972,9 @@ export default function ConciliationsPage() {
                         (document) => {
                           const isSelected = selectedDocuments.some((doc) => doc.id === document.id)
                           const pendingAmount =
-                            conciliationType === "DOCUMENTS"
-                              ? Number.parseFloat(document.pendingAmount || "0")
-                              : Number.parseFloat(document.detraction?.pendingAmount || "0")
+                          conciliationType === "DOCUMENTS"
+                            ? Number.parseFloat(document.pendingAmount || "0")
+                            : Number.parseFloat(document.detraction?.amount || "0")
                           const conciliationAmount = documentConciliationAmounts[document.id] || pendingAmount
                           const hasAccounting = document.accountLinks && document.accountLinks.length > 0
                           const hasCostCenters = document.costCenterLinks && document.costCenterLinks.length > 0
@@ -1039,7 +1036,7 @@ export default function ConciliationsPage() {
                                 <div className="font-bold">{formatCurrency(pendingAmount)}</div>
                                 {document.detraction?.hasDetraction && conciliationType === "DOCUMENTS" && (
                                   <Badge variant="secondary" className="text-xs mt-1">
-                                    Det: {formatCurrency(document.detraction.pendingAmount)}
+                                    Det: {formatCurrency(document.detraction.amount)}
                                   </Badge>
                                 )}
                                 {document.hasRetention && (
@@ -1144,11 +1141,11 @@ export default function ConciliationsPage() {
                   Conciliación{" "}
                   {getSelectedTotal() <
                   selectedDocuments.reduce((sum, doc) => {
-                    const pendingAmount =
+                    const totalAmount =
                       conciliationType === "DOCUMENTS"
                         ? Number.parseFloat(doc.pendingAmount || "0")
-                        : Number.parseFloat(doc.detraction?.pendingAmount || "0")
-                    return sum + pendingAmount
+                        : Number.parseFloat(doc.detraction?.amount || "0")
+                    return sum + totalAmount
                   }, 0)
                     ? "parcial"
                     : "completa"}
@@ -1347,7 +1344,7 @@ export default function ConciliationsPage() {
       </Card>
 
       {/* Conciliation Dialog */}
-      <ConciliationDialog
+      {conciliationType === "DOCUMENTS" ? (<ConciliationDialog
         open={showConciliationDialog}
         onOpenChange={setShowConciliationDialog}
         selectedTransaction={selectedTransaction}
@@ -1355,7 +1352,15 @@ export default function ConciliationsPage() {
         documentConciliationAmounts={documentConciliationAmounts}
         conciliationType={conciliationType}
         bankAccounts={bankAccounts}
-      />
+      />) :  <DetractionConciliationDialog
+          open={showConciliationDialog}
+          onOpenChange={setShowConciliationDialog}
+          selectedTransaction={selectedTransaction}
+          selectedDocuments={selectedDocuments}
+          documentConciliationAmounts={documentConciliationAmounts}
+          bankAccounts={bankAccounts}
+        />}
+      
     </div>
   )
 }
