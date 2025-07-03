@@ -292,21 +292,17 @@ export interface Conciliation extends BaseEntity {
   documentDetractions?: Array<{
     id: string
     amount: number
+    code: string
+
     document: {
       id: string
       fullNumber: string
-      code: string
       total: number
-      document: {
-        id:string
-        fullNumber:string
-        issueDate:Date
-        total:number
-        currency:string
+      currency:string
+ 
         supplier:{
           id:string
           businessName:string
-        }
       }
     }
   }>
@@ -359,8 +355,6 @@ export interface ConciliationItem extends BaseEntity {
   conciliatedAmount: string // Decimal en schema
   difference: string // Decimal en schema
   distributionPercentage: string // Decimal en schema
-  detractionAmount: string // Decimal en schema
-  retentionAmount: string // Decimal en schema
   status: ConciliationItemStatus
   notes: string | null
   systemNotes: string | null
@@ -619,8 +613,6 @@ export interface CreateConciliationItemDto {
   conciliatedAmount: number
   difference: number
   distributionPercentage?: number
-  detractionAmount?: number
-  retentionAmount?: number
   status?: ConciliationItemStatus
   notes?: string
   systemNotes?: string
@@ -676,6 +668,7 @@ export interface UpdateConciliationDto {
   notes?: string
   approvedById?: string
   completedAt?: string | Date
+  detractionIds?:string[]
 }
 
 export interface UpdateConciliationItemDto {
@@ -685,8 +678,6 @@ export interface UpdateConciliationItemDto {
   conciliatedAmount?: number
   difference?: number
   distributionPercentage?: number
-  detractionAmount?: number
-  retentionAmount?: number
   status?: ConciliationItemStatus
   notes?: string
   systemNotes?: string

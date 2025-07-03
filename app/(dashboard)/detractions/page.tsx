@@ -34,7 +34,7 @@ const formatCurrency = (amount: string | number | null | undefined, currency = "
   return `${symbol} ${numAmount.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// Status and Type Badges (can be moved to a shared util if used in many places)
+// Status and Type Badges
 const getDocumentStatusBadge = (status?: DocumentStatus) => {
   if (!status) return <Badge variant="outline">Desconocido</Badge>;
   const statusConfig = {
@@ -63,6 +63,12 @@ const getDocumentTypeBadge = (type?: DocumentType) => {
   return <Badge variant="outline" className={config.class}>{config.label}</Badge>;
 }
 
+const getDetractionStatusBadge = (paymentDate?: Date | string | null) => {
+  if (!paymentDate) {
+    return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">Pendiente</Badge>;
+  }
+  return <Badge variant="outline" className="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20">Pagada</Badge>;
+};
 
 export default function DetractionsPage() {
   const { company, user } = useAuthStore();
@@ -82,16 +88,15 @@ export default function DetractionsPage() {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
-  const [selectedDetractionIds, setSelectedDetractionIds] = useState<string[]>([]); // Using document IDs for selection
+  const [selectedDetractionIds, setSelectedDetractionIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (company?.id) {
-      // Fetch all documents initially, filtering will be client-side for now or can be API-side
-      fetchDocuments(company.id, { page: 1, limit: 1000 }); // Fetch a large number for client-side filtering
+      fetchDocuments(company.id, { page: 1, limit: 1000 });
     }
   }, [company?.id, fetchDocuments]);
 
- useEffect(() => {
+  useEffect(() => {
     if (error) {
       toast({ title: "Error", description: error, variant: "destructive" });
       clearError();
@@ -121,11 +126,11 @@ export default function DetractionsPage() {
           passes = passes && new Date(doc.issueDate) <= filters.dateRange.to;
         }
         if (filters.detractionStatus !== "all") {
-          const pendingAmount = parseFloat(doc.detraction?.pendingAmount || "0");
+          const hasPayment = !!doc.detraction?.paymentDate;
           if (filters.detractionStatus === "paid") {
-            passes = passes && pendingAmount === 0;
+            passes = passes && hasPayment;
           } else if (filters.detractionStatus === "pending") {
-            passes = passes && pendingAmount > 0;
+            passes = passes && !hasPayment;
           }
         }
         return passes;
@@ -143,15 +148,12 @@ export default function DetractionsPage() {
 
   const handleFilterChange = (key: string, value: any) => {
     setFilters(prev => ({ ...prev, [key]: value }));
-    setCurrentPage(1); // Reset to first page when filters change
+    setCurrentPage(1);
   };
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
   };
-  
-  // TODO: Implement if bulk actions on detractions are needed
-  // const handleDeleteSelectedDetractions = async () => { ... }
 
   const filterConfigs = [
     { key: "search", type: "search" as const, placeholder: "Buscar N°, Proveedor, RUC..." },
@@ -188,8 +190,9 @@ export default function DetractionsPage() {
           <p className="text-muted-foreground">Visualiza y gestiona las detracciones de documentos.</p>
         </div>
         <div className="flex gap-2">
-          {/* <Button variant="outline" size="sm"> <Download className="w-4 h-4 mr-2" /> Exportar </Button> */}
-          {/* Add other actions if needed */}
+          <Button variant="outline" size="sm">
+            <Download className="w-4 h-4 mr-2" /> Exportar
+          </Button>
         </div>
       </div>
 
@@ -208,36 +211,17 @@ export default function DetractionsPage() {
                 </span>
               )}
             </CardTitle>
-            {/* {selectedDetractionIds.length > 0 && (
-              <Button variant="destructive" size="sm" onClick={handleDeleteSelectedDetractions} >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Eliminar Seleccionadas
-              </Button>
-            )} */}
           </div>
         </CardHeader>
         <CardContent>
           {loading && paginatedDetractions.length === 0 ? (
-            <TableSkeleton rows={itemsPerPage} columns={8} />
+            <TableSkeleton rows={itemsPerPage} columns={9} />
           ) : (
             <>
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {/* <TableHead className="w-12 px-2">
-                        <Checkbox
-                          checked={ paginatedDetractions.length > 0 && selectedDetractionIds.length === paginatedDetractions.length}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedDetractionIds(paginatedDetractions.map((d) => d.id))
-                            } else {
-                              setSelectedDetractionIds([])
-                            }
-                          }}
-                          aria-label="Seleccionar todas las detracciones en esta página"
-                        />
-                      </TableHead> */}
                       <TableHead>Tipo Doc.</TableHead>
                       <TableHead>Documento</TableHead>
                       <TableHead>Proveedor</TableHead>
@@ -245,7 +229,7 @@ export default function DetractionsPage() {
                       <TableHead className="text-right">Monto Total</TableHead>
                       <TableHead>Cod. Detracción</TableHead>
                       <TableHead className="text-right">Monto Detracción</TableHead>
-                      <TableHead className="text-right">Pendiente Det.</TableHead>
+                      <TableHead>Estado Detracción</TableHead>
                       <TableHead>Fecha Pago Det.</TableHead>
                       <TableHead className="text-center">Estado Doc.</TableHead>
                       <TableHead className="text-center">Acciones</TableHead>
@@ -254,27 +238,13 @@ export default function DetractionsPage() {
                   <TableBody>
                     {paginatedDetractions.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="h-24 text-center">
+                        <TableCell colSpan={11} className="h-24 text-center">
                           No se encontraron detracciones con los filtros aplicados.
                         </TableCell>
                       </TableRow>
                     ) : (
                       paginatedDetractions.map((doc) => (
-                        <TableRow 
-                          key={doc.id}
-                          data-state={selectedDetractionIds.includes(doc.id) && "selected"}
-                        >
-                          {/* <TableCell className="px-2">
-                            <Checkbox
-                              checked={selectedDetractionIds.includes(doc.id)}
-                              onCheckedChange={(checked) => {
-                                setSelectedDetractionIds((prev) =>
-                                  checked ? [...prev, doc.id] : prev.filter((id) => id !== doc.id),
-                                )
-                              }}
-                              aria-label={`Seleccionar detracción del documento ${doc.fullNumber}`}
-                            />
-                          </TableCell> */}
+                        <TableRow key={doc.id}>
                           <TableCell>{getDocumentTypeBadge(doc.documentType)}</TableCell>
                           <TableCell className="font-mono">{doc.fullNumber}</TableCell>
                           <TableCell className="max-w-xs truncate" title={doc.supplier?.businessName || ""}>
@@ -284,10 +254,8 @@ export default function DetractionsPage() {
                           <TableCell className="text-right font-mono">{formatCurrency(doc.total, doc.currency)}</TableCell>
                           <TableCell>{doc.detraction?.code || "-"}</TableCell>
                           <TableCell className="text-right font-mono">{formatCurrency(doc.detraction?.amount, doc.currency)}</TableCell>
-                          <TableCell className="text-right font-mono font-semibold text-orange-600 dark:text-orange-400">
-                            {formatCurrency(doc.detraction?.pendingAmount, doc.currency)}
-                          </TableCell>
-                          <TableCell>{formatDate(doc.detraction?.paymentDate)}</TableCell>
+                          <TableCell>{getDetractionStatusBadge(doc.detraction?.paymentDate)}</TableCell>
+                          <TableCell>{doc.detraction?.paymentDate ? formatDate(doc.detraction.paymentDate) : "-"}</TableCell>
                           <TableCell className="text-center">{getDocumentStatusBadge(doc.status)}</TableCell>
                           <TableCell className="text-center">
                             <DropdownMenu>
@@ -304,7 +272,6 @@ export default function DetractionsPage() {
                                     <Eye className="mr-2 h-4 w-4" /> Ver Documento
                                   </Link>
                                 </DropdownMenuItem>
-                                {/* Add other actions like "Mark as Paid" if needed */}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>

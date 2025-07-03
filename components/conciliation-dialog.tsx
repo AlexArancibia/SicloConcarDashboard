@@ -708,8 +708,6 @@ export function ConciliationDialog({
           conciliatedAmount: conciliationAmount,
           difference: Math.abs(documentTotal - conciliationAmount),
           distributionPercentage: conciliationAmount / documentTotal,
-          detractionAmount: conciliationType === "DETRACTIONS" ? conciliationAmount : 0,
-          retentionAmount: 0,
           status: conciliationAmount < documentTotal ? "PARTIAL" : "MATCHED",
           notes: conciliationAmount < documentTotal ? "Conciliación parcial" : undefined,
           systemNotes: `Documento ${document.fullNumber} conciliado`,

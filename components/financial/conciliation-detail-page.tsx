@@ -253,13 +253,13 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
           </p>
         </div>
       </div>
-      <div className="pt-2">
+      {/* <div className="pt-2">
         <Link href={`/transactions?search=${conciliation?.transaction?.operationNumber}`}>
           <Button variant="link" size="sm" className="p-0 h-auto text-blue-600 dark:text-blue-400">
             Ver Transacción Completa <ArrowRight className="h-3 w-3 ml-1"/>
           </Button>
         </Link>
-      </div>
+      </div> */}
     </div>
   )
 
@@ -330,16 +330,16 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
           {conciliation?.documentDetractions?.map((detraction) => (
             <TableRow key={detraction.id} className="border-slate-200 dark:border-slate-700">
               <TableCell className="font-mono text-slate-800 dark:text-slate-200">
-                {detraction.document.document.fullNumber}
+                {detraction.document.fullNumber}
               </TableCell>
               <TableCell className="text-slate-700 dark:text-slate-300">
-                {detraction.document.document.supplier.businessName}
+                {detraction.document.supplier.businessName}
               </TableCell>
               <TableCell className="text-right text-slate-700 dark:text-slate-300">
                 {formatCurrency(detraction.amount)}
               </TableCell>
               <TableCell className="text-right font-semibold text-slate-800 dark:text-slate-200">
-                {formatCurrency(detraction.document.document.total)}
+                {formatCurrency(detraction.document.total)}
               </TableCell>
               <TableCell className="text-center">
                 <Link href={`/documents/${detraction.document.id}`}>
@@ -440,7 +440,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-700 dark:text-blue-300 text-sm font-medium mb-1">Saldo Bancario</p>
+                <p className="text-blue-700 dark:text-blue-300 text-sm font-medium mb-1">Monto de Transacción</p>
                 <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                   {formatCurrency(conciliation?.bankBalance)}
                 </p>
@@ -456,7 +456,10 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-emerald-700 dark:text-emerald-300 text-sm font-medium mb-1">Saldo Contable</p>
+                <p className="text-emerald-700 dark:text-emerald-300 text-sm font-medium mb-1">{
+                  conciliation?.type === "DETRACTIONS" ? "Monto Detracciones" : "Monto Documentos"
+  
+    }</p>
                 <p className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">
                   {formatCurrency(conciliation?.bookBalance)}
                 </p>

@@ -1,6 +1,7 @@
 import type { BaseEntity } from "./common"
 import type { Company } from "./auth"
 import type { PaginationDto } from "./common"
+import { Conciliation } from "./conciliations"
 
 // Enums basados en el schema de Prisma
 export type DocumentType = "INVOICE" | "CREDIT_NOTE" | "DEBIT_NOTE" | "RECEIPT" | "PURCHASE_ORDER" | "CONTRACT"
@@ -187,7 +188,7 @@ export interface DocumentDetraction extends BaseEntity {
 
   // Relaciones
   document?: Document
-  conciliation?: any
+  conciliation?: Conciliation
 }
 
 export interface DocumentAccountLink extends BaseEntity {
