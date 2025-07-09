@@ -21,6 +21,7 @@ import {
   ChevronRight,
   AlertTriangle,
   Trash2,
+  Info,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FiltersBar } from "@/components/ui/filters-bar"
@@ -304,81 +305,111 @@ export default function ConciliationsPage() {
   }, [transactions, transactionFilters, transactionPage, transactionItemsPerPage, isTransactionConciliated])
 
   // Get available documents for conciliation with filters
-  const { availableDocuments, totalDocumentPages } = useMemo(() => {
-    let filtered = documents.filter((doc) => {
-      // Basic availability criteria
-      const hasValidStatus = doc.status === "APPROVED"
-      const hasValidAmount = Number.parseFloat(doc.pendingAmount || "0") > 0
+const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo(() => {
+  let filtered = documents.filter((doc) => {
+    // Basic availability criteria
+    const hasValidStatus = doc.status === "APPROVED"
+    const hasValidAmount = Number.parseFloat(doc.pendingAmount || "0") > 0
+    return hasValidStatus && hasValidAmount
+  })
 
-      return hasValidStatus && hasValidAmount
+  // Special handling for TRANSFER_INBANK transactions
+  let matchingAccountCount = 0
+  if (selectedTransaction?.transactionType === "TRANSFER_INBANK") {
+    const numbersOnly = selectedTransaction.description?.replace(/\D/g, '') || ''
+    
+    if (numbersOnly) {
+      const docsWithMatchingAccount = []
+      const otherDocs = []
+      
+      for (const doc of filtered) {
+        const hasMatchingAccount = doc.supplier?.supplierBankAccounts?.some(acc => {
+          const accNumberClean = acc.accountNumber?.replace(/\D/g, '')
+          return accNumberClean && accNumberClean.includes(numbersOnly)
+        })
+        
+        if (hasMatchingAccount) {
+          docsWithMatchingAccount.push(doc)
+          matchingAccountCount++
+        } else {
+          otherDocs.push(doc)
+        }
+      }
+      
+      filtered = [...docsWithMatchingAccount, ...otherDocs]
+    }
+  }
+
+  // Apply filters
+  if (documentFilters.search) {
+    filtered = filtered.filter(
+      (doc) =>
+        doc.fullNumber?.toLowerCase().includes(documentFilters.search.toLowerCase()) ||
+        doc.supplier?.businessName?.toLowerCase().includes(documentFilters.search.toLowerCase()) ||
+        doc.supplier?.documentNumber?.toLowerCase().includes(documentFilters.search.toLowerCase()),
+    )
+  }
+
+  if (documentFilters.dateRange.from) {
+    filtered = filtered.filter((doc) => new Date(doc.issueDate) >= documentFilters.dateRange.from!)
+  }
+
+  if (documentFilters.dateRange.to) {
+    filtered = filtered.filter((doc) => new Date(doc.issueDate) <= documentFilters.dateRange.to!)
+  }
+
+  if (documentFilters.supplier) {
+    filtered = filtered.filter((doc) =>
+      doc.supplier?.businessName?.toLowerCase().includes(documentFilters.supplier.toLowerCase()),
+    )
+  }
+
+  if (documentFilters.status && documentFilters.status !== "all") {
+    filtered = filtered.filter((doc) => doc.status === documentFilters.status)
+  }
+
+  if (documentFilters.type && documentFilters.type !== "all") {
+    filtered = filtered.filter((doc) => doc.documentType === documentFilters.type)
+  }
+
+  if (documentFilters.currency && documentFilters.currency !== "all") {
+    filtered = filtered.filter((doc) => doc.currency === documentFilters.currency)
+  }
+
+  if (documentFilters.minAmount) {
+    filtered = filtered.filter((doc) => {
+      const amount = Number.parseFloat(doc.pendingAmount || "0")
+      return amount >= Number.parseFloat(documentFilters.minAmount)
     })
+  }
 
-    // Apply filters
-    if (documentFilters.search) {
-      filtered = filtered.filter(
-        (doc) =>
-          doc.fullNumber?.toLowerCase().includes(documentFilters.search.toLowerCase()) ||
-          doc.supplier?.businessName?.toLowerCase().includes(documentFilters.search.toLowerCase()) ||
-          doc.supplier?.documentNumber?.toLowerCase().includes(documentFilters.search.toLowerCase()),
-      )
-    }
-
-    if (documentFilters.dateRange.from) {
-      filtered = filtered.filter((doc) => new Date(doc.issueDate) >= documentFilters.dateRange.from!)
-    }
-
-    if (documentFilters.dateRange.to) {
-      filtered = filtered.filter((doc) => new Date(doc.issueDate) <= documentFilters.dateRange.to!)
-    }
-
-    if (documentFilters.supplier) {
-      filtered = filtered.filter((doc) =>
-        doc.supplier?.businessName?.toLowerCase().includes(documentFilters.supplier.toLowerCase()),
-      )
-    }
-
-    if (documentFilters.status && documentFilters.status !== "all") {
-      filtered = filtered.filter((doc) => doc.status === documentFilters.status)
-    }
-
-    if (documentFilters.type && documentFilters.type !== "all") {
-      filtered = filtered.filter((doc) => doc.documentType === documentFilters.type)
-    }
-
-    if (documentFilters.currency && documentFilters.currency !== "all") {
-      filtered = filtered.filter((doc) => doc.currency === documentFilters.currency)
-    }
-
-    if (documentFilters.minAmount) {
-      filtered = filtered.filter((doc) => {
-        const amount = Number.parseFloat(doc.pendingAmount || "0")
-        return amount >= Number.parseFloat(documentFilters.minAmount)
-      })
-    }
-
-    if (documentFilters.maxAmount) {
-      filtered = filtered.filter((doc) => {
-        const amount = Number.parseFloat(doc.pendingAmount || "0")
-        return amount <= Number.parseFloat(documentFilters.maxAmount)
-      })
-    }
-
-    const totalPages = Math.ceil(filtered.length / documentItemsPerPage)
-    const startIndex = (documentPage - 1) * documentItemsPerPage
-    const endIndex = startIndex + documentItemsPerPage
-    const paginatedDocuments = filtered.slice(startIndex, endIndex)
-
-    debugLog("Available documents for conciliation", {
-      total: filtered.length,
-      page: documentPage,
-      withoutAccounting: documents.filter(
-        (d) => d.status === "APPROVED" && (!d.accountLinks || d.accountLinks.length === 0),
-      ).length,
+  if (documentFilters.maxAmount) {
+    filtered = filtered.filter((doc) => {
+      const amount = Number.parseFloat(doc.pendingAmount || "0")
+      return amount <= Number.parseFloat(documentFilters.maxAmount)
     })
+  }
 
-    return { availableDocuments: paginatedDocuments, totalDocumentPages: totalPages }
-  }, [documents, documentFilters, documentPage, documentItemsPerPage])
+  const totalPages = Math.ceil(filtered.length / documentItemsPerPage)
+  const startIndex = (documentPage - 1) * documentItemsPerPage
+  const endIndex = startIndex + documentItemsPerPage
+  const paginatedDocuments = filtered.slice(startIndex, endIndex)
 
+  debugLog("Available documents for conciliation", { 
+    total: filtered.length,
+    page: documentPage,
+    matchingAccountCount,
+    withoutAccounting: documents.filter(
+      (d) => d.status === "APPROVED" && (!d.accountLinks || d.accountLinks.length === 0),
+    ).length,
+  })
+
+  return { 
+    availableDocuments: paginatedDocuments, 
+    totalDocumentPages: totalPages,
+    matchingAccountCount
+  }
+}, [documents, documentFilters, documentPage, documentItemsPerPage, selectedTransaction])
   // Get available detractions with filters
   const { availableDetractions, totalDetractionPages } = useMemo(() => {
     let filtered = documents.filter((doc) => {
@@ -460,7 +491,25 @@ export default function ConciliationsPage() {
     setSelectedDocuments([])
     setDocumentConciliationAmounts({})
     debugLog("Transaction selected", { transactionId: transaction.id, amount: transaction.amount })
+
+    if (transaction.transactionType === "TRANSFER_INBANK") {
+  // Extraemos todos los números de la descripción y los unimos
+  const numbersOnly = transaction.description?.replace(/\D/g, '') || ''
+  
+  if (numbersOnly) {
+    debugLog("Transferencia interna detectada", { accountNumber: numbersOnly })
+    
+    // También podemos mostrar un toast informativo
+    toast({
+      title: "Transferencia interna detectada",
+      description: `Buscando documentos con cuenta bancaria: ${numbersOnly}`,
+    })
   }
+}
+
+  }
+
+  
 
   const handleDocumentSelect = async (document: Document) => {
     const isSelected = selectedDocuments.some((doc) => doc.id === document.id)
@@ -1191,8 +1240,11 @@ export default function ConciliationsPage() {
                             const isSelected = selectedDocuments.some((doc) => doc.id === document.id)
                             const pendingAmount = Number.parseFloat(document.pendingAmount || "0")
                             const conciliationAmount = documentConciliationAmounts[document.id] || pendingAmount
-                            const hasAccounting = document.accountLinks && document.accountLinks.length > 0
-                            const hasCostCenters = document.costCenterLinks && document.costCenterLinks.length > 0
+                            const hasMatchingAccount = selectedTransaction?.transactionType === "TRANSFER_INBANK" && 
+                              document.supplier?.supplierBankAccounts?.some(acc => {
+                                const accountMatch = selectedTransaction.description?.match(/\d{3}\s\d{8}\s\d/)
+                                return accountMatch && acc.accountNumber === accountMatch[0]
+                              })
 
                             return (
                               <TableRow
@@ -1204,14 +1256,17 @@ export default function ConciliationsPage() {
                                 <TableCell>
                                   <Checkbox checked={isSelected} aria-label="Seleccionar documento" />
                                 </TableCell>
-                                <TableCell>
+                                <TableCell >
                                   <div className="flex items-start gap-2">
                                     {getTypeBadge(document.documentType)}
                                     <div>
                                       <div className="font-medium">{document.fullNumber}</div>
-                                      <div className="text-xs text-muted-foreground">
-                                        {document.supplier?.documentNumber}
-                                      </div>
+                                      {hasMatchingAccount && (
+                                        <Badge variant="outline" className="text-xs bg-green-100 text-green-800">
+                                          Cuenta coincidente
+                                        </Badge>
+                                      )}
+ 
                                       {document.detraction?.hasDetraction && (
                                         <Badge variant="secondary" className="text-xs mt-1">
                                           Detracción
@@ -1221,11 +1276,17 @@ export default function ConciliationsPage() {
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <div className="truncate max-w-xs" title={document.supplier?.businessName}>
-                                    {document.supplier?.businessName}
-                                  </div>
-                                  {getStatusBadge(document.status)}
-                                </TableCell>
+                                <div className="truncate max-w-xs" title={document.supplier?.businessName}>
+                                  {document.supplier?.businessName}
+                                  {document.supplier?.documentNumber && (
+                                    <span className="text-xs text-muted-foreground block">
+                                      {document.supplier.documentNumber}
+                                    </span>
+                                  )}
+                                  {formatBankAccounts(document.supplier?.supplierBankAccounts)}
+                                </div>
+                                {/* {getStatusBadge(document.status)} */}
+                              </TableCell>
                                 <TableCell>
                                   <div className="text-sm">
                                     Emisión: {formatDate(document.issueDate)}
@@ -1315,6 +1376,14 @@ export default function ConciliationsPage() {
           {selectedTransaction && selectedDocuments.length > 0 && (
             <Card>
               <CardContent className="p-6">
+                {selectedTransaction?.transactionType === "TRANSFER_INBANK" && (
+              <Alert className="mb-4">
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Se detectó una transferencia interna. Se están mostrando primero los documentos del proveedor con la cuenta {selectedTransaction.description?.match(/\d{3}\s\d{8}\s\d/)?.[0]}.
+                </AlertDescription>
+              </Alert>
+            )}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
                   <div className="text-center">
                     <div className="text-sm text-muted-foreground">Transacción</div>
@@ -1925,3 +1994,31 @@ export default function ConciliationsPage() {
     </div>
   )
 }
+
+const formatBankAccounts = (bankAccounts?: Array<{
+  id: string;
+  bankId: string;
+  accountNumber: string;
+  accountType: string;
+  currency: string;
+  bank?: {
+    name: string;
+    code: string;
+  };
+}>) => {
+  if (!bankAccounts || bankAccounts.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-1 space-y-1">
+      {bankAccounts.map((account) => (
+        <div key={account.id} className="text-xs text-muted-foreground flex items-center gap-1">
+          <span className="font-bold">{account.bank?.name || 'Banco'}:</span>
+          <span>{account.accountNumber}</span>
+          <span>{account.currency}</span>
+        </div>
+      ))}
+    </div>
+  );
+};

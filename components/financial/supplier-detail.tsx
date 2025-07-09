@@ -2,7 +2,14 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { 
+  Card, 
+  CardContent, 
+  CardHeader, 
+  CardTitle, 
+  CardDescription,
+  CardFooter 
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -20,13 +27,37 @@ import {
   DollarSign,
   CreditCard,
   Banknote,
+  Plus,
+  ChevronRight,
+  Code,
 } from "lucide-react"
 import { useSuppliersStore } from "@/stores/suppliers-store"
 import { useDocumentsStore } from "@/stores/documents-store"
+import { useBanksStore } from "@/stores/bank-store"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
-import { useAuthStore } from "@/stores/authStore"
-import type { Supplier, SupplierType, SupplierStatus } from "@/types/suppliers"
+import type { Supplier, SupplierType, SupplierStatus, CreateSupplierBankAccountDto } from "@/types/suppliers"
 import type { DocumentStatus } from "@/types/documents"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { toast } from "@/hooks/use-toast"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { BankAccountType } from "@/types/bank-accounts"
+import { useAuthStore } from "@/stores/authStore"
 
 interface SupplierDetailPageProps {
   id: string
@@ -55,30 +86,41 @@ const DocumentStatusLabels: Record<DocumentStatus, string> = {
   CANCELLED: "Cancelado",
 }
 
+const BankAccountTypeLabels: Record<BankAccountType, string> = {
+  CHECKING: "Cuenta Corriente",
+  SAVINGS: "Cuenta de Ahorros",
+  CREDIT: "Cuenta de Crédito",
+  INVESTMENT: "Cuenta de Inversión",
+}
+
 export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
   const router = useRouter()
   const { company } = useAuthStore()
   const [supplier, setSupplier] = useState<Supplier | null>(null)
   const [documentsLoading, setDocumentsLoading] = useState(false)
+  const [isEditingAccount, setIsEditingAccount] = useState(false)
+  const [currentAccount, setCurrentAccount] = useState<CreateSupplierBankAccountDto | null>(null)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [payloadPreview, setPayloadPreview] = useState<string>("")
 
-  const { loading, error, getSupplierById, deleteSupplier } = useSuppliersStore()
+  const { loading, error, getSupplierById, deleteSupplier, updateSupplier } = useSuppliersStore()
   const { documents, getDocumentsBySupplier, clearDocuments } = useDocumentsStore()
+  const { banks, fetchBanks } = useBanksStore()
 
+  // Fetch supplier data
   useEffect(() => {
-    const fetchSupplier = async () => {
+    const fetchData = async () => {
       if (id) {
         const data = await getSupplierById(id)
-        if (data) {
-          setSupplier(data)
-        }
+        if (data) setSupplier(data)
       }
     }
-
-    fetchSupplier()
+    fetchData()
   }, [id, getSupplierById])
 
+  // Fetch documents
   useEffect(() => {
-    const fetchDocuments = async () => {
+    const fetchDocs = async () => {
       if (supplier?.id && company?.id) {
         setDocumentsLoading(true)
         try {
@@ -91,22 +133,162 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
       }
     }
 
-    fetchDocuments()
-
-    // Cleanup documents when component unmounts
-    return () => {
-      clearDocuments()
-    }
+    fetchDocs()
+    return () => clearDocuments()
   }, [supplier?.id, company?.id, getDocumentsBySupplier, clearDocuments])
 
-  const handleDelete = async () => {
+  // Fetch banks
+  useEffect(() => {
+    fetchBanks()
+  }, [fetchBanks])
+
+  // Update payload preview when currentAccount changes
+  useEffect(() => {
+    if (!supplier || !currentAccount) return
+
+    const updatedAccounts = isEditingAccount
+      ? supplier.supplierBankAccounts?.map(acc => 
+          acc.accountNumber === currentAccount.accountNumber && acc.bankId === currentAccount.bankId
+            ? currentAccount
+            : {
+                bankId: acc.bankId,
+                accountNumber: acc.accountNumber,
+                accountType: acc.accountType,
+                currency: acc.currency,
+                isDefault: acc.isDefault,
+              }
+        ) || []
+      : [
+          ...(supplier.supplierBankAccounts?.map(acc => ({
+            bankId: acc.bankId,
+            accountNumber: acc.accountNumber,
+            accountType: acc.accountType,
+            currency: acc.currency,
+            isDefault: acc.isDefault,
+          })) || []),
+          currentAccount
+        ]
+
+    // Handle default account
+    const finalAccounts = currentAccount.isDefault
+      ? updatedAccounts.map(acc => ({
+          ...acc,
+          isDefault: acc.accountNumber === currentAccount.accountNumber && 
+                   acc.bankId === currentAccount.bankId
+        }))
+      : updatedAccounts
+
+    setPayloadPreview(JSON.stringify(
+      { supplierBankAccounts: finalAccounts },
+      null, 
+      2
+    ))
+  }, [currentAccount, supplier, isEditingAccount])
+
+  const handleDeleteSupplier = async () => {
     if (supplier && window.confirm("¿Está seguro de que desea eliminar este proveedor?")) {
       try {
         await deleteSupplier(supplier.id)
         router.push("/suppliers")
       } catch (error) {
         console.error("Error deleting supplier:", error)
+        toast({
+          title: "Error",
+          description: "No se pudo eliminar el proveedor",
+          variant: "destructive",
+        })
       }
+    }
+  }
+
+  const handleAddAccount = () => {
+    setCurrentAccount({
+      bankId: "",
+      accountNumber: "",
+      accountType: "CHECKING",
+      currency: "PEN",
+      isDefault: false,
+    })
+    setIsEditingAccount(false)
+    setIsDialogOpen(true)
+  }
+
+  const handleEditAccount = (account: any) => {
+    setCurrentAccount({
+      bankId: account.bankId,
+      accountNumber: account.accountNumber,
+      accountType: account.accountType,
+      currency: account.currency,
+      isDefault: account.isDefault,
+    })
+    setIsEditingAccount(true)
+    setIsDialogOpen(true)
+  }
+
+  const handleDeleteAccount = async (accountId: string) => {
+    if (!supplier) return
+    
+    if (window.confirm("¿Está seguro de que desea eliminar esta cuenta bancaria?")) {
+      try {
+        const updatedAccounts = supplier.supplierBankAccounts
+          ?.filter(acc => acc.id !== accountId)
+          .map(acc => ({
+            bankId: acc.bankId,
+            accountNumber: acc.accountNumber,
+            accountType: acc.accountType,
+            currency: acc.currency,
+            isDefault: acc.isDefault,
+          })) || []
+
+        await updateSupplier(supplier.id, {
+          supplierBankAccounts: updatedAccounts
+        })
+
+        const updatedSupplier = await getSupplierById(id)
+        if (updatedSupplier) {
+          setSupplier(updatedSupplier)
+          toast({
+            title: "Éxito",
+            description: "La cuenta bancaria ha sido eliminada correctamente.",
+          })
+        }
+      } catch (error) {
+        console.error("Error deleting bank account:", error)
+        toast({
+          title: "Error",
+          description: "No se pudo eliminar la cuenta bancaria.",
+          variant: "destructive",
+        })
+      }
+    }
+  }
+
+  const handleSaveAccount = async () => {
+    if (!supplier || !currentAccount) return
+
+    try {
+      const payload = JSON.parse(payloadPreview)
+      await updateSupplier(supplier.id, payload)
+
+      const updatedSupplier = await getSupplierById(id)
+      if (updatedSupplier) {
+        setSupplier(updatedSupplier)
+        toast({
+          title: "Éxito",
+          description: isEditingAccount 
+            ? "Cuenta bancaria actualizada correctamente." 
+            : "Cuenta bancaria agregada correctamente.",
+        })
+      }
+
+      setIsDialogOpen(false)
+    } catch (error) {
+      console.error("Error saving bank account:", error)
+      toast({
+        title: "Error",
+        description: "No se pudo guardar la cuenta bancaria.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -128,19 +310,8 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
     )
   }
 
-  const getDocumentTypeName = (type: string) => {
-    const typeMap: Record<string, string> = {
-      DNI: "DNI",
-      RUC: "RUC",
-      CE: "CE",
-      PASSPORT: "Pasaporte",
-      OTHER: "Otro",
-    }
-    return typeMap[type] || "Otro"
-  }
-
-  const getSupplierTypeName = (type: SupplierType) => {
-    return SupplierTypeLabels[type] || "Desconocido"
+  const getBankName = (bankId: string) => {
+    return banks.find(b => b.id === bankId)?.name || "Banco no encontrado"
   }
 
   const formatCurrency = (amount: string | number, currency = "PEN") => {
@@ -156,37 +327,6 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
       month: "short",
       day: "numeric",
     })
-  }
-
-  const getDocumentStatusBadge = (status: DocumentStatus) => {
-    const statusConfig = {
-      DRAFT: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20",
-      PENDING: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-      APPROVED: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-      REJECTED: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-      PAID: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
-      CANCELLED: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
-    }
-
-    return (
-      <Badge
-        variant="outline"
-        className={statusConfig[status] || "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20"}
-      >
-        {DocumentStatusLabels[status] || status}
-      </Badge>
-    )
-  }
-
-  // Calculate document statistics
-  const documentStats = {
-    total: documents.length,
-    totalAmount: documents.reduce((sum, doc) => sum + Number.parseFloat(doc.total), 0),
-    currency: documents[0]?.currency || "PEN",
-    lastDocument:
-      documents.length > 0
-        ? documents.sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime())[0]
-        : null,
   }
 
   if (error) {
@@ -215,9 +355,19 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
     )
   }
 
+  // Calculate document statistics
+  const documentStats = {
+    total: documents.length,
+    totalAmount: documents.reduce((sum, doc) => sum + Number.parseFloat(doc.total), 0),
+    currency: documents[0]?.currency || "PEN",
+    lastDocument:
+      documents.length > 0
+        ? documents.sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime())[0]
+        : null,
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header with back button */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => router.push("/suppliers")}>
@@ -232,7 +382,7 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
               <Edit className="w-4 h-4 mr-2" />
               Editar
             </Button>
-            <Button variant="destructive" size="sm" onClick={handleDelete}>
+            <Button variant="destructive" size="sm" onClick={handleDeleteSupplier}>
               <Trash2 className="w-4 h-4 mr-2" />
               Eliminar
             </Button>
@@ -273,19 +423,16 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
                   <div className="flex flex-wrap gap-2 mt-2">
                     <Badge variant="outline" className="flex items-center gap-1">
                       <FileText className="w-3 h-3" />
-                      {getDocumentTypeName(supplier.documentType)}: {supplier.documentNumber}
+                      {supplier.documentType}: {supplier.documentNumber}
                     </Badge>
 
                     <Badge variant="outline" className="flex items-center gap-1">
                       <Building2 className="w-3 h-3" />
-                      {getSupplierTypeName(supplier.supplierType)}
+                      {SupplierTypeLabels[supplier.supplierType]}
                     </Badge>
 
                     {supplier.isRetentionAgent && (
-                      <Badge
-                        variant="outline"
-                        className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
-                      >
+                      <Badge variant="outline" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20">
                         Agente de Retención
                       </Badge>
                     )}
@@ -315,7 +462,7 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
           </Card>
 
           {/* Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium">Total Documentos</CardTitle>
@@ -355,153 +502,203 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </div> */}
 
-          {/* Bank Accounts Section */}
-          {supplier.supplierBankAccounts && supplier.supplierBankAccounts.length > 0 && (
-            <Card>
-              <CardHeader>
+          {/* Bank Accounts Section - Improved Design */}
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <CreditCard className="w-5 h-5" />
-                  Cuentas Bancarias ({supplier.supplierBankAccounts.length})
+                  Cuentas Bancarias ({supplier.supplierBankAccounts?.length || 0})
                 </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Button size="sm" onClick={handleAddAccount}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar Cuenta
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {supplier.supplierBankAccounts && supplier.supplierBankAccounts.length > 0 ? (
+                <div className="space-y-4">
                   {supplier.supplierBankAccounts.map((account) => (
-                    <div key={account.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Banknote className="w-4 h-4 text-gray-500" />
-                          <span className="font-medium">{account.bank?.name || "Banco"}</span>
+                    <div key={account.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent transition-colors">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-lg bg-secondary">
+                          <Banknote className="w-5 h-5 text-primary" />
                         </div>
-                        <div className="flex gap-1">
-                          {account.isDefault && (
-                            <Badge variant="outline" className="text-xs">
-                              Principal
-                            </Badge>
-                          )}
-                          <Badge variant={account.isActive ? "default" : "secondary"} className="text-xs">
-                            {account.isActive ? "Activa" : "Inactiva"}
-                          </Badge>
+                        <div>
+                          <div className="font-medium flex items-center gap-2">
+                            {getBankName(account.bankId)}
+                            {account.isDefault && (
+                              <Badge variant="secondary" className="text-xs">
+                                Principal
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {account.accountNumber} • {BankAccountTypeLabels[account.accountType]} • {account.currency}
+                          </div>
                         </div>
                       </div>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Número:</span>
-                          <span className="font-mono">{account.accountNumber}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Tipo:</span>
-                          <span>{account.accountType}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Moneda:</span>
-                          <span>{account.currency}</span>
-                        </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-8 w-8 p-0"
+                          onClick={() => handleEditAccount(account)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                          onClick={() => handleDeleteAccount(account.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <CreditCard className="w-12 h-12 text-muted-foreground" />
+                  <p className="text-muted-foreground">No hay cuentas bancarias registradas</p>
+                  <Button onClick={handleAddAccount}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Agregar Cuenta Bancaria
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-          {/* Detailed Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Información Detallada</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Información Fiscal</h3>
-                    <Separator className="my-2" />
-                    <dl className="space-y-2">
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium">Categoría Tributaria:</dt>
-                        <dd className="text-sm">{supplier.taxCategory || "No especificado"}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium">Agente de Retención:</dt>
-                        <dd className="text-sm">{supplier.isRetentionAgent ? "Sí" : "No"}</dd>
-                      </div>
-                      {supplier.isRetentionAgent && supplier.retentionRate && (
-                        <div className="flex justify-between">
-                          <dt className="text-sm font-medium">Tasa de Retención:</dt>
-                          <dd className="text-sm">{supplier.retentionRate}%</dd>
-                        </div>
-                      )}
-                    </dl>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Condiciones Comerciales</h3>
-                    <Separator className="my-2" />
-                    <dl className="space-y-2">
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium">Límite de Crédito:</dt>
-                        <dd className="text-sm">
-                          {supplier.creditLimit ? `S/ ${Number(supplier.creditLimit).toFixed(2)}` : "No especificado"}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium">Plazo de Pago:</dt>
-                        <dd className="text-sm">
-                          {supplier.paymentTerms ? `${supplier.paymentTerms} días` : "No especificado"}
-                        </dd>
-                      </div>
-                    </dl>
+          {/* Bank Account Dialog with Payload Preview */}
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogContent className="sm:max-w-[625px]">
+              <DialogHeader>
+                <DialogTitle>
+                  {isEditingAccount ? "Editar Cuenta Bancaria" : "Agregar Cuenta Bancaria"}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="bankId" className="text-right">
+                    Banco
+                  </Label>
+                  <Select
+                    value={currentAccount?.bankId || ""}
+                    onValueChange={(value) => setCurrentAccount(prev => prev ? {...prev, bankId: value} : null)}
+                    
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un banco" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {banks.map((bank) => (
+                        <SelectItem key={bank.id} value={bank.id}>
+                          {bank.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="accountNumber" className="text-right">
+                    Número
+                  </Label>
+                  <Input
+                    id="accountNumber"
+                    value={currentAccount?.accountNumber || ""}
+                    onChange={(e) => setCurrentAccount(prev => prev ? {...prev, accountNumber: e.target.value} : null)}
+                    
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="accountType" className="text-right">
+                    Tipo
+                  </Label>
+                  <Select
+                    value={currentAccount?.accountType || "CHECKING"}
+                    onValueChange={(value) => setCurrentAccount(prev => prev ? {...prev, accountType: value as BankAccountType} : null)}
+                    
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(BankAccountTypeLabels).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="currency" className="text-right">
+                    Moneda
+                  </Label>
+                  <Select
+                    value={currentAccount?.currency || "PEN"}
+                    onValueChange={(value) => setCurrentAccount(prev => prev ? {...prev, currency: value} : null)}
+                    
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona una moneda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PEN">Soles (PEN)</SelectItem>
+                      <SelectItem value="USD">Dólares (USD)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <div className="col-start-2 col-span-3 flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="isDefault"
+                      checked={currentAccount?.isDefault || false}
+                      onChange={(e) => setCurrentAccount(prev => prev ? {...prev, isDefault: e.target.checked} : null)}
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <Label htmlFor="isDefault">Establecer como cuenta principal</Label>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Ubicación</h3>
-                    <Separator className="my-2" />
-                    <dl className="space-y-2">
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium">Dirección:</dt>
-                        <dd className="text-sm">{supplier.address || "No especificado"}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium">Distrito:</dt>
-                        <dd className="text-sm">{supplier.district || "No especificado"}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium">Provincia:</dt>
-                        <dd className="text-sm">{supplier.province || "No especificado"}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium">Departamento:</dt>
-                        <dd className="text-sm">{supplier.department || "No especificado"}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium">País:</dt>
-                        <dd className="text-sm">{supplier.country || "Perú"}</dd>
-                      </div>
-                    </dl>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Fechas</h3>
-                    <Separator className="my-2" />
-                    <dl className="space-y-2">
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium">Fecha de Registro:</dt>
-                        <dd className="text-sm">{formatDate(supplier.createdAt)}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium">Última Actualización:</dt>
-                        <dd className="text-sm">{formatDate(supplier.updatedAt)}</dd>
-                      </div>
-                    </dl>
+                <div className="grid grid-cols-4 items-start gap-4">
+                  <Label className="text-right pt-2">
+                    Payload
+                  </Label>
+                  <div className="col-span-3">
+                    <Card className="bg-muted/50">
+                      <ScrollArea className="h-32">
+                       
+                          {payloadPreview || '{}'}
+                        
+                      </ScrollArea>
+                    </Card>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Este es el payload que se enviará al servidor
+                    </p>
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleSaveAccount}>
+                  {isEditingAccount ? "Guardar Cambios" : "Agregar Cuenta"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Documents Section */}
           <Card>
@@ -530,7 +727,7 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
                     </thead>
                     <tbody>
                       {documents.map((document) => (
-                        <tr key={document.id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <tr key={document.id} className="border-b hover:bg-accent transition-colors">
                           <td className="p-3">
                             <Badge variant="outline">{document.documentType}</Badge>
                           </td>
@@ -546,7 +743,11 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
                           <td className="p-3 text-right font-mono font-semibold">
                             {formatCurrency(document.total, document.currency)}
                           </td>
-                          <td className="p-3 text-center">{getDocumentStatusBadge(document.status)}</td>
+                          <td className="p-3 text-center">
+                            <Badge variant="outline">
+                              {DocumentStatusLabels[document.status] || document.status}
+                            </Badge>
+                          </td>
                           <td className="p-3 text-center">
                             <Button variant="ghost" size="sm" onClick={() => router.push(`/documents/${document.id}`)}>
                               <Eye className="w-4 h-4" />
@@ -558,9 +759,9 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
                   </table>
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">No hay documentos registrados para este proveedor</p>
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <FileText className="w-12 h-12 text-muted-foreground" />
+                  <p className="text-muted-foreground">No hay documentos registrados para este proveedor</p>
                 </div>
               )}
             </CardContent>

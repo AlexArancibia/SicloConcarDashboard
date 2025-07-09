@@ -937,15 +937,15 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
 
       // Payment Terms
       const paymentTerms = Array.from(retentionElements)
-        .filter((element) => {
-          const paymentTermsId = element.querySelector("cbc\\:ID, ID")?.textContent?.trim()?.toLowerCase() || ""
-          return !paymentTermsId.includes("retencion") && !paymentTermsId.includes("detraccion")
-        })
-        .map((element) => ({
-          amount: getNumericValue("cbc\\:Amount", "Amount") || total / 2,
-          dueDate: new Date(getElementText("cbc\\:PaymentDueDate", "PaymentDueDate") || dueDate),
-          description: getElementText("cbc\\:Note", "Note") || "Pago según términos acordados",
-        }))
+  .filter((element) => {
+    const paymentTermsId = element.querySelector("cbc\\:ID, ID")?.textContent?.trim()?.toLowerCase() || ""
+    return !paymentTermsId.includes("retencion") && !paymentTermsId.includes("detraccion")
+  })
+  .map((element) => ({
+    amount: getNumericValue("cbc\\:Amount", "Amount") || total,  
+    dueDate: new Date(getElementText("cbc\\:PaymentDueDate", "PaymentDueDate") || dueDate),
+    description: getElementText("cbc\\:Note", "Note") || "Pago según términos acordados",
+  }))
 
       // Si no hay payment terms, crear uno por defecto
       if (paymentTerms.length === 0) {

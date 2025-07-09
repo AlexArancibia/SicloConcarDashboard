@@ -2,6 +2,7 @@ import type { BaseEntity } from "./common"
 import type { Company } from "./auth"
 import type { PaginationDto } from "./common"
 import { Conciliation } from "./conciliations"
+import { Supplier } from "./suppliers"
 
 // Enums basados en el schema de Prisma
 export type DocumentType = "INVOICE" | "CREDIT_NOTE" | "DEBIT_NOTE" | "RECEIPT" | "PURCHASE_ORDER" | "CONTRACT"
@@ -49,12 +50,7 @@ export interface Document extends BaseEntity {
 
   // Relaciones expandidas
   company?: Company
-  supplier?: {
-    id: string
-    businessName: string
-    documentNumber: string
-    documentType: string
-  }
+  supplier?:Supplier
   currencyRef?: {
     code: string
     name: string
