@@ -16,11 +16,23 @@ interface SunatStore {
   rheRecords: SunatRhe[]
   rheLoading: boolean
   rheError: string | null
+  rhePagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
 
   // Invoice State
   invoices: SunatInvoice[]
   invoicesLoading: boolean
   invoicesError: string | null
+  invoicesPagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
 
   // Stats State
   stats: SunatStats | null
@@ -31,23 +43,40 @@ interface SunatStore {
   importProgress: number
 
   // RHE Actions
-  fetchSunatRhe: (companyId: string, page?: number, limit?: number) => Promise<void>
+  fetchSunatRhe: (
+    companyId: string,
+    options?: {
+      page?: number
+      limit?: number
+      searchTerm?: string
+      startDate?: string
+      endDate?: string
+    }
+  ) => Promise<void>
   createSunatRhe: (data: CreateSunatRheDto) => Promise<SunatRhe>
   getSunatRheById: (id: string) => Promise<SunatRhe>
   updateSunatRhe: (id: string, data: UpdateSunatRheDto) => Promise<SunatRhe>
   deleteSunatRhe: (id: string) => Promise<void>
   getSunatRheByPeriod: (companyId: string, startDate: string, endDate: string) => Promise<SunatRhe[]>
-  searchSunatRhe: (companyId: string, searchTerm: string, page?: number, limit?: number) => Promise<void>
   importSunatRheFromFile: (companyId: string, userId: string, file: File) => Promise<void>
 
   // Invoice Actions
-  fetchSunatInvoices: (companyId: string, page?: number, limit?: number) => Promise<void>
+  fetchSunatInvoices: (
+    companyId: string,
+    options?: {
+      page?: number
+      limit?: number
+      searchTerm?: string
+      period?: string
+      startDate?: string
+      endDate?: string
+    }
+  ) => Promise<void>
   createSunatInvoice: (data: CreateSunatInvoiceDto) => Promise<SunatInvoice>
   getSunatInvoiceById: (id: string) => Promise<SunatInvoice>
   updateSunatInvoice: (id: string, data: UpdateSunatInvoiceDto) => Promise<SunatInvoice>
   deleteSunatInvoice: (id: string) => Promise<void>
   getSunatInvoicesByPeriod: (companyId: string, period: string) => Promise<SunatInvoice[]>
-  searchSunatInvoices: (companyId: string, searchTerm: string, page?: number, limit?: number) => Promise<void>
   importSunatInvoicesFromFile: (companyId: string, userId: string, file: File) => Promise<void>
 
   // Stats Actions
@@ -63,22 +92,54 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
   rheRecords: [],
   rheLoading: false,
   rheError: null,
+  rhePagination: {
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1
+  },
+
   invoices: [],
   invoicesLoading: false,
   invoicesError: null,
+  invoicesPagination: {
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1
+  },
+
   stats: null,
   statsLoading: false,
   importLoading: false,
   importProgress: 0,
 
   // RHE Actions
-  fetchSunatRhe: async (companyId: string, page = 1, limit = 25) => {
+  fetchSunatRhe: async (companyId, options = {}) => {
+    const { page = 1, limit = 999, searchTerm, startDate, endDate } = options
     set({ rheLoading: true, rheError: null })
+    
     try {
       const response = await apiClient.get<PaginatedResponse<SunatRhe>>(`/sunat/rhe/company/${companyId}`, {
-        params: { page, limit },
+        params: { 
+          page, 
+          limit, 
+          searchTerm,
+          startDate,
+          endDate
+        },
       })
-      set({ rheRecords: response.data.data, rheLoading: false })
+      
+      set({ 
+        rheRecords: response.data.data,
+        rhePagination: {
+          page: response.data.page,
+          limit: response.data.limit,
+          total: response.data.total,
+          totalPages: response.data.totalPages
+        },
+        rheLoading: false 
+      })
     } catch (error: any) {
       set({
         rheError: error.response?.data?.message || error.message || "Error al cargar registros RHE",
@@ -87,7 +148,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
     }
   },
 
-  createSunatRhe: async (data: CreateSunatRheDto) => {
+  createSunatRhe: async (data) => {
     try {
       const response = await apiClient.post<SunatRhe>("/sunat/rhe", data)
       const newRecord = response.data
@@ -98,7 +159,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
     }
   },
 
-  getSunatRheById: async (id: string) => {
+  getSunatRheById: async (id) => {
     try {
       const response = await apiClient.get<SunatRhe>(`/sunat/rhe/${id}`)
       return response.data
@@ -107,7 +168,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
     }
   },
 
-  updateSunatRhe: async (id: string, data: UpdateSunatRheDto) => {
+  updateSunatRhe: async (id, data) => {
     try {
       const response = await apiClient.patch<SunatRhe>(`/sunat/rhe/${id}`, data)
       const updatedRecord = response.data
@@ -120,7 +181,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
     }
   },
 
-  deleteSunatRhe: async (id: string) => {
+  deleteSunatRhe: async (id) => {
     try {
       await apiClient.delete(`/sunat/rhe/${id}`)
       set((state) => ({
@@ -131,7 +192,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
     }
   },
 
-  getSunatRheByPeriod: async (companyId: string, startDate: string, endDate: string) => {
+  getSunatRheByPeriod: async (companyId, startDate, endDate) => {
     try {
       const response = await apiClient.get<SunatRhe[]>(`/sunat/rhe/company/${companyId}/period`, {
         params: { startDate, endDate },
@@ -142,24 +203,9 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
     }
   },
 
-  searchSunatRhe: async (companyId: string, searchTerm: string, page = 1, limit = 25) => {
-    set({ rheLoading: true, rheError: null })
-    try {
-      const response = await apiClient.get<PaginatedResponse<SunatRhe>>(`/sunat/rhe/company/${companyId}/search`, {
-        params: { searchTerm, page, limit },
-      })
-      set({ rheRecords: response.data.data, rheLoading: false })
-    } catch (error: any) {
-      set({
-        rheError: error.response?.data?.message || "Error al buscar registros RHE",
-        rheLoading: false,
-      })
-    }
-  },
-
-  importSunatRheFromFile: async (companyId: string, userId: string, file: File) => {
+  importSunatRheFromFile: async (companyId, userId, file) => {
     set({ importLoading: true, importProgress: 0 })
-    try {
+    try { 
       const formData = new FormData()
       formData.append("file", file)
       formData.append("companyId", companyId)
@@ -188,22 +234,41 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
   },
 
   // Invoice Actions
-  fetchSunatInvoices: async (companyId: string, page = 1, limit = 25) => {
+  fetchSunatInvoices: async (companyId, options = {}) => {
+    const { page = 1, limit = 999, searchTerm, period, startDate, endDate } = options
     set({ invoicesLoading: true, invoicesError: null })
+    
     try {
       const response = await apiClient.get<PaginatedResponse<SunatInvoice>>(`/sunat/invoices/company/${companyId}`, {
-        params: { page, limit },
+        params: { 
+          page, 
+          limit, 
+          searchTerm,
+          period,
+          startDate,
+          endDate
+        },
       })
-      set({ invoices: response.data.data, invoicesLoading: false })
+      
+      set({ 
+        invoices: response.data.data,
+        invoicesPagination: {
+          page: response.data.page,
+          limit: response.data.limit,
+          total: response.data.total,
+          totalPages: response.data.totalPages
+        },
+        invoicesLoading: false 
+      })
     } catch (error: any) {
       set({
-        invoicesError: error.response?.data?.message || "Error al cargar facturas",
+        invoicesError: error.response?.data?.message || error.message || "Error al cargar facturas",
         invoicesLoading: false,
       })
     }
   },
 
-  createSunatInvoice: async (data: CreateSunatInvoiceDto) => {
+  createSunatInvoice: async (data) => {
     try {
       const response = await apiClient.post<SunatInvoice>("/sunat/invoices", data)
       const newInvoice = response.data
@@ -214,7 +279,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
     }
   },
 
-  getSunatInvoiceById: async (id: string) => {
+  getSunatInvoiceById: async (id) => {
     try {
       const response = await apiClient.get<SunatInvoice>(`/sunat/invoices/${id}`)
       return response.data
@@ -223,7 +288,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
     }
   },
 
-  updateSunatInvoice: async (id: string, data: UpdateSunatInvoiceDto) => {
+  updateSunatInvoice: async (id, data) => {
     try {
       const response = await apiClient.patch<SunatInvoice>(`/sunat/invoices/${id}`, data)
       const updatedInvoice = response.data
@@ -236,7 +301,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
     }
   },
 
-  deleteSunatInvoice: async (id: string) => {
+  deleteSunatInvoice: async (id) => {
     try {
       await apiClient.delete(`/sunat/invoices/${id}`)
       set((state) => ({
@@ -247,7 +312,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
     }
   },
 
-  getSunatInvoicesByPeriod: async (companyId: string, period: string) => {
+  getSunatInvoicesByPeriod: async (companyId, period) => {
     try {
       const response = await apiClient.get<SunatInvoice[]>(`/sunat/invoices/company/${companyId}/period/${period}`)
       return response.data
@@ -256,25 +321,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
     }
   },
 
-  searchSunatInvoices: async (companyId: string, searchTerm: string, page = 1, limit = 25) => {
-    set({ invoicesLoading: true, invoicesError: null })
-    try {
-      const response = await apiClient.get<PaginatedResponse<SunatInvoice>>(
-        `/sunat/invoices/company/${companyId}/search`,
-        {
-          params: { searchTerm, page, limit },
-        },
-      )
-      set({ invoices: response.data.data, invoicesLoading: false })
-    } catch (error: any) {
-      set({
-        invoicesError: error.response?.data?.message || "Error al buscar facturas",
-        invoicesLoading: false,
-      })
-    }
-  },
-
-  importSunatInvoicesFromFile: async (companyId: string, userId: string, file: File) => {
+  importSunatInvoicesFromFile: async (companyId, userId, file) => {
     set({ importLoading: true, importProgress: 0 })
     try {
       const formData = new FormData()
@@ -305,7 +352,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
   },
 
   // Stats Actions
-  getSunatStats: async (companyId: string) => {
+  getSunatStats: async (companyId) => {
     set({ statsLoading: true })
     try {
       const response = await apiClient.get<SunatStats>(`/sunat/company/${companyId}/stats`)

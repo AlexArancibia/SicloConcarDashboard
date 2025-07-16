@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useMemo } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { 
   Card, 
   CardContent, 
@@ -95,6 +95,7 @@ const BankAccountTypeLabels: Record<BankAccountType, string> = {
 
 export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { company } = useAuthStore()
   const [supplier, setSupplier] = useState<Supplier | null>(null)
   const [documentsLoading, setDocumentsLoading] = useState(false)
@@ -106,6 +107,9 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
   const { loading, error, getSupplierById, deleteSupplier, updateSupplier } = useSuppliersStore()
   const { documents, getDocumentsBySupplier, clearDocuments } = useDocumentsStore()
   const { banks, fetchBanks } = useBanksStore()
+
+  // Obtener la página de los query params para volver correctamente
+  const returnPage = searchParams.get('page') || '1'
 
   // Fetch supplier data
   useEffect(() => {
@@ -185,11 +189,15 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
     ))
   }, [currentAccount, supplier, isEditingAccount])
 
+  const handleBack = () => {
+    router.push(`/suppliers?page=${returnPage}`)
+  }
+
   const handleDeleteSupplier = async () => {
     if (supplier && window.confirm("¿Está seguro de que desea eliminar este proveedor?")) {
       try {
         await deleteSupplier(supplier.id)
-        router.push("/suppliers")
+        router.push(`/suppliers?page=${returnPage}`)
       } catch (error) {
         console.error("Error deleting supplier:", error)
         toast({
@@ -329,13 +337,26 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
     })
   }
 
+  // Calculate document statistics
+  const documentStats = useMemo(() => {
+    return {
+      total: documents.length,
+      totalAmount: documents.reduce((sum, doc) => sum + Number.parseFloat(doc.total), 0),
+      currency: documents[0]?.currency || "PEN",
+      lastDocument:
+        documents.length > 0
+          ? documents.sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime())[0]
+          : null,
+    }
+  }, [documents])
+
   if (error) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <div className="text-red-500 mb-4">Error: {error}</div>
-            <Button onClick={() => router.push("/suppliers")}>Volver a Proveedores</Button>
+            <Button onClick={handleBack}>Volver a Proveedores</Button>
           </div>
         </div>
       </div>
@@ -348,29 +369,18 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <div className="text-red-500 mb-4">ID de proveedor no válido</div>
-            <Button onClick={() => router.push("/suppliers")}>Volver a Proveedores</Button>
+            <Button onClick={handleBack}>Volver a Proveedores</Button>
           </div>
         </div>
       </div>
     )
   }
 
-  // Calculate document statistics
-  const documentStats = {
-    total: documents.length,
-    totalAmount: documents.reduce((sum, doc) => sum + Number.parseFloat(doc.total), 0),
-    currency: documents[0]?.currency || "PEN",
-    lastDocument:
-      documents.length > 0
-        ? documents.sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime())[0]
-        : null,
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/suppliers")}>
+          <Button variant="ghost" size="sm" onClick={handleBack}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Volver
           </Button>
@@ -378,7 +388,11 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
         </div>
         {supplier && (
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => router.push(`/suppliers/${supplier.id}/edit`)}>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => router.push(`/suppliers/${supplier.id}/edit?page=${returnPage}`)}
+            >
               <Edit className="w-4 h-4 mr-2" />
               Editar
             </Button>
@@ -461,50 +475,7 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
             </CardContent>
           </Card>
 
-          {/* Statistics Cards */}
-          {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Documentos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <FileText className="w-8 h-8 text-blue-500" />
-                  <span className="text-2xl font-bold">{documentStats.total}</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Monto Total</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <DollarSign className="w-8 h-8 text-green-500" />
-                  <span className="text-2xl font-bold">
-                    {formatCurrency(documentStats.totalAmount, documentStats.currency)}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Último Documento</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <Calendar className="w-8 h-8 text-amber-500" />
-                  <span className="text-lg font-medium">
-                    {documentStats.lastDocument ? formatDate(documentStats.lastDocument.issueDate) : "Sin documentos"}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          </div> */}
-
-          {/* Bank Accounts Section - Improved Design */}
+          {/* Bank Accounts Section */}
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -558,9 +529,6 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
                       </div>
                     </div>
                   ))}
@@ -578,127 +546,104 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
             </CardContent>
           </Card>
 
-          {/* Bank Account Dialog with Payload Preview */}
+          {/* Bank Account Dialog */}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogContent className="sm:max-w-[625px]">
-              <DialogHeader>
-                <DialogTitle>
-                  {isEditingAccount ? "Editar Cuenta Bancaria" : "Agregar Cuenta Bancaria"}
-                </DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="bankId" className="text-right">
-                    Banco
-                  </Label>
-                  <Select
-                    value={currentAccount?.bankId || ""}
-                    onValueChange={(value) => setCurrentAccount(prev => prev ? {...prev, bankId: value} : null)}
-                    
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un banco" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {banks.map((bank) => (
-                        <SelectItem key={bank.id} value={bank.id}>
-                          {bank.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="accountNumber" className="text-right">
-                    Número
-                  </Label>
-                  <Input
-                    id="accountNumber"
-                    value={currentAccount?.accountNumber || ""}
-                    onChange={(e) => setCurrentAccount(prev => prev ? {...prev, accountNumber: e.target.value} : null)}
-                    
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="accountType" className="text-right">
-                    Tipo
-                  </Label>
-                  <Select
-                    value={currentAccount?.accountType || "CHECKING"}
-                    onValueChange={(value) => setCurrentAccount(prev => prev ? {...prev, accountType: value as BankAccountType} : null)}
-                    
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(BankAccountTypeLabels).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="currency" className="text-right">
-                    Moneda
-                  </Label>
-                  <Select
-                    value={currentAccount?.currency || "PEN"}
-                    onValueChange={(value) => setCurrentAccount(prev => prev ? {...prev, currency: value} : null)}
-                    
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona una moneda" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PEN">Soles (PEN)</SelectItem>
-                      <SelectItem value="USD">Dólares (USD)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <div className="col-start-2 col-span-3 flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="isDefault"
-                      checked={currentAccount?.isDefault || false}
-                      onChange={(e) => setCurrentAccount(prev => prev ? {...prev, isDefault: e.target.checked} : null)}
-                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <Label htmlFor="isDefault">Establecer como cuenta principal</Label>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-4 items-start gap-4">
-                  <Label className="text-right pt-2">
-                    Payload
-                  </Label>
-                  <div className="col-span-3">
-                    <Card className="bg-muted/50">
-                      <ScrollArea className="h-32">
-                       
-                          {payloadPreview || '{}'}
-                        
-                      </ScrollArea>
-                    </Card>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Este es el payload que se enviará al servidor
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleSaveAccount}>
-                  {isEditingAccount ? "Guardar Cambios" : "Agregar Cuenta"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+  <DialogContent className="sm:max-w-[625px]">
+    <DialogHeader>
+      <DialogTitle>
+        {isEditingAccount ? "Editar Cuenta Bancaria" : "Agregar Cuenta Bancaria"}
+      </DialogTitle>
+    </DialogHeader>
+    <div className="grid gap-4 py-4">
+      <div className="grid items-center gap-4">
+        <Label htmlFor="bankId">
+          Banco
+        </Label>
+        <Select
+          value={currentAccount?.bankId || ""}
+          onValueChange={(value) => setCurrentAccount(prev => prev ? {...prev, bankId: value} : null)}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Selecciona un banco" />
+          </SelectTrigger>
+          <SelectContent>
+            {banks.map((bank) => (
+              <SelectItem key={bank.id} value={bank.id}>
+                {bank.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid items-center gap-4">
+        <Label htmlFor="accountNumber">
+          Número
+        </Label>
+        <Input
+          id="accountNumber"
+          value={currentAccount?.accountNumber || ""}
+          onChange={(e) => setCurrentAccount(prev => prev ? {...prev, accountNumber: e.target.value} : null)}
+          className="w-full"
+        />
+      </div>
+      <div className="grid items-center gap-4">
+        <Label htmlFor="accountType">
+          Tipo
+        </Label>
+        <Select
+          value={currentAccount?.accountType || "CHECKING"}
+          onValueChange={(value) => setCurrentAccount(prev => prev ? {...prev, accountType: value as BankAccountType} : null)}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Selecciona un tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(BankAccountTypeLabels).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid items-center gap-4">
+        <Label htmlFor="currency">
+          Moneda
+        </Label>
+        <Select
+          value={currentAccount?.currency || "PEN"}
+          onValueChange={(value) => setCurrentAccount(prev => prev ? {...prev, currency: value} : null)}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Selecciona una moneda" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="PEN">Soles (PEN)</SelectItem>
+            <SelectItem value="USD">Dólares (USD)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex items-center space-x-2">
+        <input
+          type="checkbox"
+          id="isDefault"
+          checked={currentAccount?.isDefault || false}
+          onChange={(e) => setCurrentAccount(prev => prev ? {...prev, isDefault: e.target.checked} : null)}
+          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+        />
+        <Label htmlFor="isDefault">Establecer como cuenta principal</Label>
+      </div>
+    </div>
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+        Cancelar
+      </Button>
+      <Button onClick={handleSaveAccount}>
+        {isEditingAccount ? "Guardar Cambios" : "Agregar Cuenta"}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
 
           {/* Documents Section */}
           <Card>
@@ -718,8 +663,6 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
                         <th className="text-left p-3">Número</th>
                         <th className="text-left p-3">Fecha Emisión</th>
                         <th className="text-left p-3">Fecha Vencimiento</th>
-                        <th className="text-right p-3">Subtotal</th>
-                        <th className="text-right p-3">IGV</th>
                         <th className="text-right p-3">Total</th>
                         <th className="text-center p-3">Estado</th>
                         <th className="text-center p-3">Acciones</th>
@@ -734,12 +677,6 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
                           <td className="p-3 font-mono">{document.fullNumber}</td>
                           <td className="p-3">{formatDate(document.issueDate)}</td>
                           <td className="p-3">{document.dueDate ? formatDate(document.dueDate) : "-"}</td>
-                          <td className="p-3 text-right font-mono">
-                            {formatCurrency(document.subtotal, document.currency)}
-                          </td>
-                          <td className="p-3 text-right font-mono">
-                            {formatCurrency(document.igv, document.currency)}
-                          </td>
                           <td className="p-3 text-right font-mono font-semibold">
                             {formatCurrency(document.total, document.currency)}
                           </td>
@@ -749,7 +686,11 @@ export default function SupplierDetailPage({ id }: SupplierDetailPageProps) {
                             </Badge>
                           </td>
                           <td className="p-3 text-center">
-                            <Button variant="ghost" size="sm" onClick={() => router.push(`/documents/${document.id}`)}>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => router.push(`/documents/${document.id}?from=supplier&id=${supplier.id}&page=${returnPage}`)}
+                            >
                               <Eye className="w-4 h-4" />
                             </Button>
                           </td>

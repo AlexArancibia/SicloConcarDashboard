@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useMemo } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,8 +28,12 @@ const SupplierStatusLabels: Record<SupplierStatus, string> = {
 
 export default function SuppliersPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { company } = useAuthStore()
-  const [currentPage, setCurrentPage] = useState(1)
+  
+  // Obtener la página de los query params o usar 1 por defecto
+  const initialPage = parseInt(searchParams.get('page') || '1', 10)
+  const [currentPage, setCurrentPage] = useState(initialPage)
   const [filters, setFilters] = useState({
     search: "",
     documentType: "",
@@ -90,8 +94,26 @@ export default function SuppliersPage() {
     setFilters((prev) => ({ ...prev, [key]: value }))
   }
 
+  // Función para navegar a un proveedor manteniendo la página actual
+  const navigateToSupplier = (id: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('page', currentPage.toString())
+    router.push(`/suppliers/${id}?${params.toString()}`)
+  }
+
+  // Función para navegar a la edición manteniendo la página actual
+  const navigateToEdit = (id: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('page', currentPage.toString())
+    router.push(`/suppliers/${id}/edit?${params.toString()}`)
+  }
+
+  // Modificar las funciones de cambio de página para actualizar la URL
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('page', newPage.toString())
+    router.replace(`?${params.toString()}`, { scroll: false })
   }
 
   const getStatusBadge = (status: SupplierStatus) => {
@@ -128,11 +150,19 @@ export default function SuppliersPage() {
   }
 
   // Filter suppliers locally for document type (since this isn't handled by backend)
-  const filteredSuppliers = suppliers.filter((supplier) => {
-    const matchesDocumentType =
-      !filters.documentType || filters.documentType === "all" || supplier.documentType === filters.documentType
-    return matchesDocumentType
-  })
+  const filteredSuppliers = useMemo(() => {
+    return suppliers.filter((supplier) => {
+      const matchesDocumentType =
+        !filters.documentType || filters.documentType === "all" || supplier.documentType === filters.documentType
+      return matchesDocumentType
+    })
+  }, [suppliers, filters.documentType])
+
+  // Ordenar los proveedores alfabéticamente por razón social
+  const sortedSuppliers = useMemo(() => {
+    return [...filteredSuppliers].sort((a, b) => 
+      a.businessName.localeCompare(b.businessName, 'es', { sensitivity: 'base' }))
+  }, [filteredSuppliers])
 
   const filterConfigs = [
     {
@@ -256,7 +286,7 @@ export default function SuppliersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredSuppliers.map((supplier) => (
+                    {sortedSuppliers.map((supplier) => (
                       <tr key={supplier.id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
                         <td className="p-3">
                           <Badge variant="outline">{getDocumentTypeName(supplier.documentType)}</Badge>
@@ -303,7 +333,7 @@ export default function SuppliersPage() {
                               variant="ghost"
                               size="sm"
                               title="Ver detalles"
-                              onClick={() => router.push(`/suppliers/${supplier.id}`)}
+                              onClick={() => navigateToSupplier(supplier.id)}
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
@@ -311,7 +341,7 @@ export default function SuppliersPage() {
                               variant="ghost"
                               size="sm"
                               title="Editar"
-                              onClick={() => router.push(`/suppliers/${supplier.id}/edit`)}
+                              onClick={() => navigateToEdit(supplier.id)}
                             >
                               <Edit className="w-4 h-4" />
                             </Button>
@@ -323,7 +353,7 @@ export default function SuppliersPage() {
                 </table>
               </div>
 
-              {filteredSuppliers.length === 0 && !loading && (
+              {sortedSuppliers.length === 0 && !loading && (
                 <div className="text-center py-8">
                   <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-500">No se encontraron proveedores con los filtros aplicados</p>

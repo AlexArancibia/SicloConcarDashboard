@@ -73,8 +73,6 @@ export default function SunatPage() {
     statsLoading,
     fetchSunatRhe,
     fetchSunatInvoices,
-    searchSunatRhe,
-    searchSunatInvoices,
     getSunatStats,
     deleteSunatRhe,
     deleteSunatInvoice,
@@ -94,9 +92,9 @@ export default function SunatPage() {
 
     if (term.trim()) {
       if (type === "rhe") {
-        searchSunatRhe(user.companyId, term)
+        fetchSunatRhe(user.companyId, {searchTerm:term})
       } else {
-        searchSunatInvoices(user.companyId, term)
+        fetchSunatInvoices(user.companyId, {searchTerm:term})
       }
     } else {
       if (type === "rhe") {
