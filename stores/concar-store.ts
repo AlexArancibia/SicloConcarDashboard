@@ -75,16 +75,20 @@ interface ConcarStore {
   fetchConcarData: (companyId: string, filters: ConcarFilters) => Promise<void>
   fetchConcarSummary: (
     companyId: string,
-    filters: Pick<ConcarFilters, "startDate" | "endDate" | "bankAccountId" | "conciliationType" | "conciliationStatus">,
+    filters: Pick<ConcarFilters, "startDate" | "endDate" | "bankAccountId" | "conciliationType" | "conciliationStatus">
   ) => Promise<void>
   fetchBankAccountsByCurrency: (companyId: string, currency: string) => Promise<void>
   fetchCurrenciesWithBankAccounts: (companyId: string) => Promise<void>
   fetchConcarDataByCurrency: (
     companyId: string,
     currency: string,
-    filters: Omit<ConcarFilters, "bankAccountId">,
+    filters: Omit<ConcarFilters, "bankAccountId">
   ) => Promise<void>
-  exportConcarData: (companyId: string, filters: ConcarFilters, format?: "csv" | "excel") => Promise<void>
+  exportConcarData: (
+    companyId: string,
+    filters: Omit<ConcarFilters, "page" | "limit">,
+    format?: "csv" | "excel"
+  ) => Promise<void>
 
   // Utility Actions
   clearErrors: () => void
@@ -130,7 +134,11 @@ export const useConcarStore = create<ConcarStore>((set, get) => ({
 
     try {
       const response = await apiClient.get<ConcarDataResponse>(`/concar/company/${companyId}`, {
-        params: filters,
+        params: {
+          ...filters,
+          page: filters.page || 1,
+          limit: filters.limit || 100,
+        },
       })
 
       set({
@@ -170,7 +178,9 @@ export const useConcarStore = create<ConcarStore>((set, get) => ({
     set({ bankAccountsLoading: true, bankAccountsError: null })
 
     try {
-      const response = await apiClient.get<BankAccount[]>(`/concar/company/${companyId}/bank-accounts/${currency}`)
+      const response = await apiClient.get<BankAccount[]>(
+        `/concar/company/${companyId}/bank-accounts/${currency}`
+      )
 
       set({
         bankAccounts: response.data,
@@ -191,7 +201,11 @@ export const useConcarStore = create<ConcarStore>((set, get) => ({
       const response = await apiClient.get<Currency[]>(`/concar/company/${companyId}/currencies`)
 
       set({
-        currencies: response.data,
+        currencies: response.data.map((currency: any) => ({
+          code: currency,
+          name: currency, // Puedes mejorar esto con un mapeo de nombres de monedas
+          symbol: currency === "PEN" ? "S/" : "$", // Ejemplo básico
+        })),
         currenciesLoading: false,
       })
     } catch (error: any) {
@@ -206,9 +220,16 @@ export const useConcarStore = create<ConcarStore>((set, get) => ({
     set({ loading: true, error: null, currentFilters: { ...filters, bankAccountId: undefined } })
 
     try {
-      const response = await apiClient.get<ConcarDataResponse>(`/concar/company/${companyId}/currency/${currency}`, {
-        params: filters,
-      })
+      const response = await apiClient.get<ConcarDataResponse>(
+        `/concar/company/${companyId}/currency/${currency}`,
+        {
+          params: {
+            ...filters,
+            page: filters.page || 1,
+            limit: filters.limit || 100,
+          },
+        }
+      )
 
       set({
         data: response.data.data,
@@ -242,7 +263,12 @@ export const useConcarStore = create<ConcarStore>((set, get) => ({
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement("a")
       link.href = url
-      link.setAttribute("download", `concar_export_${companyId}_${filters.startDate}_${filters.endDate}.${format}`)
+      link.setAttribute(
+        "download",
+        `concar_export_${companyId}_${filters.startDate}_${filters.endDate}.${
+          format === "excel" ? "xlsx" : "csv"
+        }`
+      )
       document.body.appendChild(link)
       link.click()
       link.remove()
