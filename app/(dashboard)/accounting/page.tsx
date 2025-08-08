@@ -46,10 +46,6 @@ export default function AccountingPage() {
     description: "",
     parentAccountId: null,
     isActive: true,
-    allowsTransactions: true,
-    normalBalance: "DEBIT",
-    taxRelevant: false,
-    reconciliationRequired: false,
   })
 
   const [costCenterForm, setCostCenterForm] = useState<Partial<CreateCostCenterDto>>({
@@ -360,10 +356,6 @@ export default function AccountingPage() {
       description: account.description,
       parentAccountId: account.parentAccountId,
       isActive: account.isActive,
-      allowsTransactions: account.allowsTransactions,
-      normalBalance: account.normalBalance,
-      taxRelevant: account.taxRelevant,
-      reconciliationRequired: account.reconciliationRequired,
     })
     setAccountDialogOpen(true)
   }
@@ -376,10 +368,6 @@ export default function AccountingPage() {
       description: costCenter.description,
       parentCostCenterId: costCenter.parentCostCenterId,
       isActive: costCenter.isActive,
-      budgetAmount: costCenter.budgetAmount ? Number(costCenter.budgetAmount) : null,
-      actualAmount: costCenter.actualAmount ? Number(costCenter.actualAmount) : null,
-      manager: costCenter.manager,
-      department: costCenter.department,
     })
     setCostCenterDialogOpen(true)
   }
@@ -392,10 +380,6 @@ export default function AccountingPage() {
       description: "",
       parentAccountId: null,
       isActive: true,
-      allowsTransactions: true,
-      normalBalance: "DEBIT",
-      taxRelevant: false,
-      reconciliationRequired: false,
     })
   }
 
@@ -406,10 +390,6 @@ export default function AccountingPage() {
       description: "",
       parentCostCenterId: null,
       isActive: true,
-      budgetAmount: null,
-      actualAmount: null,
-      manager: "",
-      department: "",
     })
   }
 
@@ -595,60 +575,13 @@ export default function AccountingPage() {
                     </Select>
                   </div>
 
-                  <div>
-                    <Label htmlFor="normalBalance">Saldo Normal *</Label>
-                    <Select
-                      value={accountForm.normalBalance}
-                      onValueChange={(value) => setAccountForm({ ...accountForm, normalBalance: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="DEBIT">Débito</SelectItem>
-                        <SelectItem value="CREDIT">Crédito</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="isActive"
-                        checked={accountForm.isActive}
-                        onCheckedChange={(checked) => setAccountForm({ ...accountForm, isActive: checked })}
-                      />
-                      <Label htmlFor="isActive">Activo</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="allowsTransactions"
-                        checked={accountForm.allowsTransactions}
-                        onCheckedChange={(checked) => setAccountForm({ ...accountForm, allowsTransactions: checked })}
-                      />
-                      <Label htmlFor="allowsTransactions">Permite Transacciones</Label>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="taxRelevant"
-                        checked={accountForm.taxRelevant}
-                        onCheckedChange={(checked) => setAccountForm({ ...accountForm, taxRelevant: checked })}
-                      />
-                      <Label htmlFor="taxRelevant">Relevante para Impuestos</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="reconciliationRequired"
-                        checked={accountForm.reconciliationRequired}
-                        onCheckedChange={(checked) =>
-                          setAccountForm({ ...accountForm, reconciliationRequired: checked })
-                        }
-                      />
-                      <Label htmlFor="reconciliationRequired">Requiere Conciliación</Label>
-                    </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="isActive"
+                      checked={accountForm.isActive}
+                      onCheckedChange={(checked) => setAccountForm({ ...accountForm, isActive: checked })}
+                    />
+                    <Label htmlFor="isActive">Activo</Label>
                   </div>
 
                   <div className="flex justify-end space-x-2 pt-4">
@@ -778,7 +711,6 @@ export default function AccountingPage() {
                           <th className="text-left p-3">Código</th>
                           <th className="text-left p-3">Nombre</th>
                           <th className="text-left p-3">Tipo</th>
-                          <th className="text-left p-3">Saldo Normal</th>
                           <th className="text-left p-3">Cuenta Padre</th>
                           <th className="text-center p-3">Nivel</th>
                           <th className="text-center p-3">Estado</th>
@@ -807,11 +739,6 @@ export default function AccountingPage() {
                               </td>
                               <td className="p-3">
                                 <Badge variant="outline">{account.accountType}</Badge>
-                              </td>
-                              <td className="p-3">
-                                <Badge variant={account.normalBalance === "DEBIT" ? "default" : "secondary"}>
-                                  {account.normalBalance === "DEBIT" ? "Débito" : "Crédito"}
-                                </Badge>
                               </td>
                               <td className="p-3">
                                 {account.parentAccount ? (
