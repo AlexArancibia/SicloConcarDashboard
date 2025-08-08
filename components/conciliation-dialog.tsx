@@ -16,12 +16,16 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { CheckCircle, AlertCircle, Plus, Trash2, X, Code, Database, Info } from "lucide-react"
+import { CheckCircle, AlertCircle, Plus, Trash2, X, Code, Database, Info, FileText } from "lucide-react"
 import { useConciliationsStore } from "@/stores/conciliation-store"
 import { useAccountingAccountsStore } from "@/stores/accounting-accounts-store"
 import { useCostCentersStore } from "@/stores/cost-centers-store"
 import { useAuthStore } from "@/stores/authStore"
 import { useDocumentsStore } from "@/stores/documents-store" // Asumiendo que este store existe
+import { useAccountingEntriesStore } from "@/stores/accounting-entries-store"
+import { useToast } from "@/hooks/use-toast"
+import { TemplateSearchDialog } from "@/components/financial/template-search-dialog"
+import type { CreateAccountingEntryDto, CreateAccountingEntryLineDto, MovementType, AccountingEntryTemplate } from "@/types/accounting"
 import type {
   CreateConciliationDto,
   ExpenseType,
@@ -99,6 +103,8 @@ export function ConciliationDialog({
   const { accountingAccounts, fetchAccountingAccounts } = useAccountingAccountsStore()
   const { costCenters, fetchCostCenters } = useCostCentersStore()
   const { updateDocument } = useDocumentsStore() // Obtener la función updateDocument del store de documentos
+  const { createEntry } = useAccountingEntriesStore()
+  const { toast } = useToast()
 
   // State
   const [conciliationData, setConciliationData] = useState({
@@ -111,6 +117,15 @@ export function ConciliationDialog({
   const [applyReserves, setApplyReserves] = useState(false)
   const [allocationMode, setAllocationMode] = useState<"document" | "item">("document")
   const [error, setError] = useState<string | null>(null)
+  const [templateSearchOpen, setTemplateSearchOpen] = useState(false)
+  // Estado para el asiento contable
+  const [entryForm, setEntryForm] = useState<CreateAccountingEntryDto>({
+    companyId: "",
+    conciliationId: "", // Se establecerá cuando se cree la conciliación
+    status: "DRAFT",
+    notes: "Asiento de conciliación",
+    lines: [],
+  })
 
   // Load accounting data
   useEffect(() => {
@@ -120,6 +135,20 @@ export function ConciliationDialog({
       fetchCostCenters(user.companyId, { page: 1, limit: 1000 })
     }
   }, [open, user?.companyId])
+
+  // Sincronizar metadatos del asiento con la transacción
+  useEffect(() => {
+    if (open && user?.companyId && selectedTransaction) {
+      setEntryForm((prev) => ({
+        ...prev,
+        companyId: user.companyId!,
+        notes:
+          prev.notes && prev.notes !== "Asiento de conciliación"
+            ? prev.notes
+            : `Conciliación ${selectedTransaction.operationNumber || selectedTransaction.description}`,
+      }))
+    }
+  }, [open, user?.companyId, selectedTransaction])
 
   // Initialize document allocations with real document lines
   useEffect(() => {
@@ -226,6 +255,19 @@ export function ConciliationDialog({
     debugLog("Calculated totals", result)
     return result
   }, [selectedDocuments, selectedTransaction, expenses, documentConciliationAmounts])
+
+  // Totales del asiento contable
+  const entryTotals = useMemo(() => {
+    const debitRaw = entryForm.lines
+      .filter((l) => l.movementType === "DEBIT")
+      .reduce((a, l) => a + (Number(l.amount) || 0), 0)
+    const creditRaw = entryForm.lines
+      .filter((l) => l.movementType === "CREDIT")
+      .reduce((a, l) => a + (Number(l.amount) || 0), 0)
+    const debit = Number(debitRaw.toFixed(2))
+    const credit = Number(creditRaw.toFixed(2))
+    return { debit, credit, balanced: debit === credit }
+  }, [entryForm.lines])
 
   // Generate payloads for developer tab - PORCENTAJES EN DECIMAL
   const generatePayloads = useMemo(() => {
@@ -634,11 +676,78 @@ export function ConciliationDialog({
     debugLog("Removed expense", id)
   }
 
+  // Gestión de líneas del asiento contable
+  const addEntryLine = () => {
+    setEntryForm((f) => ({
+      ...f,
+      lines: [
+        ...f.lines,
+        {
+          lineNumber: f.lines.length + 1,
+          accountCode: "",
+          movementType: "DEBIT" as MovementType,
+          amount: 0,
+          description: "",
+          auxiliaryCode: "",
+          documentRef: "",
+        },
+      ],
+    }))
+  }
+
+  const removeEntryLine = (idx: number) => {
+    setEntryForm((f) => ({ ...f, lines: f.lines.filter((_, i) => i !== idx) }))
+  }
+
+  const updateEntryLine = (idx: number, patch: Partial<CreateAccountingEntryLineDto>) => {
+    setEntryForm((f) => ({
+      ...f,
+      lines: f.lines.map((l, i) => (i === idx ? { ...l, ...patch } : l)),
+    }))
+  }
+
+  const handleTemplateSelect = (template: AccountingEntryTemplate) => {
+    if (template.lines && template.lines.length > 0) {
+      // Convertir las líneas de la plantilla al formato del asiento contable
+      const templateLines: CreateAccountingEntryLineDto[] = template.lines.map((line, index) => ({
+        lineNumber: index + 1,
+        accountCode: line.accountCode,
+        movementType: line.movementType,
+        amount: 0, // Monto en 0 como solicitado
+        description: "",
+        applicationType: line.applicationType,
+        calculationBase: line.calculationBase,
+        value: line.value,
+        auxiliaryCode: "",
+        documentRef: "",
+      }))
+
+      setEntryForm((f) => ({
+        ...f,
+        lines: templateLines,
+        notes: template.description || f.notes,
+      }))
+
+      toast({
+        title: "Plantilla aplicada",
+        description: `Se ha precargado la plantilla "${template.name}" con ${templateLines.length} líneas.`,
+      })
+    }
+  }
+
   const handleSubmit = async () => {
     setError(null)
 
     if (!user?.companyId || !selectedTransaction) {
       setError("Información de usuario o transacción no disponible")
+      return
+    }
+
+    // Validación: asiento contable cuadrado si se ha ingresado
+    if (entryForm.lines.length > 0 && !entryTotals.balanced) {
+      setError(
+        `El asiento contable no está cuadrado. Debe: ${formatCurrency(entryTotals.debit)}, Haber: ${formatCurrency(entryTotals.credit)}`,
+      )
       return
     }
 
@@ -746,6 +855,34 @@ export function ConciliationDialog({
       }
 
       debugLog("Conciliation process completed successfully")
+
+      // PASO 5: Crear asiento contable si hay líneas
+      if (entryForm.lines.length > 0) {
+        const entryPayload: CreateAccountingEntryDto = {
+          companyId: user.companyId,
+          conciliationId: createdConciliation.id,
+          status: "DRAFT",
+          notes: entryForm.notes || `Asiento conciliación ${conciliationData.reference || createdConciliation.id}`,
+          metadata: {
+            transactionId: selectedTransaction.id,
+            transactionDate: selectedTransaction.transactionDate,
+            transactionAmount: selectedTransaction.amount,
+            conciliationReference: conciliationData.reference,
+          },
+          lines: entryForm.lines.map((l, i) => ({
+            lineNumber: l.lineNumber || i + 1,
+            accountCode: l.accountCode,
+            movementType: l.movementType,
+            amount: Number(l.amount) || 0,
+            description: l.description || "",
+            auxiliaryCode: l.auxiliaryCode || "",
+            documentRef: l.documentRef || "",
+          })),
+        }
+        debugLog("Creating accounting entry", entryPayload)
+        await createEntry(entryPayload)
+      }
+
       onOpenChange(false)
       resetForm()
     } catch (error: any) {
@@ -765,6 +902,13 @@ export function ConciliationDialog({
     setApplyReserves(false)
     setAllocationMode("document")
     setError(null)
+    setEntryForm({
+      companyId: "",
+      conciliationId: "",
+      status: "DRAFT",
+      notes: "Asiento de conciliación",
+      lines: [],
+    })
     debugLog("Form reset")
   }
 
@@ -775,10 +919,44 @@ export function ConciliationDialog({
     })}`
   }
 
+  const handleTabChange = (nextTab: string) => {
+    if (
+      activeTab === "accounts" &&
+      nextTab !== "accounts" &&
+      entryForm.lines.length > 0 &&
+      !(
+        entryForm.lines.length === 0 || (entryForm.lines.length > 0 && Math.abs(entryTotals.debit - entryTotals.credit) < 0.005)
+      )
+    ) {
+      setError(
+        `El asiento contable no está cuadrado. Debe: ${formatCurrency(entryTotals.debit)}, Haber: ${formatCurrency(
+          entryTotals.credit,
+        )}`,
+      )
+      return
+    }
+    setActiveTab(nextTab)
+  }
+
+  const handleDialogOpenChange = (requestedOpen: boolean) => {
+    if (!requestedOpen) {
+      if (activeTab === "accounts" && entryForm.lines.length > 0 && Math.abs(entryTotals.debit - entryTotals.credit) >= 0.005) {
+        setError(
+          `El asiento contable no está cuadrado. Debe: ${formatCurrency(entryTotals.debit)}, Haber: ${formatCurrency(
+            entryTotals.credit,
+          )}`,
+        )
+        return
+      }
+    }
+    onOpenChange(requestedOpen)
+  }
+
   if (!selectedTransaction) return null
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-6xl max-h-[95vh] overflow-hidden p-5">
         <DialogHeader className="pb-2">
           <DialogTitle className="flex items-center justify-between text-lg">
@@ -805,7 +983,7 @@ export function ConciliationDialog({
                 </div>
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            <Button variant="ghost" size="sm" onClick={() => handleDialogOpenChange(false)}>
               <X className="h-4 w-4" />
             </Button>
           </DialogTitle>
@@ -972,7 +1150,7 @@ export function ConciliationDialog({
 
           {/* Right Column - Tabs */}
           <div className="col-span-9">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="h-full flex flex-col">
               <TabsList className="grid w-full grid-cols-5 h-8">
                 <TabsTrigger value="documents" className="text-xs">
                   {conciliationType === "DOCUMENTS" ? "Documentos" : "Detracciones"}
@@ -1038,15 +1216,37 @@ export function ConciliationDialog({
 
                 <TabsContent value="accounts" className="h-full m-0 p-0">
                   <div className="p-3 border-b bg-muted/30">
-                    <div className="flex items-center gap-2">
-                      <Info className="h-4 w-4 text-blue-500" />
-                      <p className="text-xs text-muted-foreground">
-                        Asigne una cuenta contable por {allocationMode === "document" ? "documento" : "ítem"}
-                      </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Info className="h-4 w-4 text-blue-500" />
+                        <p className="text-xs text-muted-foreground">
+                          Asigne una cuenta contable por {allocationMode === "document" ? "documento" : "ítem"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs">
+                        <div>
+                          <span className="mr-2">Debe: <span className="font-semibold">{formatCurrency(entryTotals.debit)}</span></span>
+                          <span>Haber: <span className="font-semibold">{formatCurrency(entryTotals.credit)}</span></span>
+                        </div>
+                        {entryForm.lines.length > 0 && (
+                          <Badge variant={entryTotals.balanced ? "default" : "destructive"}>
+                            {entryTotals.balanced ? "Cuadrado" : "Descuadrado"}
+                          </Badge>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Estado:</span>
+                          <Badge variant="outline" className="text-xs">
+                            {entryForm.status === "DRAFT" && "Borrador"}
+                            {entryForm.status === "POSTED" && "Contabilizado"}
+                            {entryForm.status === "CANCELLED" && "Anulado"}
+                          </Badge>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <ScrollArea className="h-[calc(100%-40px)]">
                     <div className="p-4 space-y-3">
+                      {/* Sección: Distribución por documento/ítem (ya existente) */}
                       {selectedDocuments.map((document) => {
                         const allocation = documentAllocations.find((alloc) => alloc.documentId === document.id)
                         if (!allocation) return null
@@ -1123,6 +1323,221 @@ export function ConciliationDialog({
                           </div>
                         )
                       })}
+
+                      {/* Sección: Asiento contable manual (Debe/Haber) */}
+                      <div className="p-3 border rounded space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-medium">Asiento contable</div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setTemplateSearchOpen(true)}
+                              className="text-xs"
+                            >
+                              <FileText className="w-3 h-3 mr-1" />
+                              Buscar Plantilla
+                            </Button>
+                            <div className="text-xs text-muted-foreground">
+                              Ingrese líneas de Debe/Haber. Debe = Haber antes de continuar.
+                            </div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <Input
+                            placeholder="Notas del asiento (opcional)"
+                            value={entryForm.notes || ""}
+                            onChange={(e) => setEntryForm((f) => ({ ...f, notes: e.target.value }))}
+                            className="h-8 text-xs"
+                          />
+                          <Select
+                            value={entryForm.status}
+                            onValueChange={(value) => setEntryForm((f) => ({ ...f, status: value as any }))}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Estado" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="DRAFT">Borrador</SelectItem>
+                              <SelectItem value="POSTED">Contabilizado</SelectItem>
+                              <SelectItem value="CANCELLED">Anulado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="border rounded overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-10 text-xs">#</TableHead>
+                                <TableHead className="text-xs">Cuenta</TableHead>
+                                <TableHead className="w-40 text-xs">Tipo</TableHead>
+                                <TableHead className="w-40 text-right text-xs">Monto</TableHead>
+                                <TableHead className="text-xs">Descripción</TableHead>
+                                <TableHead className="w-20 text-xs">Auxiliar</TableHead>
+                                <TableHead className="w-20 text-xs">Ref. Doc</TableHead>
+                                <TableHead className="w-16"></TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {entryForm.lines.map((line, idx) => (
+                                <TableRow key={idx}>
+                                  <TableCell className="text-xs">{line.lineNumber || idx + 1}</TableCell>
+                                  <TableCell>
+                                    <Select
+                                      value={line.accountCode}
+                                      onValueChange={(v) => updateEntryLine(idx, { accountCode: v })}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs">
+                                        <SelectValue placeholder="Seleccionar cuenta" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {accountingAccounts.map((acc) => (
+                                          <SelectItem key={acc.id} value={acc.accountCode} className="text-xs">
+                                            {acc.accountCode} - {acc.accountName}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Select
+                                      value={line.movementType}
+                                      onValueChange={(v) => updateEntryLine(idx, { movementType: v as MovementType })}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs">
+                                        <SelectValue placeholder="Tipo" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="DEBIT">Debe</SelectItem>
+                                        <SelectItem value="CREDIT">Haber</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={String(line.amount)}
+                                      onChange={(e) => updateEntryLine(idx, { amount: Number.parseFloat(e.target.value || "0") })}
+                                      className="h-8 text-xs text-right"
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      placeholder="Descripción"
+                                      value={line.description || ""}
+                                      onChange={(e) => updateEntryLine(idx, { description: e.target.value })}
+                                      className="h-8 text-xs"
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      placeholder="Auxiliar"
+                                      value={line.auxiliaryCode || ""}
+                                      onChange={(e) => updateEntryLine(idx, { auxiliaryCode: e.target.value })}
+                                      className="h-8 text-xs"
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      placeholder="Ref. Doc"
+                                      value={line.documentRef || ""}
+                                      onChange={(e) => updateEntryLine(idx, { documentRef: e.target.value })}
+                                      className="h-8 text-xs"
+                                    />
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Button variant="ghost" size="sm" className="h-7" onClick={() => removeEntryLine(idx)}>
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" className="h-7" onClick={addEntryLine}>
+                              <Plus className="h-3 w-3 mr-1" /> Agregar línea
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-7" 
+                              onClick={() => {
+                                // Sugerir asiento automático basado en documentos
+                                const suggestedLines: CreateAccountingEntryLineDto[] = []
+                                
+                                // Línea 1: Debe - Cuenta bancaria
+                                const bankAccount = bankAccounts.find(b => b.id === selectedTransaction?.bankAccountId)
+                                if (bankAccount) {
+                                  suggestedLines.push({
+                                    lineNumber: 1,
+                                    accountCode: bankAccount.accountingAccount?.accountCode || "",
+                                    movementType: "DEBIT",
+                                    amount: totals.totalConciliated,
+                                    description: `Conciliación ${conciliationData.reference || selectedTransaction?.operationNumber}`,
+                                    auxiliaryCode: "",
+                                    documentRef: selectedTransaction?.operationNumber || "",
+                                  })
+                                }
+                                
+                                // Línea 2: Haber - Cuenta de proveedores (si hay documentos)
+                                if (selectedDocuments.length > 0) {
+                                  const defaultAccount = accountingAccounts.find(acc => 
+                                    acc.accountCode.startsWith("42") || acc.accountName.toLowerCase().includes("proveedor")
+                                  )
+                                  if (defaultAccount) {
+                                    suggestedLines.push({
+                                      lineNumber: 2,
+                                      accountCode: defaultAccount.accountCode,
+                                      movementType: "CREDIT",
+                                      amount: totals.documentsTotal,
+                                      description: `Pago a proveedores - ${selectedDocuments.length} documento(s)`,
+                                      auxiliaryCode: "",
+                                      documentRef: selectedDocuments.map(d => d.fullNumber).join(", "),
+                                    })
+                                  }
+                                }
+                                
+                                // Línea 3: Haber - Gastos (si hay gastos adicionales)
+                                if (totals.expensesTotal > 0) {
+                                  const expenseAccount = accountingAccounts.find(acc => 
+                                    acc.accountCode.startsWith("63") || acc.accountName.toLowerCase().includes("gasto")
+                                  )
+                                  if (expenseAccount) {
+                                    suggestedLines.push({
+                                      lineNumber: 3,
+                                      accountCode: expenseAccount.accountCode,
+                                      movementType: "CREDIT",
+                                      amount: totals.expensesTotal,
+                                      description: "Gastos adicionales de conciliación",
+                                      auxiliaryCode: "",
+                                      documentRef: "",
+                                    })
+                                  }
+                                }
+                                
+                                setEntryForm(prev => ({ ...prev, lines: suggestedLines }))
+                              }}
+                            >
+                              <Database className="h-3 w-3 mr-1" /> Sugerir
+                            </Button>
+                          </div>
+                          <div className="text-xs">
+                            Debe: <span className="font-semibold">{formatCurrency(entryTotals.debit)}</span> · Haber: {" "}
+                            <span className="font-semibold">{formatCurrency(entryTotals.credit)}</span> {" "}
+                            {entryForm.lines.length > 0 && (
+                              <span className={entryTotals.balanced ? "text-green-600" : "text-orange-600"}>
+                                ({entryTotals.balanced ? "Cuadrado" : "Descuadrado"})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </ScrollArea>
                 </TabsContent>
@@ -1635,5 +2050,13 @@ export function ConciliationDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Diálogo de búsqueda de plantillas */}
+    <TemplateSearchDialog
+      open={templateSearchOpen}
+      onOpenChange={setTemplateSearchOpen}
+      onTemplateSelect={handleTemplateSelect}
+    />
+  </>
   )
 }

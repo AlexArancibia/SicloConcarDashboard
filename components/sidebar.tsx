@@ -16,6 +16,7 @@ import {
   LogOut,
   Shield,
   BookText,
+  List,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -146,6 +147,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </NavItem>
               <NavItem href="/accounting" icon={BookText}>
                 Contabilidad
+              </NavItem>
+              <NavItem href="/accounting-templates" icon={List}>
+                Plantillas Asiento Contable
               </NavItem>
             </SidebarMenu>
           </SidebarGroupContent>

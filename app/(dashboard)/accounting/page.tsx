@@ -58,10 +58,6 @@ export default function AccountingPage() {
     description: "",
     parentCostCenterId: null,
     isActive: true,
-    budgetAmount: null,
-    actualAmount: null,
-    manager: "",
-    department: "",
   })
 
   const { toast } = useToast()
@@ -184,9 +180,17 @@ export default function AccountingPage() {
 
     try {
       const accountData: CreateAccountingAccountDto = {
-        ...accountForm,
         companyId: user.companyId,
-      } as CreateAccountingAccountDto
+        accountCode: accountForm.accountCode || "",
+        accountName: accountForm.accountName || "",
+        accountType: accountForm.accountType || "",
+        description: accountForm.description || undefined,
+        parentAccountId:
+          accountForm.parentAccountId && accountForm.parentAccountId !== "none"
+            ? accountForm.parentAccountId
+            : undefined,
+        isActive: accountForm.isActive ?? true,
+      }
 
       const result = await createAccountingAccount(accountData)
       if (result) {
@@ -212,16 +216,15 @@ export default function AccountingPage() {
 
     try {
       const updateData: UpdateAccountingAccountDto = {
-        accountCode: accountForm.accountCode,
-        accountName: accountForm.accountName,
-        accountType: accountForm.accountType,
-        description: accountForm.description,
-        parentAccountId: accountForm.parentAccountId,
+        accountCode: accountForm.accountCode || undefined,
+        accountName: accountForm.accountName || undefined,
+        accountType: accountForm.accountType || undefined,
+        description: accountForm.description || undefined,
+        parentAccountId:
+          accountForm.parentAccountId && accountForm.parentAccountId !== "none"
+            ? accountForm.parentAccountId
+            : undefined,
         isActive: accountForm.isActive,
-        allowsTransactions: accountForm.allowsTransactions,
-        normalBalance: accountForm.normalBalance,
-        taxRelevant: accountForm.taxRelevant,
-        reconciliationRequired: accountForm.reconciliationRequired,
       }
 
       await updateAccountingAccount(editingAccount.id, updateData)
@@ -266,9 +269,16 @@ export default function AccountingPage() {
 
     try {
       const costCenterData: CreateCostCenterDto = {
-        ...costCenterForm,
         companyId: user.companyId,
-      } as CreateCostCenterDto
+        code: costCenterForm.code || "",
+        name: costCenterForm.name || "",
+        description: costCenterForm.description || undefined,
+        parentCostCenterId:
+          costCenterForm.parentCostCenterId && costCenterForm.parentCostCenterId !== "none"
+            ? costCenterForm.parentCostCenterId
+            : undefined,
+        isActive: costCenterForm.isActive ?? true,
+      }
 
       const result = await createCostCenter(costCenterData)
       if (result) {
@@ -294,15 +304,14 @@ export default function AccountingPage() {
 
     try {
       const updateData: UpdateCostCenterDto = {
-        code: costCenterForm.code,
-        name: costCenterForm.name,
-        description: costCenterForm.description,
-        parentCostCenterId: costCenterForm.parentCostCenterId,
+        code: costCenterForm.code || undefined,
+        name: costCenterForm.name || undefined,
+        description: costCenterForm.description || undefined,
+        parentCostCenterId:
+          costCenterForm.parentCostCenterId && costCenterForm.parentCostCenterId !== "none"
+            ? costCenterForm.parentCostCenterId
+            : undefined,
         isActive: costCenterForm.isActive,
-        budgetAmount: costCenterForm.budgetAmount,
-        actualAmount: costCenterForm.actualAmount,
-        manager: costCenterForm.manager,
-        department: costCenterForm.department,
       }
 
       await updateCostCenter(editingCostCenter.id, updateData)
@@ -568,7 +577,9 @@ export default function AccountingPage() {
                     <Label htmlFor="parentAccount">Cuenta Padre</Label>
                     <Select
                       value={accountForm.parentAccountId || ""}
-                      onValueChange={(value) => setAccountForm({ ...accountForm, parentAccountId: value || null })}
+                      onValueChange={(value) =>
+                        setAccountForm({ ...accountForm, parentAccountId: !value || value === "none" ? null : value })
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar cuenta padre (opcional)" />
@@ -668,15 +679,6 @@ export default function AccountingPage() {
                         placeholder="Ej: CC001"
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="department">Departamento</Label>
-                      <Input
-                        id="department"
-                        value={costCenterForm.department || ""}
-                        onChange={(e) => setCostCenterForm({ ...costCenterForm, department: e.target.value })}
-                        placeholder="Ej: Ventas"
-                      />
-                    </div>
                   </div>
 
                   <div>
@@ -704,7 +706,10 @@ export default function AccountingPage() {
                     <Select
                       value={costCenterForm.parentCostCenterId || ""}
                       onValueChange={(value) =>
-                        setCostCenterForm({ ...costCenterForm, parentCostCenterId: value || null })
+                        setCostCenterForm({
+                          ...costCenterForm,
+                          parentCostCenterId: !value || value === "none" ? null : value,
+                        })
                       }
                     >
                       <SelectTrigger>
@@ -721,50 +726,7 @@ export default function AccountingPage() {
                     </Select>
                   </div>
 
-                  <div>
-                    <Label htmlFor="manager">Responsable</Label>
-                    <Input
-                      id="manager"
-                      value={costCenterForm.manager || ""}
-                      onChange={(e) => setCostCenterForm({ ...costCenterForm, manager: e.target.value })}
-                      placeholder="Nombre del responsable"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="budgetAmount">Presupuesto</Label>
-                      <Input
-                        id="budgetAmount"
-                        type="number"
-                        step="0.01"
-                        value={costCenterForm.budgetAmount || ""}
-                        onChange={(e) =>
-                          setCostCenterForm({
-                            ...costCenterForm,
-                            budgetAmount: e.target.value ? Number(e.target.value) : null,
-                          })
-                        }
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="actualAmount">Monto Real</Label>
-                      <Input
-                        id="actualAmount"
-                        type="number"
-                        step="0.01"
-                        value={costCenterForm.actualAmount || ""}
-                        onChange={(e) =>
-                          setCostCenterForm({
-                            ...costCenterForm,
-                            actualAmount: e.target.value ? Number(e.target.value) : null,
-                          })
-                        }
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
+                  {/* Campos fuera del schema backend eliminados: manager, department, budgetAmount, actualAmount */}
 
                   <div className="flex items-center space-x-2">
                     <Switch
@@ -806,7 +768,7 @@ export default function AccountingPage() {
             </CardHeader>
             <CardContent>
               {currentLoading ? (
-                <TableSkeleton rows={8} columns={8} />
+                <TableSkeleton rows={8} columns={6} />
               ) : (
                 <>
                   <div className="overflow-x-auto">
@@ -953,10 +915,8 @@ export default function AccountingPage() {
                         <tr className="border-b">
                           <th className="text-left p-3">Código</th>
                           <th className="text-left p-3">Nombre</th>
-                          <th className="text-left p-3">Departamento</th>
-                          <th className="text-left p-3">Responsable</th>
-                          <th className="text-right p-3">Presupuesto</th>
-                          <th className="text-right p-3">Real</th>
+                          <th className="text-left p-3">Centro Padre</th>
+                          <th className="text-center p-3">Nivel</th>
                           <th className="text-center p-3">Estado</th>
                           <th className="text-center p-3">Acciones</th>
                         </tr>
@@ -964,7 +924,7 @@ export default function AccountingPage() {
                       <tbody>
                         {costCenters.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="text-center py-8">
+                            <td colSpan={6} className="text-center py-8">
                               <Target className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                               <p className="text-gray-500">No se encontraron centros de costo</p>
                             </td>
@@ -984,10 +944,21 @@ export default function AccountingPage() {
                                   </div>
                                 )}
                               </td>
-                              <td className="p-3">{costCenter.department || "-"}</td>
-                              <td className="p-3">{costCenter.manager || "-"}</td>
-                              <td className="p-3 text-right font-mono">{formatCurrency(costCenter.budgetAmount)}</td>
-                              <td className="p-3 text-right font-mono">{formatCurrency(costCenter.actualAmount)}</td>
+                              <td className="p-3">
+                                {costCenter.parentCostCenter ? (
+                                  <div className="text-sm">
+                                    <div className="font-mono">{costCenter.parentCostCenter.code}</div>
+                                    <div className="text-xs text-gray-500 truncate max-w-32">
+                                      {costCenter.parentCostCenter.name}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  "-"
+                                )}
+                              </td>
+                              <td className="p-3 text-center">
+                                <Badge variant="outline">{costCenter.level}</Badge>
+                              </td>
                               <td className="p-3 text-center">{getStatusBadge(costCenter.isActive)}</td>
                               <td className="p-3">
                                 <div className="flex items-center justify-center gap-1">

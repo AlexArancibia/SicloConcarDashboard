@@ -1,14 +1,16 @@
 // Tipos de autenticación basados en el schema de Prisma
-export type UserRole = "SUPERADMIN" | "ADMIN" | "MANAGER" | "EDITOR" | "VIEWER"
-export type AuthProvider = "EMAIL" | "GOOGLE" | "MICROSOFT" | "GITHUB"
+// Roles exactamente como en schema.prisma
+export type UserRole = "ADMIN" | "MANAGER" | "ACCOUNTANT" | "EDITOR" | "VIEWER"
+// Proveedores exactamente como en schema.prisma
+export type AuthProvider = "GITHUB" | "GOOGLE" | "MICROSOFT" | "EMAIL"
 
 export interface User {
   id: string
   email: string
   emailVerified: Date | null
   image: string | null
-  firstName: string
-  lastName: string
+  firstName: string | null
+  lastName: string | null
   role: UserRole
 
   // Campos para autenticación con proveedores externos
@@ -23,7 +25,7 @@ export interface User {
   bio: string | null
   preferences: any | null
   lastLogin: Date | null
-  failedLoginAttempts: number | null
+  failedLoginAttempts: number
   lockedUntil: Date | null
   isActive: boolean
 

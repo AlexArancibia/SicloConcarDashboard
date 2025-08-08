@@ -26,10 +26,17 @@ export interface BankAccount extends BaseEntity {
   isActive: boolean
   initialBalance: number // Decimal en schema
   currentBalance: number // Decimal en schema
+  accountingAccountId?: string | null
+  annexCode?: string | null
 
   // Relaciones expandidas
   company?: Company
   bank?: Bank
+  accountingAccount?: {
+    id: string
+    accountCode: string
+    accountName: string
+  } | null
   currencyRef?: {
     code: string
     name: string

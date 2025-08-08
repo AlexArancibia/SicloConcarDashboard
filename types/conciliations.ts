@@ -1,11 +1,13 @@
 import type { BaseEntity, PaginationDto } from "./common"
 import type { Company } from "./auth"
 
-// Enums basados en el schema de Prisma
+// Enums basados exactamente en el schema de Prisma
 export type ConciliationType = "DOCUMENTS" | "DETRACTIONS"
 export type ConciliationStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
-export type ConciliationItemType = "DOCUMENT" | "TRANSACTION" | "ADJUSTMENT" | "FEE" | "OTHER"
-export type ConciliationItemStatus = "PENDING" | "MATCHED" | "PARTIAL" | "REJECTED" | "UNMATCHED"
+// El schema solo define: DOCUMENT | TRANSACTION | ADJUSTMENT
+export type ConciliationItemType = "DOCUMENT" | "TRANSACTION" | "ADJUSTMENT"
+// El schema solo define: PENDING | MATCHED | PARTIAL | UNMATCHED
+export type ConciliationItemStatus = "PENDING" | "MATCHED" | "PARTIAL" | "UNMATCHED"
 export type ExpenseType = "OPERATIONAL" | "ADMINISTRATIVE" | "FINANCIAL" | "TAX" | "OTHER"
 
 // ============================================================================

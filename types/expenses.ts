@@ -1,43 +1,50 @@
-import type { BaseEntity } from "./common"
+import type { BaseEntity, PaginationDto } from "./common"
 import type { Company } from "./auth"
 
 // Enums basados en el schema de Prisma
-export type ExpenseStatus = "IMPORTED" | "PROCESSED" | "RECONCILED" | "REJECTED" | "CANCELLED"
+export type ExpenseType = "OPERATIONAL" | "ADMINISTRATIVE" | "FINANCIAL" | "TAX" | "OTHER"
+export type ExpenseStatus = "IMPORTED" | "PROCESSED" | "RECONCILED" | "REJECTED"
 
 // ============================================================================
-// INTERFACES PRINCIPALES
+// INTERFACES PRINCIPALES (alineadas con prisma.schema)
 // ============================================================================
 
 export interface Expense extends BaseEntity {
   companyId: string
-  bankAccountId: string
-  supplierId: string | null
-  documentId: string | null
+  lineNumber: number | null
+  bankAccountId: string | null
   transactionDate: Date
   valueDate: Date | null
-  description: string
-  amount: string // Decimal en schema
-  currency: string
-  exchangeRate: string // Decimal en schema
-  localAmount: string // Decimal en schema
-  documentNumber: string | null
+  operationDesc: string | null
+  amount: string
+  balance: string | null
+  branch: string | null
+  operationNumber: string | null
+  operationTime: string | null
+  user: string | null
+  utc: string | null
+  reference2: string | null
+  documentType: string | null
+  fiscalFolio: string | null
+  concept: string | null
+  totalAmount: string | null
+  subtotal: string | null
+  igv: string | null
+  isr: string | null
+  accountingMonth: string | null
+  comments: string | null
   documentDate: Date | null
   issueDate: Date | null
   dueDate: Date | null
-  category: string | null
-  subcategory: string | null
-  paymentMethod: string | null
-  reference: string | null
-  notes: string | null
-  tags: string | null
-  isRecurring: boolean
-  recurringFrequency: string | null
-  isTaxDeductible: boolean
-  taxAmount: string | null // Decimal en schema
+  isMassive: boolean
+  expenseType: ExpenseType
+  currency: string
+  supplierId: string | null
+  documentId: string | null
+  expenseCategoryId: string | null
   status: ExpenseStatus
+  originalFileName: string | null
   rowHash: string | null
-  fileName: string | null
-  rowNumber: number | null
   importedAt: Date | null
   importedById: string | null
   processedAt: Date | null
@@ -45,58 +52,13 @@ export interface Expense extends BaseEntity {
   reconciledAt: Date | null
   reconciledById: string | null
 
-  // Relaciones expandidas
+  // Relaciones expandidas (opcionales)
   company?: Company
-  bankAccount?: {
-    id: string
-    accountNumber: string
-    alias: string | null
-    bank: {
-      name: string
-      code: string
-    }
-  }
-  supplier?: {
-    id: string
-    businessName: string
-    documentNumber: string
-    documentType: string
-  } | null
-  document?: {
-    id: string
-    fullNumber: string
-    documentType: string
-    total: string
-    issueDate: Date
-  } | null
-  importedBy?: {
-    id: string
-    firstName: string | null
-    lastName: string | null
-    email: string
-  } | null
-  processedBy?: {
-    id: string
-    firstName: string | null
-    lastName: string | null
-    email: string
-  } | null
-  reconciledBy?: {
-    id: string
-    firstName: string | null
-    lastName: string | null
-    email: string
-  } | null
 }
 
 // ============================================================================
-// DTOs (Data Transfer Objects)
+// DTOs (Data Transfer Objects) alineados con backend
 // ============================================================================
-
-export interface PaginationDto {
-  page?: number
-  limit?: number
-}
 
 export interface ExpensePaginatedResponse {
   data: Expense[]
@@ -106,76 +68,100 @@ export interface ExpensePaginatedResponse {
   totalPages: number
 }
 
+// Basado en Nest DTO (src/expenses/dto/create-expense.dto.ts)
 export interface CreateExpenseDto {
   companyId: string
+  lineNumber: number
   bankAccountId: string
-  supplierId?: string | null
-  documentId?: string | null
-  transactionDate: Date | string
-  valueDate?: Date | string | null
-  description: string
+  transactionDate: string | Date
+  valueDate?: string | Date
+  operationDesc: string
   amount: number
-  currency: string
-  exchangeRate?: number
-  localAmount?: number
-  documentNumber?: string | null
-  documentDate?: Date | string | null
-  issueDate?: Date | string | null
-  dueDate?: Date | string | null
-  category?: string | null
-  subcategory?: string | null
-  paymentMethod?: string | null
-  reference?: string | null
-  notes?: string | null
-  tags?: string | null
-  isRecurring?: boolean
-  recurringFrequency?: string | null
-  isTaxDeductible?: boolean
-  taxAmount?: number | null
+  balance: number
+  branch?: string
+  operationNumber: string
+  operationTime?: string
+  user?: string
+  utc?: string
+  reference2?: string
+  documentType?: string
+  fiscalFolio?: string
+  supplierName?: string
+  concept?: string
+  totalAmount?: number
+  subtotal?: number
+  igv?: number
+  isr?: number
+  discipline?: string
+  location?: string
+  generalCategory?: string
+  type?: string
+  account?: string
+  subAccount?: string
+  accountingMonth?: string
+  accountingAccount?: string
+  comments?: string
+  supplierRuc?: string
+  documentDate?: string | Date
+  issueDate?: string | Date
+  dueDate?: string | Date
+  isMassive?: boolean
+  expenseType: ExpenseType
+  currency?: string
+  supplierId?: string
+  documentId?: string
+  importBatchId?: string
+  originalFileName?: string
+  importedById: string
   status?: ExpenseStatus
-  rowHash?: string | null
-  fileName?: string | null
-  rowNumber?: number | null
-  importedAt?: Date | string | null
-  importedById?: string | null
-  processedAt?: Date | string | null
-  processedById?: string | null
-  reconciledAt?: Date | string | null
-  reconciledById?: string | null
+  rowHash?: string
+  importedAt?: string | Date
+  processedAt?: string | Date
+  processedById?: string
+  reconciledAt?: string | Date
+  reconciledById?: string
 }
 
 export interface UpdateExpenseDto {
-  bankAccountId?: string
+  lineNumber?: number
+  bankAccountId?: string | null
+  transactionDate?: string | Date
+  valueDate?: string | Date | null
+  operationDesc?: string | null
+  amount?: number
+  balance?: number | null
+  branch?: string | null
+  operationNumber?: string | null
+  operationTime?: string | null
+  user?: string | null
+  utc?: string | null
+  reference2?: string | null
+  documentType?: string | null
+  fiscalFolio?: string | null
+  concept?: string | null
+  totalAmount?: number | null
+  subtotal?: number | null
+  igv?: number | null
+  isr?: number | null
+  accountingMonth?: string | null
+  comments?: string | null
+  documentDate?: string | Date | null
+  issueDate?: string | Date | null
+  dueDate?: string | Date | null
+  isMassive?: boolean
+  expenseType?: ExpenseType
+  currency?: string
   supplierId?: string | null
   documentId?: string | null
-  transactionDate?: Date | string
-  valueDate?: Date | string | null
-  description?: string
-  amount?: number
-  currency?: string
-  exchangeRate?: number
-  localAmount?: number
-  documentNumber?: string | null
-  documentDate?: Date | string | null
-  issueDate?: Date | string | null
-  dueDate?: Date | string | null
-  category?: string | null
-  subcategory?: string | null
-  paymentMethod?: string | null
-  reference?: string | null
-  notes?: string | null
-  tags?: string | null
-  isRecurring?: boolean
-  recurringFrequency?: string | null
-  isTaxDeductible?: boolean
-  taxAmount?: number | null
+  expenseCategoryId?: string | null
   status?: ExpenseStatus
+  originalFileName?: string | null
   rowHash?: string | null
-  fileName?: string | null
-  rowNumber?: number | null
-  processedAt?: Date | string | null
+  importedAt?: string | Date | null
+  importedById?: string | null
+  processedAt?: string | Date | null
   processedById?: string | null
-  reconciledAt?: Date | string | null
+  reconciledAt?: string | Date | null
   reconciledById?: string | null
 }
 
@@ -188,25 +174,18 @@ export interface ExpenseFiltersDto extends PaginationDto {
   status?: ExpenseStatus
   bankAccountId?: string
   supplierId?: string
-  category?: string
-  subcategory?: string
   startDate?: string
   endDate?: string
   minAmount?: number
   maxAmount?: number
   currency?: string
-  isTaxDeductible?: boolean
-  isRecurring?: boolean
   search?: string
 }
 
 export interface ExpenseStats {
   total: number
   byStatus: Record<ExpenseStatus, number>
-  byCategory: Record<string, number>
   totalAmount: number
-  averageAmount: number
-  taxDeductibleAmount: number
 }
 
 export interface ExpenseSummary {
@@ -214,16 +193,6 @@ export interface ExpenseSummary {
   totalAmount: string
   byStatus: Array<{
     status: ExpenseStatus
-    count: number
-    amount: string
-  }>
-  byCategory: Array<{
-    category: string
-    count: number
-    amount: string
-  }>
-  byCurrency: Array<{
-    currency: string
     count: number
     amount: string
   }>

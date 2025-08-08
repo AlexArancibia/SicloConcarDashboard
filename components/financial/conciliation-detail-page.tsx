@@ -33,6 +33,8 @@ import Link from "next/link"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { DocumentStatus, DocumentType } from "@/types/documents"
+import { useAccountingEntriesStore } from "@/stores/accounting-entries-store"
+import type { AccountingEntry } from "@/types/accounting"
 
 interface ConciliationDetailPageProps {
   params: { id: string }
@@ -70,6 +72,8 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
   const [loadingData, setLoadingData] = useState(true)
   const { getConciliationById, completeConciliation, performAutomaticConciliation, loading: storeLoading } = useConciliationsStore()
   const { toast } = useToast()
+  const { entries, fetchEntries } = useAccountingEntriesStore()
+  const [relatedEntries, setRelatedEntries] = useState<AccountingEntry[]>([])
 
   useEffect(() => {
     const fetchConciliation = async () => {
@@ -93,6 +97,28 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
       fetchConciliation()
     }
   }, [params.id, getConciliationById, toast])
+
+  // Cargar asientos asociados cuando haya conciliación
+  useEffect(() => {
+    const loadEntries = async () => {
+      if (!conciliation?.companyId) return
+      try {
+        await fetchEntries(conciliation.companyId, { page: 1, limit: 1000 })
+      } catch (e) {
+        // noop visual
+      }
+    }
+    loadEntries()
+  }, [conciliation?.companyId, fetchEntries])
+
+  // Filtrar por conciliación actual
+  useEffect(() => {
+    if (!conciliation) return
+    const filtered = entries.filter(
+      (e) => e.conciliationId === conciliation.id || (e.conciliation && e.conciliation.id === conciliation.id),
+    )
+    setRelatedEntries(filtered)
+  }, [entries, conciliation])
 
   const handleComplete = async () => {
     if (!conciliation) return
@@ -389,6 +415,51 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
           ))}
         </TableBody>
       </Table>
+    </div>
+  )
+
+  const AccountingEntriesTable = () => (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow className="border-slate-200 dark:border-slate-700">
+            <TableHead className="text-slate-700 dark:text-slate-300">Fecha</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300">Nº Asiento</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300">Descripción</TableHead>
+            <TableHead className="text-right text-slate-700 dark:text-slate-300">Debe</TableHead>
+            <TableHead className="text-right text-slate-700 dark:text-slate-300">Haber</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300">Estado</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {relatedEntries.map((e) => {
+            const totals = (e.lines || []).reduce(
+              (acc, line) => {
+                const amount = typeof line.amount === "string" ? Number.parseFloat(line.amount) : (line.amount || 0)
+                if (line.movementType === "DEBIT") acc.debit += amount
+                if (line.movementType === "CREDIT") acc.credit += amount
+                return acc
+              },
+              { debit: 0, credit: 0 },
+            )
+            return (
+              <TableRow key={e.id} className="border-slate-200 dark:border-slate-700">
+                <TableCell className="text-slate-700 dark:text-slate-300">{formatShortDate(e.createdAt)}</TableCell>
+                <TableCell className="font-mono text-slate-800 dark:text-slate-200" title={e.id}>{e.id}</TableCell>
+                <TableCell className="text-slate-700 dark:text-slate-300 max-w-xl truncate" title={e.notes || ""}>
+                  {e.notes || "-"}
+                </TableCell>
+                <TableCell className="text-right text-slate-700 dark:text-slate-300">{formatCurrency(totals.debit)}</TableCell>
+                <TableCell className="text-right text-slate-700 dark:text-slate-300">{formatCurrency(totals.credit)}</TableCell>
+                <TableCell className="text-slate-700 dark:text-slate-300">{e.status}</TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+      {relatedEntries.length === 0 && (
+        <div className="text-center py-8 text-slate-500 dark:text-slate-400">No hay asientos asociados.</div>
+      )}
     </div>
   )
 
@@ -791,6 +862,19 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
                 </CardContent>
               </Card>
             )}
+
+            {/* Accounting Entries related to this conciliation */}
+            <Card className="bg-white dark:bg-slate-800 shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-200">
+                  <Hash className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                  Asientos contables asociados ({relatedEntries.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AccountingEntriesTable />
+              </CardContent>
+            </Card>
 
             {/* Accounting Summary */}
             {conciliation.summary?.accountingSummary && (
