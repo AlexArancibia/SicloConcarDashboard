@@ -1,6 +1,9 @@
 import type { BaseEntity, PaginationDto } from "./common"
 import type { Company } from "./auth"
 
+// Re-export PaginationDto for convenience
+export type { PaginationDto }
+
 // Enums basados en el schema de Prisma
 export type ExpenseType = "OPERATIONAL" | "ADMINISTRATIVE" | "FINANCIAL" | "TAX" | "OTHER"
 export type ExpenseStatus = "IMPORTED" | "PROCESSED" | "RECONCILED" | "REJECTED"
