@@ -36,6 +36,7 @@ import type {
 import type { Transaction } from "@/types/transactions"
 import type { BankAccount } from "@/types/bank-accounts"
 import type { Document, UpdateDocumentDto } from "@/types/documents" // Importar el DTO de documentos
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 
 const DEBUG_MODE = true
 
@@ -708,19 +709,106 @@ export function ConciliationDialog({
 
   const handleTemplateSelect = (template: AccountingEntryTemplate) => {
     if (template.lines && template.lines.length > 0) {
+      // Solo calcular montos si estamos en modo documento y hay exactamente un documento
+      const shouldCalculateAmounts = allocationMode === "document" && selectedDocuments.length === 1
+      const documentAmount = shouldCalculateAmounts ? parseFloat(selectedDocuments[0].total) : 0
+
       // Convertir las líneas de la plantilla al formato del asiento contable
-      const templateLines: CreateAccountingEntryLineDto[] = template.lines.map((line, index) => ({
-        lineNumber: index + 1,
-        accountCode: line.accountCode,
-        movementType: line.movementType,
-        amount: 0, // Monto en 0 como solicitado
-        description: "",
-        applicationType: line.applicationType,
-        calculationBase: line.calculationBase,
-        value: line.value,
-        auxiliaryCode: "",
-        documentRef: "",
-      }))
+      const templateLines: CreateAccountingEntryLineDto[] = template.lines.map((line, index) => {
+        let calculatedAmount = 0
+
+        if (shouldCalculateAmounts && line.calculationBase && line.value) {
+          const value = typeof line.value === 'string' ? parseFloat(line.value) : line.value
+          
+          switch (line.calculationBase) {
+            case "SUBTOTAL":
+              // Para subtotal, usar el monto del documento directamente
+              calculatedAmount = documentAmount
+              break
+            case "IGV":
+              // Para IGV, calcular el 18% del subtotal
+              calculatedAmount = documentAmount * 0.18
+              break
+            case "TOTAL":
+              // Para total, usar el monto del documento
+              calculatedAmount = documentAmount
+              break
+            case "RENT":
+              // Para renta, usar el valor como porcentaje del monto
+              calculatedAmount = (documentAmount * value) / 100
+              break
+            case "TAX":
+              // Para impuestos, usar el valor como porcentaje del monto
+              calculatedAmount = (documentAmount * value) / 100
+              break
+            case "RETENTION_AMOUNT":
+              // Para retención, verificar si es porcentaje o valor directo
+              if (line.applicationType === "PERCENTAGE") {
+                calculatedAmount = (documentAmount * value) / 100
+              } else {
+                calculatedAmount = typeof value === 'number' ? value : 0
+              }
+              break
+            case "DETRACTION_AMOUNT":
+              // Para detracción, verificar si es porcentaje o valor directo
+              if (line.applicationType === "PERCENTAGE") {
+                calculatedAmount = (documentAmount * value) / 100
+              } else {
+                calculatedAmount = typeof value === 'number' ? value : 0
+              }
+              break
+            case "NET_PAYABLE":
+              // Para monto neto a pagar, verificar si es porcentaje o valor directo
+              if (line.applicationType === "PERCENTAGE") {
+                calculatedAmount = (documentAmount * value) / 100
+              } else {
+                calculatedAmount = typeof value === 'number' ? value : 0
+              }
+              break
+            case "PENDING_AMOUNT":
+              // Para monto pendiente, verificar si es porcentaje o valor directo
+              if (line.applicationType === "PERCENTAGE") {
+                calculatedAmount = (documentAmount * value) / 100
+              } else {
+                calculatedAmount = typeof value === 'number' ? value : 0
+              }
+              break
+            case "CONCILIATED_AMOUNT":
+              // Para monto conciliado, verificar si es porcentaje o valor directo
+              if (line.applicationType === "PERCENTAGE") {
+                calculatedAmount = (documentAmount * value) / 100
+              } else {
+                calculatedAmount = typeof value === 'number' ? value : 0
+              }
+              break
+            case "OTHER":
+              // Para otros, usar el valor directamente si es numérico
+              calculatedAmount = typeof value === 'number' ? value : 0
+              break
+            default:
+              // Para otros casos, no calcular
+              calculatedAmount = 0
+          }
+        }
+
+        // Si el tipo de aplicación es TRANSACTION_AMOUNT, usar el monto de la transacción
+        if (line.applicationType === "TRANSACTION_AMOUNT" && selectedTransaction) {
+          calculatedAmount = Math.abs(parseFloat(selectedTransaction.amount))
+        }
+
+        return {
+          lineNumber: index + 1,
+          accountCode: line.accountCode,
+          movementType: line.movementType,
+          amount: calculatedAmount,
+          description: "",
+          applicationType: line.applicationType,
+          calculationBase: line.calculationBase,
+          value: line.value,
+          auxiliaryCode: "",
+          documentRef: "",
+        }
+      })
 
       setEntryForm((f) => ({
         ...f,
@@ -728,9 +816,13 @@ export function ConciliationDialog({
         notes: template.description || f.notes,
       }))
 
+      const amountInfo = shouldCalculateAmounts 
+        ? ` con montos calculados del documento (${formatCurrency(documentAmount)})`
+        : " (montos en 0 - verificar configuración)"
+
       toast({
         title: "Plantilla aplicada",
-        description: `Se ha precargado la plantilla "${template.name}" con ${templateLines.length} líneas.`,
+        description: `Se ha precargado la plantilla "${template.name}" con ${templateLines.length} líneas${amountInfo}. Hover sobre los montos para ver los cálculos.`,
       })
     }
   }
@@ -913,10 +1005,128 @@ export function ConciliationDialog({
   }
 
   const formatCurrency = (amount: number, currencySymbol = "S/") => {
-    return `${currencySymbol} ${amount.toLocaleString("es-PE", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`
+    return `${currencySymbol} ${amount.toFixed(2)}`
+  }
+
+  const generateCalculationTooltip = (line: any, documentAmount?: number) => {
+    // Si no hay calculationBase, verificar si es TRANSACTION_AMOUNT
+    if (!line.calculationBase) {
+      if (line.applicationType === "TRANSACTION_AMOUNT" && selectedTransaction) {
+        const transactionAmount = Math.abs(parseFloat(selectedTransaction.amount))
+        return `💳 **Monto de Transacción Bancaria:**\n\n` +
+               `Monto: ${formatCurrency(transactionAmount)}\n` +
+               `Descripción: ${selectedTransaction.description}\n` +
+               `Fecha: ${new Date(selectedTransaction.transactionDate).toLocaleDateString('es-ES')}\n\n` +
+               `📋 Este monto proviene directamente de la transacción bancaria seleccionada.`
+      }
+      return "📝 Monto ingresado manualmente"
+    }
+
+    const baseAmount = documentAmount || 0
+    let explanation = ""
+    let calculatedAmount = line.amount
+
+    switch (line.calculationBase) {
+      case "SUBTOTAL":
+        explanation = `📄 Monto del documento: ${formatCurrency(baseAmount)}`
+        break
+      case "IGV":
+        explanation = `🧮 Cálculo del IGV (18%):\n\n` +
+                     `Monto base: ${formatCurrency(baseAmount)}\n` +
+                     `Porcentaje: 18%\n` +
+                     `Fórmula: ${formatCurrency(baseAmount)} × 0.18\n` +
+                     `Resultado: ${formatCurrency(calculatedAmount)}`
+        break
+      case "TOTAL":
+        explanation = `📄 Monto total del documento: ${formatCurrency(baseAmount)}`
+        break
+      case "RENT":
+        const rentValue = typeof line.value === 'string' ? parseFloat(line.value) : (line.value || 0)
+        explanation = `🧮 Cálculo de Renta (${rentValue}%):\n\n` +
+                     `Monto base: ${formatCurrency(baseAmount)}\n` +
+                     `Porcentaje: ${rentValue}%\n` +
+                     `Fórmula: ${formatCurrency(baseAmount)} × ${rentValue}%\n` +
+                     `Resultado: ${formatCurrency(calculatedAmount)}`
+        break
+      case "TAX":
+        const taxValue = typeof line.value === 'string' ? parseFloat(line.value) : (line.value || 0)
+        explanation = `🧮 Cálculo de Impuesto (${taxValue}%):\n\n` +
+                     `Monto base: ${formatCurrency(baseAmount)}\n` +
+                     `Porcentaje: ${taxValue}%\n` +
+                     `Fórmula: ${formatCurrency(baseAmount)} × ${taxValue}%\n` +
+                     `Resultado: ${formatCurrency(calculatedAmount)}`
+        break
+      case "RETENTION_AMOUNT":
+        if (typeof line.value === 'number') {
+          explanation = `💰 Monto de retención: ${formatCurrency(line.value)}`
+        } else {
+          explanation = "💰 Monto de retención configurado en la plantilla"
+        }
+        break
+      case "DETRACTION_AMOUNT":
+        if (typeof line.value === 'number') {
+          explanation = `💰 Monto de detracción: ${formatCurrency(line.value)}`
+        } else {
+          explanation = "💰 Monto de detracción configurado en la plantilla"
+        }
+        break
+      case "NET_PAYABLE":
+        if (typeof line.value === 'number') {
+          explanation = `💰 Monto neto a pagar: ${formatCurrency(line.value)}`
+        } else {
+          explanation = "💰 Monto neto a pagar configurado en la plantilla"
+        }
+        break
+      case "PENDING_AMOUNT":
+        if (typeof line.value === 'number') {
+          explanation = `💰 Monto pendiente de pago: ${formatCurrency(line.value)}`
+        } else {
+          explanation = "💰 Monto pendiente de pago configurado en la plantilla"
+        }
+        break
+      case "CONCILIATED_AMOUNT":
+        if (typeof line.value === 'number') {
+          explanation = `💰 Monto ya conciliado: ${formatCurrency(line.value)}`
+        } else {
+          explanation = "💰 Monto ya conciliado configurado en la plantilla"
+        }
+        break
+      case "OTHER":
+        if (typeof line.value === 'number') {
+          explanation = `💰 Monto fijo de la plantilla: ${formatCurrency(line.value)}`
+        } else {
+          explanation = "💰 Monto configurado en la plantilla"
+        }
+        break
+      default:
+        explanation = "📋 Cálculo basado en la plantilla"
+    }
+
+    // Si el tipo de aplicación es TRANSACTION_AMOUNT, agregar información especial
+    if (line.applicationType === "TRANSACTION_AMOUNT" && selectedTransaction) {
+      const transactionAmount = Math.abs(parseFloat(selectedTransaction.amount))
+      explanation += `\n\n💳 **Monto de Transacción Bancaria:**\n` +
+                   `Monto: ${formatCurrency(transactionAmount)}\n` +
+                   `Descripción: ${selectedTransaction.description}\n` +
+                   `Fecha: ${new Date(selectedTransaction.transactionDate).toLocaleDateString('es-ES')}`
+    }
+
+    // Agregar información del monto base si está disponible
+    if (documentAmount && line.calculationBase !== "OTHER") {
+      explanation += `\n\n📊 Monto base del documento: ${formatCurrency(documentAmount)}`
+    }
+
+    // Agregar información de la plantilla
+    explanation += `\n\n🔧 Plantilla aplicada: ${line.calculationBase}`
+    if (line.value !== undefined && line.value !== null) {
+      if (line.calculationBase === "RENT" || line.calculationBase === "TAX") {
+        explanation += ` (${line.value}%)`
+      } else if (line.calculationBase === "OTHER") {
+        explanation += ` (${formatCurrency(typeof line.value === 'number' ? line.value : parseFloat(line.value || '0'))})`
+      }
+    }
+
+    return explanation
   }
 
   const handleTabChange = (nextTab: string) => {
@@ -1327,7 +1537,28 @@ export function ConciliationDialog({
                       {/* Sección: Asiento contable manual (Debe/Haber) */}
                       <div className="p-3 border rounded space-y-3">
                         <div className="flex items-center justify-between">
-                          <div className="text-sm font-medium">Asiento contable</div>
+                          <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Asiento contable</span>
+                  <TooltipProvider delayDuration={300}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-blue-500 cursor-help" />
+                      </TooltipTrigger>
+                                           <TooltipContent className="max-w-sm z-[9999] bg-gradient-to-br from-green-50 to-teal-100 border-2 border-green-200 shadow-lg" side="top" sideOffset={5}>
+                       <div className="p-3">
+                         <div className="bg-green-600 text-white px-3 py-2 rounded-t-lg -mt-3 -mx-3 mb-3">
+                           <p className="text-sm font-bold text-center">💡 Información del Sistema</p>
+                         </div>
+                         <div className="text-xs text-gray-800 bg-white p-3 rounded-lg border border-green-200">
+                           <p className="text-center font-medium">
+                             Los montos se calculan automáticamente según la plantilla aplicada
+                           </p>
+                         </div>
+                       </div>
+                     </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                           <div className="flex items-center gap-2">
                             <Button
                               type="button"
@@ -1371,12 +1602,33 @@ export function ConciliationDialog({
                             <TableHeader>
                               <TableRow>
                                 <TableHead className="w-10 text-xs">#</TableHead>
-                                <TableHead className="text-xs">Cuenta</TableHead>
-                                <TableHead className="w-40 text-xs">Tipo</TableHead>
-                                <TableHead className="w-40 text-right text-xs">Monto</TableHead>
-                                <TableHead className="text-xs">Descripción</TableHead>
+                                <TableHead className="w-32 text-xs">Cuenta</TableHead>
+                                <TableHead className="w-20 text-xs">Tipo</TableHead>
+                                <TableHead className="w-40 text-right text-xs">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <span>Monto</span>
+                                    <TooltipProvider delayDuration={300}>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Info className="h-3 w-3 text-blue-500 cursor-help" />
+                                        </TooltipTrigger>
+                                                             <TooltipContent className="max-w-sm z-[9999] bg-gradient-to-br from-orange-50 to-amber-100 border-2 border-orange-200 shadow-lg" side="top" sideOffset={5}>
+                       <div className="p-3">
+                         <div className="bg-orange-600 text-white px-3 py-2 rounded-t-lg -mt-3 -mx-3 mb-3">
+                           <p className="text-sm font-bold text-center">💡 Ayuda</p>
+                         </div>
+                         <div className="text-xs text-gray-800 bg-white p-3 rounded-lg border border-orange-200">
+                           <p className="text-center font-medium">
+                             Hover sobre el campo para ver el cálculo detallado
+                           </p>
+                         </div>
+                       </div>
+                     </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  </div>
+                                </TableHead>
                                 <TableHead className="w-20 text-xs">Auxiliar</TableHead>
-                                <TableHead className="w-20 text-xs">Ref. Doc</TableHead>
                                 <TableHead className="w-16"></TableHead>
                               </TableRow>
                             </TableHeader>
@@ -1389,8 +1641,8 @@ export function ConciliationDialog({
                                       value={line.accountCode}
                                       onValueChange={(v) => updateEntryLine(idx, { accountCode: v })}
                                     >
-                                      <SelectTrigger className="h-8 text-xs">
-                                        <SelectValue placeholder="Seleccionar cuenta" />
+                                      <SelectTrigger className="h-8 w-28 text-xs">
+                                        <SelectValue placeholder="Cuenta" />
                                       </SelectTrigger>
                                       <SelectContent>
                                         {accountingAccounts.map((acc) => (
@@ -1406,45 +1658,95 @@ export function ConciliationDialog({
                                       value={line.movementType}
                                       onValueChange={(v) => updateEntryLine(idx, { movementType: v as MovementType })}
                                     >
-                                      <SelectTrigger className="h-8 text-xs">
+                                      <SelectTrigger className="h-8 w-16 text-xs">
                                         <SelectValue placeholder="Tipo" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="DEBIT">Debe</SelectItem>
-                                        <SelectItem value="CREDIT">Haber</SelectItem>
+                                        <SelectItem value="DEBIT">D</SelectItem>
+                                        <SelectItem value="CREDIT">H</SelectItem>
                                       </SelectContent>
                                     </Select>
                                   </TableCell>
-                                  <TableCell className="text-right">
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      value={String(line.amount)}
-                                      onChange={(e) => updateEntryLine(idx, { amount: Number.parseFloat(e.target.value || "0") })}
-                                      className="h-8 text-xs text-right"
-                                    />
-                                  </TableCell>
-                                  <TableCell>
-                                    <Input
-                                      placeholder="Descripción"
-                                      value={line.description || ""}
-                                      onChange={(e) => updateEntryLine(idx, { description: e.target.value })}
-                                      className="h-8 text-xs"
-                                    />
-                                  </TableCell>
+                                                                      <TableCell className="text-right">
+                                      <div className="flex items-center gap-2 justify-end">
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          value={String(line.amount)}
+                                          onChange={(e) => updateEntryLine(idx, { amount: Number.parseFloat(e.target.value || "0") })}
+                                          className="h-8 text-xs text-right"
+                                        />
+                                        {/* Icono de información para TODOS los tipos de monto */}
+                                        <TooltipProvider delayDuration={300}>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Info className="h-4 w-4 text-gray-500 cursor-help hover:text-gray-700 transition-colors" />
+                                            </TooltipTrigger>
+                                            <TooltipContent className="max-w-md z-[9999] bg-white border border-gray-200 shadow-lg" side="top" sideOffset={5}>
+                                              <div className="p-4">
+                                                <div className="bg-gray-100 text-gray-800 px-3 py-2 rounded-t-lg -mt-4 -mx-4 mb-4">
+                                                  <p className="text-sm font-medium text-center">Información del Monto</p>
+                                                </div>
+                                                
+                                                {/* Sección del cálculo */}
+                                                <div className="text-xs text-gray-700 whitespace-pre-line bg-gray-50 p-3 rounded-lg border border-gray-200 mb-3">
+                                                  {generateCalculationTooltip(line, selectedDocuments.length === 1 ? parseFloat(selectedDocuments[0].total) : undefined)}
+                                                </div>
+                                                
+                                                {/* Sección de información de la plantilla */}
+                                                {line.calculationBase && (
+                                                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-3">
+                                                    <p className="text-xs font-medium text-gray-700 mb-2 text-center">Detalles de la Plantilla</p>
+                                                    <div className="space-y-2">
+                                                      <div className="flex justify-between items-center">
+                                                        <span className="font-medium text-gray-600">Base:</span>
+                                                        <span className="bg-gray-200 px-2 py-1 rounded text-gray-700 font-medium">
+                                                          {line.calculationBase}
+                                                        </span>
+                                                      </div>
+                                                      {line.value !== undefined && line.value !== null && (
+                                                        <div className="flex justify-between items-center">
+                                                          <span className="font-medium text-gray-600">Valor:</span>
+                                                          <span className="bg-gray-200 px-2 py-1 rounded text-gray-700 font-medium">
+                                                            {
+                                                              line.calculationBase === "RENT" || line.calculationBase === "TAX" 
+                                                                ? `${line.value}%` 
+                                                                : line.calculationBase === "OTHER" 
+                                                                  ? formatCurrency(typeof line.value === 'number' ? line.value : parseFloat(line.value || '0'))
+                                                                  : line.value
+                                                            }
+                                                          </span>
+                                                        </div>
+                                                      )}
+                                                      {line.applicationType && (
+                                                        <div className="flex justify-between items-center">
+                                                          <span className="font-medium text-gray-600">Tipo:</span>
+                                                          <span className="bg-gray-200 px-2 py-1 rounded text-gray-700 font-medium">
+                                                            {line.applicationType}
+                                                          </span>
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                )}
+                                                
+                                                {/* Sección del monto - siempre visible */}
+                                                <div className="bg-gray-100 p-3 rounded-lg border border-gray-200">
+                                                  <p className="text-xs font-medium text-gray-700 text-center">
+                                                    Monto: {formatCurrency(line.amount)}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      </div>
+                                    </TableCell>
                                   <TableCell>
                                     <Input
                                       placeholder="Auxiliar"
                                       value={line.auxiliaryCode || ""}
                                       onChange={(e) => updateEntryLine(idx, { auxiliaryCode: e.target.value })}
-                                      className="h-8 text-xs"
-                                    />
-                                  </TableCell>
-                                  <TableCell>
-                                    <Input
-                                      placeholder="Ref. Doc"
-                                      value={line.documentRef || ""}
-                                      onChange={(e) => updateEntryLine(idx, { documentRef: e.target.value })}
                                       className="h-8 text-xs"
                                     />
                                   </TableCell>
@@ -1462,69 +1764,6 @@ export function ConciliationDialog({
                           <div className="flex gap-2">
                             <Button variant="outline" size="sm" className="h-7" onClick={addEntryLine}>
                               <Plus className="h-3 w-3 mr-1" /> Agregar línea
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="h-7" 
-                              onClick={() => {
-                                // Sugerir asiento automático basado en documentos
-                                const suggestedLines: CreateAccountingEntryLineDto[] = []
-                                
-                                // Línea 1: Debe - Cuenta bancaria
-                                const bankAccount = bankAccounts.find(b => b.id === selectedTransaction?.bankAccountId)
-                                if (bankAccount) {
-                                  suggestedLines.push({
-                                    lineNumber: 1,
-                                    accountCode: bankAccount.accountingAccount?.accountCode || "",
-                                    movementType: "DEBIT",
-                                    amount: totals.totalConciliated,
-                                    description: `Conciliación ${conciliationData.reference || selectedTransaction?.operationNumber}`,
-                                    auxiliaryCode: "",
-                                    documentRef: selectedTransaction?.operationNumber || "",
-                                  })
-                                }
-                                
-                                // Línea 2: Haber - Cuenta de proveedores (si hay documentos)
-                                if (selectedDocuments.length > 0) {
-                                  const defaultAccount = accountingAccounts.find(acc => 
-                                    acc.accountCode.startsWith("42") || acc.accountName.toLowerCase().includes("proveedor")
-                                  )
-                                  if (defaultAccount) {
-                                    suggestedLines.push({
-                                      lineNumber: 2,
-                                      accountCode: defaultAccount.accountCode,
-                                      movementType: "CREDIT",
-                                      amount: totals.documentsTotal,
-                                      description: `Pago a proveedores - ${selectedDocuments.length} documento(s)`,
-                                      auxiliaryCode: "",
-                                      documentRef: selectedDocuments.map(d => d.fullNumber).join(", "),
-                                    })
-                                  }
-                                }
-                                
-                                // Línea 3: Haber - Gastos (si hay gastos adicionales)
-                                if (totals.expensesTotal > 0) {
-                                  const expenseAccount = accountingAccounts.find(acc => 
-                                    acc.accountCode.startsWith("63") || acc.accountName.toLowerCase().includes("gasto")
-                                  )
-                                  if (expenseAccount) {
-                                    suggestedLines.push({
-                                      lineNumber: 3,
-                                      accountCode: expenseAccount.accountCode,
-                                      movementType: "CREDIT",
-                                      amount: totals.expensesTotal,
-                                      description: "Gastos adicionales de conciliación",
-                                      auxiliaryCode: "",
-                                      documentRef: "",
-                                    })
-                                  }
-                                }
-                                
-                                setEntryForm(prev => ({ ...prev, lines: suggestedLines }))
-                              }}
-                            >
-                              <Database className="h-3 w-3 mr-1" /> Sugerir
                             </Button>
                           </div>
                           <div className="text-xs">

@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSuppliersStore } from "@/stores/suppliers-store"
+import { useAuthStore } from "@/stores/authStore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -27,13 +29,10 @@ interface ConditionEditorProps {
   disabled?: boolean
 }
 
+// Opciones de campo disponibles (se han eliminado Moneda, Cliente, Tipo de Transacción y Tipo de Documento)
 const FIELD_OPTIONS = [
-  { value: "documentType", label: "Tipo de Documento" },
-  { value: "currency", label: "Moneda" },
   { value: "amount", label: "Monto" },
   { value: "supplier", label: "Proveedor" },
-  { value: "customer", label: "Cliente" },
-  { value: "transactionType", label: "Tipo de Transacción" },
   { value: "description", label: "Descripción" },
 ]
 
@@ -52,6 +51,17 @@ const OPERATOR_OPTIONS = [
 
 export function ConditionEditor({ conditions, onChange, disabled = false }: ConditionEditorProps) {
   const [showJson, setShowJson] = useState(false)
+
+  const { user } = useAuthStore()
+  const { suppliers, fetchSuppliers } = useSuppliersStore()
+
+  // Cargar proveedores si es necesario
+  useEffect(() => {
+    const needsSuppliers = conditions.some((g) => g.conditions.some((c) => c.field === "supplier"))
+    if (needsSuppliers && user?.companyId && suppliers.length === 0) {
+      fetchSuppliers(user.companyId, { page: 1, limit: 1000 })
+    }
+  }, [conditions, suppliers.length, user?.companyId, fetchSuppliers])
 
   const addCondition = (groupIndex: number) => {
     const newConditions = [...conditions]
@@ -202,13 +212,32 @@ export function ConditionEditor({ conditions, onChange, disabled = false }: Cond
                         </SelectContent>
                       </Select>
 
-                      <Input
-                        value={condition.value}
-                        onChange={(e) => updateCondition(groupIndex, conditionIndex, "value", e.target.value)}
-                        placeholder="Valor"
-                        className="flex-1"
-                        disabled={disabled}
-                      />
+                      {condition.field === "supplier" ? (
+                        <Select
+                          value={condition.value}
+                          onValueChange={(value) => updateCondition(groupIndex, conditionIndex, "value", value)}
+                          disabled={disabled || suppliers.length === 0}
+                        >
+                          <SelectTrigger className="w-64">
+                            <SelectValue placeholder="Proveedor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {suppliers.map((s) => (
+                              <SelectItem key={s.id} value={s.businessName}>
+                                {s.businessName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          value={condition.value}
+                          onChange={(e) => updateCondition(groupIndex, conditionIndex, "value", e.target.value)}
+                          placeholder="Valor"
+                          className="flex-1"
+                          disabled={disabled}
+                        />
+                      )}
 
                       <Button
                         variant="ghost"
@@ -240,31 +269,7 @@ export function ConditionEditor({ conditions, onChange, disabled = false }: Cond
       )}
 
       {/* Vista previa de condiciones */}
-      {!showJson && conditions[0]?.conditions.some(c => c.field && c.value) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Vista Previa</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {conditions[0].conditions
-                .filter(c => c.field && c.value)
-                .map((condition, index) => (
-                  <div key={index} className="flex items-center gap-2 text-sm">
-                    <Badge variant="outline">{getFieldLabel(condition.field)}</Badge>
-                    <span className="text-gray-500">{getOperatorLabel(condition.operator)}</span>
-                    <Badge variant="secondary">{condition.value}</Badge>
-                  </div>
-                ))}
-              {conditions[0].conditions.filter(c => c.field && c.value).length > 1 && (
-                <div className="text-xs text-gray-500 mt-2">
-                  Operador: <Badge variant="outline" className="text-xs">{conditions[0].operator}</Badge>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+
     </div>
   )
 } 

@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useDocumentsStore } from "@/stores/documents-store"
 import type { DocumentStatus, DocumentType, Document } from "@/types/documents"
 import { useAuthStore } from "@/stores/authStore"
+import { JsonViewerDialog } from "@/components/ui/json-viewer-dialog"
 
 interface DocumentDetailPageProps {
   params: {
@@ -217,6 +218,12 @@ export default function DocumentDetailPage({ params }: DocumentDetailPageProps) 
             <Download className="h-4 w-4" />
             Descargar PDF
           </Button>
+          <JsonViewerDialog
+            title={`Documento ${document?.series}-${document?.number}`}
+            description="Visualiza todos los datos del documento en formato JSON"
+            data={document}
+            size="xl"
+          />
         </div>
       </div>
 

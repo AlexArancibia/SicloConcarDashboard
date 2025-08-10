@@ -4,13 +4,14 @@ import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { TemplateDialog } from "@/components/financial/template-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Plus, Search, Edit, Trash2, FileText, AlertCircle } from "lucide-react"
+import { Plus, Search, Edit, Trash2, FileText, AlertCircle, Code } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAccountingEntryTemplatesStore } from "@/stores/accounting-entry-templates-store"
 import { useAccountingAccountsStore } from "@/stores/accounting-accounts-store"
 import { useAuthStore } from "@/stores/authStore"
@@ -49,6 +50,16 @@ export default function AccountingTemplatesPage() {
   const [editingTemplate, setEditingTemplate] = useState<AccountingEntryTemplate | null>(null)
   const [activeTab, setActiveTab] = useState("general")
 
+  // NUEVO: Definición de pasos para el asistente
+  const STEPS = [
+    { key: "general", label: "General" },
+    { key: "conditions", label: "Condiciones" },
+    { key: "lines", label: "Líneas" },
+  ]
+
+  // Índice del paso actual
+  const currentStepIndex = STEPS.findIndex((s) => s.key === activeTab)
+
   // Form states
   const [templateForm, setTemplateForm] = useState<Partial<CreateAccountingEntryTemplateDto>>({
     templateNumber: "",
@@ -71,6 +82,15 @@ export default function AccountingTemplatesPage() {
       groups: [],
     },
   ])
+
+  // Developer dialog states
+  const [devDialogOpen, setDevDialogOpen] = useState(false)
+  const [selectedTemplateRaw, setSelectedTemplateRaw] = useState<AccountingEntryTemplate | null>(null)
+
+  const openDevDialog = (template: AccountingEntryTemplate) => {
+    setSelectedTemplateRaw(template)
+    setDevDialogOpen(true)
+  }
 
   const { toast } = useToast()
   const { user } = useAuthStore()
@@ -228,28 +248,6 @@ export default function AccountingTemplatesPage() {
 
   const openEditTemplateDialog = async (template: AccountingEntryTemplate) => {
     setEditingTemplate(template)
-    setTemplateForm({
-      templateNumber: template.templateNumber,
-      name: template.name,
-      filter: template.filter,
-      currency: template.currency,
-      transactionType: template.transactionType,
-      document: template.document,
-      condition: template.condition,
-      description: template.description,
-      isActive: template.isActive,
-      lines: template.lines.map(line => ({
-        accountCode: line.accountCode,
-        movementType: line.movementType,
-        applicationType: line.applicationType,
-        calculationBase: line.calculationBase,
-        value: line.value ? Number(line.value) : undefined,
-        executionOrder: line.executionOrder,
-      })),
-    })
-    if (template.condition && typeof template.condition === 'object') {
-      setConditionGroups(convertJsonToConditions(template.condition))
-    }
     setTemplateDialogOpen(true)
   }
 
@@ -305,7 +303,7 @@ export default function AccountingTemplatesPage() {
     const variants = { INVOICES: "bg-blue-100 text-blue-800", PAYROLL: "bg-purple-100 text-purple-800", BOTH: "bg-gray-100 text-gray-800" }
     return (
       <Badge variant="outline" className={variants[filter]}>
-        {filter === "INVOICES" ? "Facturas" : filter === "PAYROLL" ? "Planillas" : "Ambos"}
+        {filter === "INVOICES" ? "Facturas" : filter === "PAYROLL" ? "RH" : "Ambos"}
       </Badge>
     )
   }
@@ -346,176 +344,17 @@ export default function AccountingTemplatesPage() {
 
       {/* Main Content */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { setEditingTemplate(null); resetTemplateForm() }}>
-              <Plus className="h-4 w-4 mr-2" />
-              Crear Plantilla
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center justify-between">
-                <span>{editingTemplate ? "Editar Plantilla" : "Crear Plantilla"}</span>
-                <div className="hidden sm:flex items-center gap-2 text-sm">
-                  {templateForm.templateNumber && <Badge variant="outline">{templateForm.templateNumber}</Badge>}
-                  {templateForm.name && <Badge variant="secondary">{templateForm.name}</Badge>}
-                  {templateForm.isActive !== undefined && getStatusBadge(!!templateForm.isActive)}
-                </div>
-              </DialogTitle>
-            </DialogHeader>
+        <Button onClick={() => { setEditingTemplate(null); setTemplateDialogOpen(true) }}>
+          <Plus className="h-4 w-4 mr-2" />
+          Crear Plantilla
+        </Button>
 
-            {/* Validation summary */}
-            {validationErrors.length > 0 && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  <ul className="list-disc pl-5 space-y-1">
-                    {validationErrors.map((e, i) => (<li key={i}>{e}</li>))}
-                  </ul>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="general">General</TabsTrigger>
-                <TabsTrigger value="conditions">Condiciones</TabsTrigger>
-                <TabsTrigger value="lines">Líneas</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="general" className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="templateNumber">Número de Plantilla *</Label>
-                    <Input id="templateNumber" value={templateForm.templateNumber} onChange={(e) => setTemplateForm({ ...templateForm, templateNumber: e.target.value })} placeholder="Ej: TEMP001" />
-                  </div>
-                  <div>
-                    <Label htmlFor="name">Nombre *</Label>
-                    <Input id="name" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} placeholder="Ej: Plantilla para Facturas" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="filter">Filtro *</Label>
-                    <Select value={templateForm.filter} onValueChange={(value: AccountingEntryFilter) => setTemplateForm({ ...templateForm, filter: value })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="INVOICES">FACTURAS</SelectItem>
-                        <SelectItem value="PAYROLL">RH (Recibo por Honorarios)</SelectItem>
-                        <SelectItem value="BOTH">AMBOS</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="currency">Moneda *</Label>
-                    <Select value={templateForm.currency} onValueChange={(value: AccountingEntryCurrency) => setTemplateForm({ ...templateForm, currency: value })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL">Todas</SelectItem>
-                        <SelectItem value="PEN">Soles</SelectItem>
-                        <SelectItem value="USD">Dólares</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="transactionType">Tipo de Transacción *</Label>
-                  <Input id="transactionType" value={templateForm.transactionType} onChange={(e) => setTemplateForm({ ...templateForm, transactionType: e.target.value })} placeholder="Ej: VENTA, COMPRA, etc." />
-                </div>
-
-                <div>
-                  <Label htmlFor="description">Descripción</Label>
-                  <Textarea id="description" value={templateForm.description || ""} onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })} placeholder="Descripción de la plantilla" />
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Switch id="isActive" checked={templateForm.isActive} onCheckedChange={(checked) => setTemplateForm({ ...templateForm, isActive: checked })} />
-                  <Label htmlFor="isActive">Activo</Label>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="conditions" className="space-y-4">
-                <ConditionEditor conditions={conditionGroups} onChange={setConditionGroups} disabled={false} />
-              </TabsContent>
-
-              <TabsContent value="lines" className="space-y-4">
-                <TemplateLinesEditor lines={templateForm.lines || []} accountingAccounts={accountingAccounts} onChange={(lines) => setTemplateForm({ ...templateForm, lines })} disabled={false} />
-              </TabsContent>
-            </Tabs>
-
-            {/* Live preview */}
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="md:col-span-2">
-                <CardHeader>
-                  <CardTitle className="text-sm">Resumen</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <div className="text-gray-500">Número</div>
-                    <div className="font-medium">{templateForm.templateNumber || "-"}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Nombre</div>
-                    <div className="font-medium truncate">{templateForm.name || "-"}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Filtro</div>
-                    <div>{templateForm.filter && getFilterBadge(templateForm.filter)}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Moneda</div>
-                    <Badge variant="outline">{templateForm.currency || "-"}</Badge>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Transacción</div>
-                    <div className="font-medium">{templateForm.transactionType || "-"}</div>
-                  </div>
-
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Totales</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-4 text-center">
-                    <div>
-                      <div className="text-gray-500 text-sm">Débitos</div>
-                      <div className="text-lg font-bold text-green-600">S/ {linesTotals.debit.toLocaleString("es-PE", { minimumFractionDigits: 2 })}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500 text-sm">Créditos</div>
-                      <div className="text-lg font-bold text-red-600">S/ {linesTotals.credit.toLocaleString("es-PE", { minimumFractionDigits: 2 })}</div>
-                    </div>
-                  </div>
-                  <div className="mt-3 text-center">
-                    <Badge variant={linesTotals.balanced ? "default" : "destructive"} className={linesTotals.balanced ? "bg-green-100 text-green-800" : ""}>
-                      {linesTotals.balanced ? "✓ Balanceado" : "✗ Desbalanceado"}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Sticky action bar */}
-            <div className="sticky bottom-0 mt-4 -mx-6 px-6 py-3 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">
-                {canSubmit ? "Listo para guardar" : `${validationErrors.length} validación(es) pendiente(s)`}
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => { setTemplateDialogOpen(false); setEditingTemplate(null); resetTemplateForm() }}>
-                  Cancelar
-                </Button>
-                <Button disabled={!canSubmit} onClick={editingTemplate ? handleUpdateTemplate : handleCreateTemplate}>
-                  {editingTemplate ? "Guardar cambios" : "Crear plantilla"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <TemplateDialog
+          open={templateDialogOpen}
+          onOpenChange={setTemplateDialogOpen}
+          editingTemplate={editingTemplate}
+          onSaved={loadData}
+        />
       </div>
 
       {/* Templates List */}
@@ -586,6 +425,9 @@ export default function AccountingTemplatesPage() {
                               <Button variant="ghost" size="sm" onClick={() => handleDeleteTemplate(template.id)} title="Eliminar" className="text-red-600 hover:text-red-700">
                                 <Trash2 className="w-4 h-4" />
                               </Button>
+                              <Button variant="ghost" size="sm" onClick={() => openDevDialog(template)} title="Ver JSON">
+                                <Code className="w-4 h-4" />
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -626,6 +468,18 @@ export default function AccountingTemplatesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Developer JSON Dialog */}
+      <Dialog open={devDialogOpen} onOpenChange={setDevDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Vista JSON de Plantilla</DialogTitle>
+          </DialogHeader>
+          <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg text-xs overflow-auto">
+            {selectedTemplateRaw ? JSON.stringify(selectedTemplateRaw, null, 2) : "No data"}
+          </pre>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -419,44 +419,82 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
   )
 
   const AccountingEntriesTable = () => (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow className="border-slate-200 dark:border-slate-700">
-            <TableHead className="text-slate-700 dark:text-slate-300">Fecha</TableHead>
-            <TableHead className="text-slate-700 dark:text-slate-300">Nº Asiento</TableHead>
-            <TableHead className="text-slate-700 dark:text-slate-300">Descripción</TableHead>
-            <TableHead className="text-right text-slate-700 dark:text-slate-300">Debe</TableHead>
-            <TableHead className="text-right text-slate-700 dark:text-slate-300">Haber</TableHead>
-            <TableHead className="text-slate-700 dark:text-slate-300">Estado</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {relatedEntries.map((e) => {
-            const totals = (e.lines || []).reduce(
-              (acc, line) => {
-                const amount = typeof line.amount === "string" ? Number.parseFloat(line.amount) : (line.amount || 0)
-                if (line.movementType === "DEBIT") acc.debit += amount
-                if (line.movementType === "CREDIT") acc.credit += amount
-                return acc
-              },
-              { debit: 0, credit: 0 },
-            )
-            return (
-              <TableRow key={e.id} className="border-slate-200 dark:border-slate-700">
-                <TableCell className="text-slate-700 dark:text-slate-300">{formatShortDate(e.createdAt)}</TableCell>
-                <TableCell className="font-mono text-slate-800 dark:text-slate-200" title={e.id}>{e.id}</TableCell>
-                <TableCell className="text-slate-700 dark:text-slate-300 max-w-xl truncate" title={e.notes || ""}>
-                  {e.notes || "-"}
-                </TableCell>
-                <TableCell className="text-right text-slate-700 dark:text-slate-300">{formatCurrency(totals.debit)}</TableCell>
-                <TableCell className="text-right text-slate-700 dark:text-slate-300">{formatCurrency(totals.credit)}</TableCell>
-                <TableCell className="text-slate-700 dark:text-slate-300">{e.status}</TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
+    <div className="space-y-4">
+      {relatedEntries.map((entry) => {
+        const totals = (entry.lines || []).reduce(
+          (acc, line) => {
+            const amount = typeof line.amount === "string" ? Number.parseFloat(line.amount) : (line.amount || 0)
+            if (line.movementType === "DEBIT") acc.debit += amount
+            if (line.movementType === "CREDIT") acc.credit += amount
+            return acc
+          },
+          { debit: 0, credit: 0 },
+        )
+        
+        return (
+          <Card key={entry.id} className="bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-blue-100 dark:bg-blue-800/30 rounded-lg flex items-center justify-center">
+                    <Hash className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200">
+                      Asiento #{entry.id.split("-")[0].toUpperCase()}
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {formatShortDate(entry.createdAt)} • {entry.notes || "Sin descripción"}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-slate-600 dark:text-slate-400">Totales</div>
+                  <div className="font-semibold text-slate-800 dark:text-slate-200">
+                    D: {formatCurrency(totals.debit)} | H: {formatCurrency(totals.credit)}
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-slate-200 dark:border-slate-700">
+                      <TableHead className="text-slate-700 dark:text-slate-300 text-xs">Cuenta</TableHead>
+                      <TableHead className="text-slate-700 dark:text-slate-300 text-xs">Código Auxiliar</TableHead>
+                      <TableHead className="text-slate-700 dark:text-slate-300 text-xs">Descripción</TableHead>
+                      <TableHead className="text-right text-slate-700 dark:text-slate-300 text-xs">Debe</TableHead>
+                      <TableHead className="text-right text-slate-700 dark:text-slate-300 text-xs">Haber</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {entry.lines?.map((line, lineIndex) => (
+                      <TableRow key={lineIndex} className="border-slate-200 dark:border-slate-700">
+                        <TableCell className="text-slate-700 dark:text-slate-300">
+                          <div className="font-medium text-sm">{line.accountCode || "N/A"}</div>
+                        </TableCell>
+                        <TableCell className="text-slate-700 dark:text-slate-300">
+                          {line.auxiliaryCode || "-"}
+                        </TableCell>
+                        <TableCell className="text-slate-700 dark:text-slate-300 max-w-xs truncate" title={line.description || ""}>
+                          {line.description || "-"}
+                        </TableCell>
+                        <TableCell className="text-right text-slate-700 dark:text-slate-300">
+                          {line.movementType === "DEBIT" ? formatCurrency(line.amount) : "-"}
+                        </TableCell>
+                        <TableCell className="text-right text-slate-700 dark:text-slate-300">
+                          {line.movementType === "CREDIT" ? formatCurrency(line.amount) : "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })}
       {relatedEntries.length === 0 && (
         <div className="text-center py-8 text-slate-500 dark:text-slate-400">No hay asientos asociados.</div>
       )}

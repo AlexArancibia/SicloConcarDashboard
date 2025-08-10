@@ -21,6 +21,7 @@ interface TemplateLinesEditorProps {
   accountingAccounts: AccountingAccount[]
   onChange: (lines: CreateAccountingEntryTemplateLineDto[]) => void
   disabled?: boolean
+  showValidationErrors?: boolean
 }
 
 const APPLICATION_TYPE_LABELS = {
@@ -29,20 +30,27 @@ const APPLICATION_TYPE_LABELS = {
   TRANSACTION_AMOUNT: "Monto Transacción",
 }
 
-const CALCULATION_BASE_LABELS = {
-  SUBTOTAL: "Subtotal",
-  IGV: "IGV",
-  TOTAL: "Total",
-  RENT: "Renta",
-  TAX: "Impuesto",
-  OTHER: "Otro",
-}
+// Campos del documento disponibles para el monto base
+const CALCULATION_BASE_OPTIONS = [
+  { value: "PENDING_AMOUNT", label: "Monto Pendiente", description: "Monto pendiente de pago" },
+  { value: "SUBTOTAL", label: "Subtotal", description: "Monto sin impuestos" },
+  { value: "IGV", label: "IGV", description: "Impuesto General a las Ventas" },
+  { value: "TOTAL", label: "Total", description: "Monto total del documento" },
+  { value: "RENT", label: "Renta", description: "Retención de renta" },
+  { value: "TAX", label: "Impuesto", description: "Otros impuestos" },
+  { value: "RETENTION_AMOUNT", label: "Monto Retención", description: "Monto de retención" },
+  { value: "DETRACTION_AMOUNT", label: "Monto Detracción", description: "Monto de detracción" },
+  { value: "NET_PAYABLE", label: "Neto Pagable", description: "Monto neto a pagar" },
+  { value: "CONCILIATED_AMOUNT", label: "Monto Conciliado", description: "Monto ya conciliado" },
+  { value: "OTHER", label: "Otro", description: "Otro campo personalizado" },
+] as const
 
 export function TemplateLinesEditor({ 
   lines, 
   accountingAccounts, 
   onChange, 
-  disabled = false 
+  disabled = false,
+  showValidationErrors = false
 }: TemplateLinesEditorProps) {
   
   const addLine = () => {
@@ -69,6 +77,12 @@ export function TemplateLinesEditor({
   const updateLine = (index: number, field: string, value: any) => {
     const newLines = [...lines]
     newLines[index] = { ...newLines[index], [field]: value }
+    
+    // Si se cambia a monto fijo, limpiar el cálculo base
+    if (field === "applicationType" && (value === "FIXED_AMOUNT" || value === "TRANSACTION_AMOUNT")) {
+      newLines[index].calculationBase = undefined
+    }
+    
     onChange(newLines)
   }
 
@@ -129,6 +143,11 @@ export function TemplateLinesEditor({
 
   const hasValidLines = lines.length > 0 && lines.every(isLineValid)
 
+  // Función para determinar si se debe mostrar el campo de monto base
+  const shouldShowCalculationBase = (applicationType: ApplicationType) => {
+    return applicationType !== "FIXED_AMOUNT" && applicationType !== "TRANSACTION_AMOUNT"
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -142,8 +161,8 @@ export function TemplateLinesEditor({
         </Button>
       </div>
 
-      {/* Alertas de validación */}
-      {getInvalidLines().length > 0 && (
+      {/* Alertas de validación - Solo se muestran cuando se solicitan */}
+      {showValidationErrors && getInvalidLines().length > 0 && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
@@ -153,14 +172,7 @@ export function TemplateLinesEditor({
         </Alert>
       )}
 
-      {lines.length > 0 && !isBalanced() && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            El asiento no está balanceado. Los totales de débitos y créditos deben ser iguales.
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* Alerta de balance eliminada, ya no se requiere igualdad entre débitos y créditos */}
 
       {lines.length === 0 ? (
         <Card>
@@ -192,7 +204,7 @@ export function TemplateLinesEditor({
                     <tr 
                       key={index} 
                       className={`border-b hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                        !isLineValid(line) ? "bg-red-50 border-red-200" : ""
+                        showValidationErrors && !isLineValid(line) ? "bg-red-50 border-red-200" : ""
                       }`}
                     >
                       {/* Número de línea */}
@@ -268,25 +280,36 @@ export function TemplateLinesEditor({
                         </Select>
                       </td>
 
-                      {/* Base de cálculo */}
+                      {/* Base de cálculo - Solo visible cuando no es monto fijo */}
                       <td className="p-3">
-                        <Select
-                          value={line.calculationBase || ""}
-                          onValueChange={(value: CalculationBase) => updateLine(index, "calculationBase", value || undefined)}
-                          disabled={disabled}
-                        >
-                          <SelectTrigger className="w-24">
-                            <SelectValue placeholder="-" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="SUBTOTAL">Subtotal</SelectItem>
-                            <SelectItem value="IGV">IGV</SelectItem>
-                            <SelectItem value="TOTAL">Total</SelectItem>
-                            <SelectItem value="RENT">Renta</SelectItem>
-                            <SelectItem value="TAX">Impuesto</SelectItem>
-                            <SelectItem value="OTHER">Otro</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {shouldShowCalculationBase(line.applicationType) ? (
+                          <Select
+                            value={line.calculationBase || ""}
+                            onValueChange={(value: CalculationBase) => updateLine(index, "calculationBase", value || undefined)}
+                            disabled={disabled}
+                          >
+                            <SelectTrigger className="w-32">
+                              <SelectValue placeholder="Seleccionar base" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CALCULATION_BASE_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{option.label}</span>
+                                    <span className="text-xs text-muted-foreground">{option.description}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="text-xs text-muted-foreground italic">
+                            {line.applicationType === "FIXED_AMOUNT" 
+                              ? "No aplica para monto fijo" 
+                              : "No aplica para monto transacción"
+                            }
+                          </div>
+                        )}
                       </td>
 
                       {/* Valor */}

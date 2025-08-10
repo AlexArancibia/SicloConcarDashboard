@@ -135,6 +135,9 @@ export interface CreateAccountingEntryLineDto {
   description?: string | null
   auxiliaryCode?: string | null
   documentRef?: string | null
+  calculationBase?: CalculationBase | null
+  value?: number | string | null
+  applicationType?: ApplicationType
 }
 
 export interface CreateAccountingEntryDto {
@@ -177,7 +180,7 @@ export interface CostCenterPaginatedResponse {
 export type AccountingEntryFilter = "INVOICES" | "PAYROLL" | "BOTH"
 export type AccountingEntryCurrency = "ALL" | "PEN" | "USD"
 export type ApplicationType = "FIXED_AMOUNT" | "PERCENTAGE" | "TRANSACTION_AMOUNT"
-export type CalculationBase = "SUBTOTAL" | "IGV" | "TOTAL" | "RENT" | "TAX" | "OTHER"
+export type CalculationBase = "SUBTOTAL" | "IGV" | "TOTAL" | "RENT" | "TAX" | "RETENTION_AMOUNT" | "DETRACTION_AMOUNT" | "NET_PAYABLE" | "PENDING_AMOUNT" | "CONCILIATED_AMOUNT" | "OTHER"
 
 export interface AccountingEntryTemplateLine extends BaseEntity {
   templateId: string
