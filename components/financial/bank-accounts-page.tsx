@@ -44,14 +44,19 @@ import {
 } from "lucide-react"
 import { useBankAccountsStore } from "@/stores/bank-accounts-store"
 import { useBanksStore } from "@/stores/bank-store"
+import { useAccountingAccountsStore } from "@/stores/accounting-accounts-store"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
 import { FiltersBar } from "@/components/ui/filters-bar"
 import type { BankAccount, BankAccountType, CreateBankAccountDto, UpdateBankAccountDto } from "@/types/bank-accounts"
 import { useAuthStore } from "@/stores/authStore"
 
-// Agregar esta función helper después de las importaciones y antes del componente
+// Agregar estas funciones helper después de las importaciones y antes del componente
 const getBankById = (bankId: string, banks: any[]) => {
   return banks.find((bank) => bank.id === bankId)
+}
+
+const getAccountingAccountById = (accountId: string, accountingAccounts: any[]) => {
+  return accountingAccounts.find((account) => account.id === accountId)
 }
 
 interface BankAccountFormData {
@@ -63,6 +68,8 @@ interface BankAccountFormData {
   description: string
   initialBalance: number
   isActive: boolean
+  accountingAccountId: string
+  annexCode: string
 }
 
 const initialFormData: BankAccountFormData = {
@@ -74,6 +81,8 @@ const initialFormData: BankAccountFormData = {
   description: "",
   initialBalance: 0,
   isActive: true,
+  accountingAccountId: "none",
+  annexCode: "",
 }
 
 export default function BankAccountsPage() {
@@ -92,6 +101,7 @@ export default function BankAccountsPage() {
   } = useBankAccountsStore()
 
   const { banks, loading: banksLoading, fetchBanks } = useBanksStore()
+  const { accountingAccounts, loading: accountingLoading, error: accountingError, fetchAccountingAccounts } = useAccountingAccountsStore()
 
   const [filters, setFilters] = useState({
     search: "",
@@ -109,22 +119,24 @@ export default function BankAccountsPage() {
 
   // Cargar cuentas bancarias y bancos al montar el componente
   useEffect(() => {
-    console.log("🏦 BankAccountsPage - useEffect triggered")
-    console.log("👤 User:", user)
-    console.log("🏢 Company:", company)
-    console.log("💳 Bank accounts loaded:", bankAccounts.length, bankAccounts)
 
-    if (company?.id) {
-      console.log("📊 Fetching bank accounts for company:", company.id)
-      fetchBankAccounts(company.id, { page: currentPage, limit: 10 })
-    }
+
+          if (company?.id) {
+        fetchBankAccounts(company.id, { page: currentPage, limit: 10 })
+      }
 
     // Cargar bancos disponibles
     if (banks.length === 0 && !banksLoading) {
-      console.log("🏦 Fetching banks...")
       fetchBanks()
     }
-  }, [company?.id, currentPage, fetchBankAccounts, fetchBanks, banks.length, banksLoading])
+
+    // Cargar cuentas contables disponibles
+    if (company?.id && accountingAccounts.length === 0 && !accountingLoading) {
+      fetchAccountingAccounts(company.id, { page: 1, limit: 100 })
+    }
+    
+
+  }, [company?.id, currentPage, fetchBankAccounts, fetchBanks, fetchAccountingAccounts, banks.length, banksLoading, accountingAccounts.length, accountingLoading])
 
   // Limpiar errores cuando se cierre el modal
   useEffect(() => {
@@ -147,7 +159,7 @@ export default function BankAccountsPage() {
       return
     }
 
-    console.log("🆕 Creating bank account with data:", formData)
+
 
     const accountData: CreateBankAccountDto = {
       companyId: company.id,
@@ -159,6 +171,8 @@ export default function BankAccountsPage() {
       description: formData.description || null,
       isActive: formData.isActive,
       initialBalance: formData.initialBalance,
+      accountingAccountId: formData.accountingAccountId === "none" ? null : formData.accountingAccountId || null,
+      annexCode: formData.annexCode || null,
     }
 
     const result = await createBankAccount(accountData)
@@ -182,7 +196,7 @@ export default function BankAccountsPage() {
   const handleEditAccount = async () => {
     if (!selectedAccount) return
 
-    console.log("✏️ Updating bank account with data:", formData)
+
 
     const updateData: UpdateBankAccountDto = {
       bankId: formData.bankId,
@@ -193,6 +207,8 @@ export default function BankAccountsPage() {
       description: formData.description || null,
       isActive: formData.isActive,
       initialBalance: formData.initialBalance,
+      accountingAccountId: formData.accountingAccountId === "none" ? null : formData.accountingAccountId || null,
+      annexCode: formData.annexCode || null,
     }
 
     await updateBankAccount(selectedAccount.id, updateData)
@@ -216,7 +232,7 @@ export default function BankAccountsPage() {
   const handleDeleteAccount = async () => {
     if (!selectedAccount) return
 
-    console.log("🗑️ Deleting bank account:", selectedAccount.id)
+
 
     await deleteBankAccount(selectedAccount.id)
     if (!error) {
@@ -239,7 +255,7 @@ export default function BankAccountsPage() {
   }
 
   const handleToggleStatus = async (account: BankAccount) => {
-    console.log("🔄 Toggling account status:", account.id, "to", !account.isActive)
+
 
     await updateBankAccount(account.id, { isActive: !account.isActive })
     if (!error) {
@@ -251,7 +267,6 @@ export default function BankAccountsPage() {
   }
 
   const openEditModal = (account: BankAccount) => {
-    console.log("✏️ Opening edit modal for account:", account)
 
     setSelectedAccount(account)
     setFormData({
@@ -263,8 +278,14 @@ export default function BankAccountsPage() {
       description: account.description || "",
       initialBalance: account.initialBalance,
       isActive: account.isActive,
+      accountingAccountId: account.accountingAccountId || "none",
+      annexCode: account.annexCode || "",
     })
     setIsEditModalOpen(true)
+  }
+
+  const openCreateModal = () => {
+    setIsCreateModalOpen(true)
   }
 
   const openDeleteDialog = (account: BankAccount) => {
@@ -422,12 +443,13 @@ export default function BankAccountsPage() {
           <Button
             size="sm"
             className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm"
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={openCreateModal}
           >
             <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             <span className="hidden sm:inline">Nueva Cuenta</span>
             <span className="sm:hidden">Nueva</span>
           </Button>
+
         </div>
       </div>
 
@@ -515,11 +537,11 @@ export default function BankAccountsPage() {
         </CardHeader>
         <CardContent className="p-4 sm:p-6 pt-0">
           {loading ? (
-            <TableSkeleton rows={6} columns={8} />
+            <TableSkeleton rows={6} columns={9} />
           ) : (
             <>
               <div className="overflow-x-auto">
-                <div className="min-w-[1000px]">
+                <div className="min-w-[1200px]">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b">
@@ -527,6 +549,7 @@ export default function BankAccountsPage() {
                         <th className="text-left p-3">Número de Cuenta</th>
                         <th className="text-left p-3">Tipo</th>
                         <th className="text-left p-3">Alias</th>
+                        <th className="text-left p-3">Cuenta Contable</th>
                         <th className="text-right p-3">Saldo Actual</th>
                         <th className="text-center p-3">Moneda</th>
                         <th className="text-center p-3">Estado</th>
@@ -561,6 +584,32 @@ export default function BankAccountsPage() {
                               <p className="text-xs text-gray-500 truncate max-w-32" title={account.description}>
                                 {account.description}
                               </p>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            {account.accountingAccountId ? (
+                              (() => {
+                                const accountingAccount = getAccountingAccountById(account.accountingAccountId, accountingAccounts)
+                                return accountingAccount ? (
+                                  <div>
+                                    <p className="text-sm font-medium">
+                                      {accountingAccount.accountCode}
+                                    </p>
+                                    <p className="text-xs text-gray-500 truncate max-w-32" title={accountingAccount.accountName}>
+                                      {accountingAccount.accountName}
+                                    </p>
+                                    {account.annexCode && (
+                                      <p className="text-xs text-blue-600">
+                                        Anexo: {account.annexCode}
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-gray-400">Cuenta no encontrada</p>
+                                )
+                              })()
+                            ) : (
+                              <p className="text-sm text-gray-400">Sin enlazar</p>
                             )}
                           </td>
                           <td className="p-3 text-right">
@@ -781,6 +830,46 @@ export default function BankAccountsPage() {
                 placeholder="Descripción adicional de la cuenta..."
                 rows={3}
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="accountingAccountId">Cuenta Contable</Label>
+                <Select
+                  value={formData.accountingAccountId}
+                  onValueChange={(value) => setFormData({ ...formData, accountingAccountId: value })}
+                  disabled={accountingLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={accountingLoading ? "Cargando cuentas..." : "Seleccione una cuenta contable"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin cuenta contable</SelectItem>
+                    {accountingAccounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.accountCode} - {account.accountName}
+                      </SelectItem>
+                    ))}
+                    {accountingAccounts.length === 0 && !accountingLoading && (
+                      <SelectItem value="no-accounts" disabled>
+                        No hay cuentas contables disponibles
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                {accountingError && (
+                  <p className="text-xs text-red-500">Error al cargar cuentas contables: {accountingError}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="annexCode">Código de Anexo</Label>
+                <Input
+                  id="annexCode"
+                  value={formData.annexCode}
+                  onChange={(e) => setFormData({ ...formData, annexCode: e.target.value })}
+                  placeholder="Ej: 001, 002, etc."
+                />
+              </div>
             </div>
 
             <div className="flex items-center space-x-2">

@@ -66,6 +66,8 @@ export interface CreateBankAccountDto {
   description?: string | null
   isActive?: boolean
   initialBalance?: number
+  accountingAccountId?: string | null
+  annexCode?: string | null
 }
 
 export interface UpdateBankAccountDto {
@@ -78,6 +80,8 @@ export interface UpdateBankAccountDto {
   isActive?: boolean
   initialBalance?: number
   currentBalance?: number
+  accountingAccountId?: string | null
+  annexCode?: string | null
 }
 
 // ============================================================================

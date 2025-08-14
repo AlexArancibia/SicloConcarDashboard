@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Upload, Download, FileText, Eye, Edit, Trash2, ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
+import { Upload, Download, FileText, Eye, Edit, Trash2, ChevronLeft, ChevronRight, MoreHorizontal, CheckCircle } from "lucide-react"
 import { useDocumentsStore } from "@/stores/documents-store"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -23,6 +23,7 @@ import type { DocumentStatus, DocumentType } from "@/types/documents"
 import { useAuthStore } from "@/stores/authStore"
 import XMLImportModal from "./xml-import-modal"
 import { Checkbox } from "../ui/checkbox"
+import SunatValidationDialog from "./sunat-validation-dialog"
 
 export default function DocumentsPage() {
   const [filters, setFilters] = useState<{
@@ -51,6 +52,7 @@ export default function DocumentsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [xmlImportOpen, setXmlImportOpen] = useState(false)
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
+  const [sunatValidationOpen, setSunatValidationOpen] = useState(false)
 
   const { toast } = useToast()
   const { company, user } = useAuthStore() // Assuming user has updatedById
@@ -118,7 +120,7 @@ export default function DocumentsPage() {
     try {
       const query = {
         page: currentPage,
-        limit: 10,
+        limit: 1000, // Aumentar límite para validación SUNAT
         ...(filters.search && { search: filters.search }),
         ...(filters.type && filters.type !== "all" && { documentType: filters.type as DocumentType }),
         ...(filters.status && filters.status !== "all" && { status: filters.status as DocumentStatus }),
@@ -392,6 +394,20 @@ export default function DocumentsPage() {
               <Upload className="w-4 h-4 mr-2" />
               Importar XML
             </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setSunatValidationOpen(true)}
+              disabled={documents.length === 0}
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Validación SUNAT
+              {documents.length > 0 && (
+                <Badge variant="secondary" className="ml-2 text-xs">
+                  {documents.length}
+                </Badge>
+              )}
+            </Button>
           </div>
         </div>
 
@@ -635,6 +651,14 @@ export default function DocumentsPage() {
         onOpenChange={setXmlImportOpen}
         onImportComplete={loadDocuments}
         companyId={company?.id || ""}
+      />
+      <SunatValidationDialog
+        open={sunatValidationOpen}
+        onOpenChange={setSunatValidationOpen}
+        documents={documents}
+        companyId={company?.id || ""}
+        userId={user?.id || ""}
+        onValidationComplete={loadDocuments}
       />
     </>
   )

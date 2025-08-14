@@ -1,279 +1,383 @@
-'use client'
+"use client"
 
-import { useState, useEffect } from 'react'
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
-import { Calendar as CalendarIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Calendar } from '@/components/ui/calendar'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
-import { Progress } from '@/components/ui/progress'
-import { Separator } from '@/components/ui/separator'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Terminal } from 'lucide-react'
-import { useConcarStore } from '@/stores/concar-store'
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useToast } from "@/hooks/use-toast"
+import { useAuthStore } from "@/stores/authStore"
+import { useBankAccountsStore } from "@/stores/bank-accounts-store"
+import apiClient from "@/lib/axiosConfig"
+import { Loader2, Download, FileText, Database, BarChart3 } from "lucide-react"
 
-export default function ConcarTestPage() {
-  const companyId = 'cmp_a454f59f-2f19' // ID de la compañía de ejemplo
-  const [currency, setCurrency] = useState<string>('PEN')
-  const [bankAccountId, setBankAccountId] = useState<string>('')
+interface ConcarQueryParams {
+  companyId?: string
+  startDate?: string
+  endDate?: string
+  bankAccountId?: string | "all"
+  conciliationType?: string
+  status?: string
+  limit?: number
+  offset?: number
+}
 
-  // Obtener el store
-  const {
-    data,
-    loading,
-    error,
-    pagination,
-    summary,
-    summaryLoading,
-    summaryError,
-    bankAccounts,
-    bankAccountsLoading,
-    bankAccountsError,
-    currencies,
-    currenciesLoading,
-    currenciesError,
-    exportLoading,
-    exportProgress,
-    currentFilters,
-    fetchConcarData,
-    fetchConcarSummary,
-    fetchBankAccountsByCurrency,
-    fetchCurrenciesWithBankAccounts,
-    fetchConcarDataByCurrency,
-    exportConcarData,
-    clearErrors,
-    resetExportState,
-    setCurrentFilters,
-    clearData,
-  } = useConcarStore()
+interface ConcarResult {
+  // Bank accounts
+  accountNumber: string
+  accountType: string
+  currency: string
+  alias: string | null
+  description: string | null
 
-  // Estado para los filtros
-  const [filters, setFilters] = useState({
-    startDate: format(new Date(new Date().setMonth(new Date().getMonth() - 1)), 'yyyy-MM-dd'),
-    endDate: format(new Date(), 'yyyy-MM-dd'),
-    bankAccountId: '',
-    conciliationType: undefined,
-    conciliationStatus: undefined,
-    transactionType: '',
-    documentType: undefined,
-    supplierId: '',
-    page: 1,
-    limit: 10,
+  // Transactions
+  transactionDate: Date | null
+  transaction_description: string | null
+  transactionType: string | null
+  amount: number | null
+  balance: number | null
+  branch: string | null
+  operationNumber: string | null
+  operationTime: string | null
+  operatorUser: string | null
+  utc: string | null
+  transaction_reference: string | null
+
+  // Suppliers
+  tradeName: string | null
+  supplier_documentType: string | null
+  supplier_documentNumber: string | null
+
+  // Conciliations
+  conciliation_type: string
+  bankBalance: number
+  bookBalance: number
+  toleranceAmount: number
+  conciliation_status: string
+  additionalExpensesTotal: number
+  totalAmount: number | null
+  paymentAmount: number | null
+
+  // Conciliation items
+  conciliation_item_id: string | null
+  itemType: string | null
+  documentId: string | null
+  documentAmount: number | null
+  item_conciliated_amount: number | null
+  item_difference: number | null
+  distributionPercentage: number | null
+  item_status: string | null
+  item_notes: string | null
+  systemNotes: string | null
+  conciliatedBy: string | null
+
+  // Conciliation expenses
+  expense_id: string | null
+  expense_description: string | null
+  expense_amount: number | null
+  expenseType: string | null
+  accountId: string | null
+  expense_notes: string | null
+  isTaxDeductible: boolean | null
+  supportingDocument: string | null
+  expenseDate: Date | null
+
+  // Documents
+  document_id: string | null
+  document_companyId: string | null
+  documentType: string | null
+  series: string | null
+  number: string | null
+  fullNumber: string | null
+  supplierId: string | null
+  issueDate: Date | null
+  issueTime: string | null
+  dueDate: Date | null
+  receptionDate: Date | null
+  document_currency: string | null
+  exchangeRate: number | null
+  subtotal: number | null
+  igv: number | null
+  otherTaxes: number | null
+  document_total: number | null
+  hasRetention: boolean | null
+  retentionAmount: number | null
+  retentionPercentage: number | null
+  netPayableAmount: number | null
+  document_conciliated_amount: number | null
+  document_pending_amount: number | null
+  paymentMethod: string | null
+  document_description: string | null
+  observations: string | null
+  tags: string[] | null
+  document_status: string | null
+  orderReference: string | null
+  contractNumber: string | null
+  additionalNotes: string | null
+}
+
+export default function ConcarReportPage() {
+  const [queryParams, setQueryParams] = useState<ConcarQueryParams>({
+    companyId: "",
+    startDate: "",
+    endDate: "",
+    bankAccountId: "all",
+    conciliationType: "",
+    status: "",
+    limit: 100,
+    offset: 0
   })
 
-  // Cargar datos iniciales
-  useEffect(() => {
-    fetchCurrenciesWithBankAccounts(companyId)
-  }, [])
+  const [results, setResults] = useState<ConcarResult[]>([])
+  const [loading, setLoading] = useState(false)
+  const [responseInfo, setResponseInfo] = useState<any>(null)
 
-  // Cuando cambia la moneda, cargar cuentas bancarias
+  const { toast } = useToast()
+  const { company } = useAuthStore()
+  const { bankAccounts, loading: bankAccountsLoading, getBankAccountsByCompany } = useBankAccountsStore()
+
+  // Inicializar companyId y cargar cuentas bancarias cuando esté disponible
   useEffect(() => {
-    if (currency) {
-      fetchBankAccountsByCurrency(companyId, currency)
+    if (company?.id) {
+      setQueryParams(prev => ({ ...prev, companyId: company.id }))
+      // Cargar cuentas bancarias de la empresa
+      getBankAccountsByCompany(company.id)
     }
-  }, [currency])
+  }, [company?.id, getBankAccountsByCompany])
 
-  // Handler para cambios en los filtros
-  const handleFilterChange = (name: string, value: any) => {
-    const newFilters = { ...filters, [name]: value }
-    setFilters(newFilters)
-    setCurrentFilters(newFilters)
+  const handleParamChange = (key: keyof ConcarQueryParams, value: string | number) => {
+    // Asegurar que limit y offset sean números
+    if (key === "limit" || key === "offset") {
+      const numValue = typeof value === "string" ? parseInt(value) || 0 : value
+      setQueryParams(prev => ({ ...prev, [key]: numValue }))
+    } else {
+      setQueryParams(prev => ({ ...prev, [key]: value }))
+    }
   }
 
-  // Handler para buscar datos
-  const handleSearch = () => {
-    fetchConcarData(companyId, filters)
-    fetchConcarSummary(companyId, {
-      startDate: filters.startDate,
-      endDate: filters.endDate,
-      bankAccountId: filters.bankAccountId,
-      conciliationType: filters.conciliationType,
-      conciliationStatus: filters.conciliationStatus,
-    })
+  const executeQuery = async () => {
+    if (!company?.id) {
+      toast({
+        title: "Error",
+        description: "No se pudo identificar la empresa",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setLoading(true)
+    setResults([])
+    setResponseInfo(null)
+
+    try {
+      // Construir query string con companyId automático
+      const queryString = new URLSearchParams()
+      queryString.append("companyId", company.id)
+      
+      Object.entries(queryParams).forEach(([key, value]) => {
+        if (key !== "companyId" && value !== undefined && value !== null && value !== "" && value !== "all") {
+          queryString.append(key, String(value))
+        }
+      })
+
+      console.log("Sending query to /concar:", { companyId: company.id, ...queryParams })
+      console.log("Query string:", queryString.toString())
+      console.log("Param types:", {
+        limit: typeof queryParams.limit,
+        offset: typeof queryParams.offset,
+        startDate: typeof queryParams.startDate,
+        endDate: typeof queryParams.endDate
+      })
+      
+      const response = await apiClient.get(`/concar?${queryString.toString()}`)
+      
+      console.log("Concar response:", response.data)
+      
+      if (response.data.success) {
+        const data = response.data.data || []
+        console.log("Sample result data:", data[0])
+        console.log("Data types:", data[0] ? Object.entries(data[0]).map(([key, value]) => 
+          `${key}: ${typeof value} (${value})`
+        ) : "No data")
+        
+        setResults(data)
+        setResponseInfo({
+          success: true,
+          message: response.data.message,
+          count: response.data.count,
+          query: response.data.query
+        })
+        
+        toast({
+          title: "Éxito",
+          description: `Reporte generado con ${response.data.count} resultados`,
+        })
+      } else {
+        setResponseInfo({
+          success: false,
+          message: response.data.message,
+          error: response.data.error,
+          query: response.data.query
+        })
+        
+        toast({
+          title: "Error",
+          description: response.data.message || "Error generando reporte",
+          variant: "destructive"
+        })
+      }
+    } catch (error: any) {
+      console.error("Error executing Concar query:", error)
+      
+      setResponseInfo({
+        success: false,
+        message: "Error de conexión",
+        error: error.message,
+        query: queryParams
+      })
+      
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Error ejecutando consulta",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // Handler para buscar por moneda
-  const handleSearchByCurrency = () => {
-    fetchConcarDataByCurrency(companyId, currency, {
-      startDate: filters.startDate,
-      endDate: filters.endDate,
-      conciliationType: filters.conciliationType,
-      conciliationStatus: filters.conciliationStatus,
-      transactionType: filters.transactionType,
-      documentType: filters.documentType,
-      supplierId: filters.supplierId,
-      page: filters.page,
-      limit: filters.limit
-    })
+  const downloadResults = () => {
+    if (results.length === 0) return
+
+    const csvContent = [
+      // Headers
+      Object.keys(results[0]).join(","),
+      // Data rows
+      ...results.map(row => 
+        Object.values(row).map(value => {
+          if (value === null || value === undefined) return ""
+          if (typeof value === "string") return `"${value}"`
+          if (typeof value === "number") return value.toString()
+          if (Array.isArray(value)) return `"${value.join(", ")}"`
+          return `"${String(value)}"`
+        }).join(",")
+      )
+    ].join("\n")
+
+    const blob = new Blob([csvContent], { type: "text/csv" })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `concar-report-${new Date().toISOString().split("T")[0]}.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
   }
 
-  // Handler para exportar datos
-  const handleExport = (format: 'csv' | 'excel') => {
-    exportConcarData(companyId, filters, format)
+  const formatValue = (value: any): string => {
+    if (value === null || value === undefined) return "-"
+    if (typeof value === "boolean") return value ? "Sí" : "No"
+    if (value instanceof Date) return value.toLocaleDateString()
+    if (Array.isArray(value)) return value.join(", ")
+    return String(value)
+  }
+
+  const formatCurrency = (value: any): string => {
+    if (value === null || value === undefined || value === "") return "-"
+    const numValue = Number(value)
+    if (isNaN(numValue)) return "-"
+    return `S/ ${numValue.toFixed(2)}`
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold">Prueba de Endpoints CONCAR</h1>
-        <p className="text-sm text-muted-foreground">
-          Company ID: <span className="font-mono">{companyId}</span>
-        </p>
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Reporte Concar</h1>
+          <p className="text-gray-600">Genera reportes personalizados de conciliaciones</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-sm">
+            <Database className="w-4 h-4 mr-1" />
+            Modo Prueba
+          </Badge>
+          {company && (
+            <Badge variant="secondary" className="text-sm">
+              Empresa: {company.name}
+            </Badge>
+          )}
+        </div>
       </div>
 
-      <Separator />
-
-      {/* Filtros */}
+      {/* Formulario de parámetros */}
       <Card>
         <CardHeader>
-          <CardTitle>Filtros</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />
+            Parámetros de Consulta
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Fecha inicio */}
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Fecha inicio</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={'outline'}
-                    className={cn(
-                      'w-full justify-start text-left font-normal',
-                      !filters.startDate && 'text-muted-foreground'
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {filters.startDate ? (
-                      format(new Date(filters.startDate), 'PPP', { locale: es })
-                    ) : (
-                      <span>Seleccione una fecha</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={new Date(filters.startDate)}
-                    onSelect={(date) =>
-                      handleFilterChange('startDate', format(date || new Date(), 'yyyy-MM-dd'))
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <Label htmlFor="companyId">Empresa</Label>
+              <div className="p-3 bg-gray-50 border rounded-md">
+                <div className="font-medium">{company?.name || "Cargando..."}</div>
+                <div className="text-sm text-gray-500">{company?.id || "ID no disponible"}</div>
+              </div>
             </div>
 
-            {/* Fecha fin */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Fecha fin</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={'outline'}
-                    className={cn(
-                      'w-full justify-start text-left font-normal',
-                      !filters.endDate && 'text-muted-foreground'
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {filters.endDate ? (
-                      format(new Date(filters.endDate), 'PPP', { locale: es })
-                    ) : (
-                      <span>Seleccione una fecha</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={new Date(filters.endDate)}
-                    onSelect={(date) =>
-                      handleFilterChange('endDate', format(date || new Date(), 'yyyy-MM-dd'))
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <Label htmlFor="startDate">Fecha Inicio</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={queryParams.startDate}
+                onChange={(e) => handleParamChange("startDate", e.target.value)}
+              />
             </div>
 
-            {/* Moneda */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Moneda</label>
+              <Label htmlFor="endDate">Fecha Fin</Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={queryParams.endDate}
+                onChange={(e) => handleParamChange("endDate", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bankAccountId">Cuenta Bancaria</Label>
               <Select
-                value={currency}
-                onValueChange={(value) => setCurrency(value)}
-                disabled={currenciesLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccione moneda" />
-                </SelectTrigger>
-                <SelectContent>
-                  {currencies.map((curr) => (
-                    <SelectItem key={curr.code} value={curr.code}>
-                      {`${curr.name} (${curr.symbol})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Cuenta bancaria */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Cuenta bancaria</label>
-              <Select
-                value={filters.bankAccountId}
-                onValueChange={(value) => handleFilterChange('bankAccountId', value)}
+                value={queryParams.bankAccountId}
+                onValueChange={(value) => handleParamChange("bankAccountId", value)}
                 disabled={bankAccountsLoading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccione cuenta" />
+                  <SelectValue placeholder={bankAccountsLoading ? "Cargando..." : "Seleccionar cuenta"} />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">Todas las cuentas</SelectItem>
                   {bankAccounts.map((account) => (
                     <SelectItem key={account.id} value={account.id}>
-                      {`${account.accountNumber} - ${account.alias || account.description || 'Sin alias'}`}
+                      {account.accountNumber} - {account.alias || account.description || "Sin alias"}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Tipo conciliación */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Tipo conciliación</label>
+              <Label htmlFor="conciliationType">Tipo Conciliación</Label>
               <Select
-                value={filters.conciliationType}
-                onValueChange={(value) => handleFilterChange('conciliationType', value)}
+                value={queryParams.conciliationType}
+                onValueChange={(value) => handleParamChange("conciliationType", value)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccione tipo" />
+                  <SelectValue placeholder="Seleccionar tipo" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="DOCUMENTS">Documentos</SelectItem>
@@ -282,322 +386,207 @@ export default function ConcarTestPage() {
               </Select>
             </div>
 
-            {/* Estado conciliación */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Estado conciliación</label>
+              <Label htmlFor="status">Estado</Label>
               <Select
-                value={filters.conciliationStatus}
-                onValueChange={(value) => handleFilterChange('conciliationStatus', value)}
+                value={queryParams.status}
+                onValueChange={(value) => handleParamChange("status", value)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccione estado" />
+                  <SelectValue placeholder="Seleccionar estado" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="PENDING">Pendiente</SelectItem>
-                  <SelectItem value="IN_PROGRESS">En progreso</SelectItem>
+                  <SelectItem value="IN_PROGRESS">En Progreso</SelectItem>
                   <SelectItem value="COMPLETED">Completado</SelectItem>
                   <SelectItem value="CANCELLED">Cancelado</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {/* ID Proveedor */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">ID Proveedor</label>
+              <Label htmlFor="limit">Límite</Label>
               <Input
-                placeholder="Ingrese ID proveedor"
-                value={filters.supplierId}
-                onChange={(e) => handleFilterChange('supplierId', e.target.value)}
+                id="limit"
+                type="number"
+                value={queryParams.limit || ""}
+                onChange={(e) => {
+                  const value = e.target.value === "" ? 100 : parseInt(e.target.value) || 100
+                  handleParamChange("limit", value)
+                }}
+                placeholder="100"
+                min="1"
+                max="1000"
               />
             </div>
 
-            {/* Botones de acción */}
-            <div className="flex items-end gap-2">
-              <Button onClick={handleSearch} disabled={loading}>
-                {loading ? 'Buscando...' : 'Buscar'}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleSearchByCurrency}
-                disabled={loading}
-              >
-                Buscar por Moneda
-              </Button>
+            <div className="space-y-2">
+              <Label htmlFor="offset">Offset</Label>
+              <Input
+                id="offset"
+                type="number"
+                value={queryParams.offset || ""}
+                onChange={(e) => {
+                  const value = e.target.value === "" ? 0 : parseInt(e.target.value) || 0
+                  handleParamChange("offset", value)
+                }}
+                placeholder="0"
+                min="0"
+              />
             </div>
+          </div>
+
+          <div className="flex gap-2 mt-6">
+            <Button 
+              onClick={executeQuery} 
+              disabled={loading || !company?.id}
+              className="flex-1"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Ejecutando...
+                </>
+              ) : (
+                <>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Ejecutar Consulta
+                </>
+              )}
+            </Button>
+
+            {results.length > 0 && (
+              <Button variant="outline" onClick={downloadResults}>
+                <Download className="w-4 h-4 mr-2" />
+                Descargar CSV
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Mostrar errores */}
-      {(error || summaryError || bankAccountsError || currenciesError) && (
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <Terminal className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            {summaryError && (
-              <Alert variant="destructive">
-                <Terminal className="h-4 w-4" />
-                <AlertTitle>Error en resumen</AlertTitle>
-                <AlertDescription>{summaryError}</AlertDescription>
-              </Alert>
-            )}
-            {bankAccountsError && (
-              <Alert variant="destructive">
-                <Terminal className="h-4 w-4" />
-                <AlertTitle>Error en cuentas</AlertTitle>
-                <AlertDescription>{bankAccountsError}</AlertDescription>
-              </Alert>
-            )}
-            {currenciesError && (
-              <Alert variant="destructive">
-                <Terminal className="h-4 w-4" />
-                <AlertTitle>Error en monedas</AlertTitle>
-                <AlertDescription>{currenciesError}</AlertDescription>
-              </Alert>
-            )}
-            <Button variant="outline" onClick={clearErrors}>
-              Limpiar errores
-            </Button>
+      {/* Información de respuesta */}
+      {responseInfo && (
+        <Card className={responseInfo.success ? "border-green-200" : "border-red-200"}>
+          <CardHeader>
+            <CardTitle className={`flex items-center gap-2 ${
+              responseInfo.success ? "text-green-700" : "text-red-700"
+            }`}>
+              {responseInfo.success ? "✅ Respuesta Exitosa" : "❌ Error en Consulta"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <p><strong>Mensaje:</strong> {responseInfo.message}</p>
+              {responseInfo.count !== undefined && (
+                <p><strong>Resultados:</strong> {responseInfo.count}</p>
+              )}
+              {responseInfo.error && (
+                <p><strong>Error:</strong> <code className="bg-red-100 px-2 py-1 rounded">{responseInfo.error}</code></p>
+              )}
+              <details className="mt-4">
+                <summary className="cursor-pointer font-medium">Ver parámetros enviados</summary>
+                <pre className="mt-2 p-3 bg-gray-100 rounded text-sm overflow-x-auto">
+                  {JSON.stringify(responseInfo.query, null, 2)}
+                </pre>
+              </details>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Resumen CONCAR */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Resumen CONCAR</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {summaryLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : summary ? (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="border rounded-lg p-4">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Conciliaciones Totales
-                </h3>
-                <p className="text-2xl font-bold">{summary.total_conciliations}</p>
-              </div>
-              <div className="border rounded-lg p-4">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Documentos
-                </h3>
-                <p className="text-2xl font-bold">{summary.total_documents}</p>
-              </div>
-              <div className="border rounded-lg p-4">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Monto Conciliado
-                </h3>
-                <p className="text-2xl font-bold">
-                  {summary.total_conciliation_amount.toFixed(2)}
-                </p>
-              </div>
-              <div className="border rounded-lg p-4">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Saldo Banco
-                </h3>
-                <p className="text-2xl font-bold">
-                  {summary.total_bank_balance.toFixed(2)}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-muted-foreground">No hay datos de resumen disponibles</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Datos CONCAR */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Datos CONCAR</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : data.length > 0 ? (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cuenta</TableHead>
-                    <TableHead>Moneda</TableHead>
-                    <TableHead>Fecha Transacción</TableHead>
-                    <TableHead>Descripción</TableHead>
-                    <TableHead>Monto</TableHead>
-                    <TableHead>Saldo</TableHead>
-                    <TableHead>Estado Conciliación</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.map((item) => (
-                    <TableRow key={item.conciliation_id}>
-                      <TableCell>{item.accountNumber}</TableCell>
-                      <TableCell>{item.currency}</TableCell>
-                      <TableCell>
-                        {format(new Date(item.transactionDate), 'dd/MM/yyyy')}
-                      </TableCell>
-                      <TableCell>{item.transaction_description}</TableCell>
-                      <TableCell>{item.amount.toFixed(2)}</TableCell>
-                      <TableCell>{item.balance.toFixed(2)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {item.conciliation_status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-
-              <div className="mt-4 flex justify-between items-center">
-                <div className="text-sm text-muted-foreground">
-                  Página {pagination.page} de {pagination.totalPages} - Total:{' '}
-                  {pagination.total} registros
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    disabled={pagination.page === 1}
-                    onClick={() => {
-                      handleFilterChange('page', pagination.page - 1)
-                      handleSearch()
-                    }}
-                  >
-                    Anterior
-                  </Button>
-                  <Button
-                    variant="outline"
-                    disabled={pagination.page === pagination.totalPages}
-                    onClick={() => {
-                      handleFilterChange('page', pagination.page + 1)
-                      handleSearch()
-                    }}
-                  >
-                    Siguiente
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-4 flex gap-2">
-                <Button onClick={() => handleExport('excel')} disabled={exportLoading}>
-                  {exportLoading ? 'Exportando...' : 'Exportar a Excel'}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleExport('csv')}
-                  disabled={exportLoading}
-                >
-                  Exportar a CSV
-                </Button>
-              </div>
-
-              {exportLoading && (
-                <div className="mt-4 space-y-2">
-                  <Progress value={exportProgress} className="h-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Progreso: {exportProgress}%
-                  </p>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-muted-foreground">No hay datos disponibles</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Información de monedas y cuentas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Resultados */}
+      {results.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Monedas disponibles</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>Resultados ({results.length})</span>
+              <Badge variant="secondary">
+                {results.length} registros
+              </Badge>
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {currenciesLoading ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-              </div>
-            ) : currencies.length > 0 ? (
-              <div className="space-y-2">
-                {currencies.map((curr) => (
-                  <div
-                    key={curr.code}
-                    className="flex items-center justify-between p-3 border rounded-lg"
-                  >
-                    <div>
-                      <p className="font-medium">{curr.name}</p>
-                      <p className="text-sm text-muted-foreground">{curr.code}</p>
+            <Tabs defaultValue="table" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="table">Vista Tabla</TabsTrigger>
+                <TabsTrigger value="json">Vista JSON</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="table" className="mt-4">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-2">Cuenta</th>
+                        <th className="text-left p-2">Tipo</th>
+                        <th className="text-left p-2">Proveedor</th>
+                        <th className="text-left p-2">Documento</th>
+                        <th className="text-left p-2">Monto</th>
+                        <th className="text-left p-2">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.slice(0, 50).map((result, index) => (
+                        <tr key={index} className="border-b hover:bg-gray-50">
+                          <td className="p-2">
+                            <div className="font-medium">{result.accountNumber}</div>
+                            <div className="text-xs text-gray-500">{result.alias || result.description}</div>
+                          </td>
+                          <td className="p-2">
+                            <Badge variant="outline">{result.conciliation_type}</Badge>
+                          </td>
+                          <td className="p-2">
+                            <div className="font-medium">{result.tradeName || "-"}</div>
+                            <div className="text-xs text-gray-500">{result.supplier_documentNumber || "-"}</div>
+                          </td>
+                          <td className="p-2">
+                            <div className="font-medium">{result.fullNumber || "-"}</div>
+                            <div className="text-xs text-gray-500">{result.documentType || "-"}</div>
+                          </td>
+                          <td className="p-2">
+                            <div className="font-medium">
+                              {formatCurrency(result.document_total)}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {result.document_conciliated_amount ? `Conciliado: ${formatCurrency(result.document_conciliated_amount)}` : "-"}
+                            </div>
+                          </td>
+                          <td className="p-2">
+                            <Badge 
+                              variant={result.conciliation_status === "COMPLETED" ? "default" : "secondary"}
+                            >
+                              {result.conciliation_status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {results.length > 50 && (
+                    <div className="mt-4 text-center text-sm text-gray-500">
+                      Mostrando 50 de {results.length} resultados. Use los parámetros para filtrar más.
                     </div>
-                    <Badge variant="outline">{curr.symbol}</Badge>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground">No hay monedas disponibles</p>
-            )}
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="json" className="mt-4">
+                <div className="bg-gray-100 p-4 rounded-lg">
+                  <pre className="text-sm overflow-x-auto">
+                    {JSON.stringify(results.slice(0, 10), null, 2)}
+                  </pre>
+                  {results.length > 10 && (
+                    <div className="mt-2 text-sm text-gray-500">
+                      Mostrando 10 de {results.length} resultados en formato JSON
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Cuentas bancarias ({currency})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {bankAccountsLoading ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-              </div>
-            ) : bankAccounts.length > 0 ? (
-              <div className="space-y-2">
-                {bankAccounts.map((account) => (
-                  <div
-                    key={account.id}
-                    className="p-3 border rounded-lg space-y-1"
-                  >
-                    <p className="font-medium">{account.accountNumber}</p>
-                    <p className="text-sm">
-                      {account.alias || account.description || 'Sin alias'}
-                    </p>
-                    <div className="flex gap-2">
-                      <Badge variant="outline">{account.accountType}</Badge>
-                      <Badge variant="outline">{account.currency}</Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground">
-                No hay cuentas disponibles para esta moneda
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Acciones adicionales */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Acciones Adicionales</CardTitle>
-        </CardHeader>
-        <CardContent className="flex gap-2">
-          <Button variant="destructive" onClick={clearData}>
-            Limpiar todos los datos
-          </Button>
-          <Button variant="outline" onClick={resetExportState}>
-            Reiniciar estado de exportación
-          </Button>
-        </CardContent>
-      </Card>
+      )}
     </div>
   )
 }
