@@ -24,8 +24,6 @@ export interface BankAccount extends BaseEntity {
   alias: string | null
   description: string | null
   isActive: boolean
-  initialBalance: number // Decimal en schema
-  currentBalance: number // Decimal en schema
   accountingAccountId?: string | null
   annexCode?: string | null
 
@@ -65,7 +63,6 @@ export interface CreateBankAccountDto {
   alias?: string | null
   description?: string | null
   isActive?: boolean
-  initialBalance?: number
   accountingAccountId?: string | null
   annexCode?: string | null
 }
@@ -78,8 +75,6 @@ export interface UpdateBankAccountDto {
   alias?: string | null
   description?: string | null
   isActive?: boolean
-  initialBalance?: number
-  currentBalance?: number
   accountingAccountId?: string | null
   annexCode?: string | null
 }

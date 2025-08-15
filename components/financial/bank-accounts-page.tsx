@@ -66,7 +66,6 @@ interface BankAccountFormData {
   currency: string
   alias: string
   description: string
-  initialBalance: number
   isActive: boolean
   accountingAccountId: string
   annexCode: string
@@ -79,7 +78,6 @@ const initialFormData: BankAccountFormData = {
   currency: "PEN",
   alias: "",
   description: "",
-  initialBalance: 0,
   isActive: true,
   accountingAccountId: "none",
   annexCode: "",
@@ -170,7 +168,6 @@ export default function BankAccountsPage() {
       alias: formData.alias || null,
       description: formData.description || null,
       isActive: formData.isActive,
-      initialBalance: formData.initialBalance,
       accountingAccountId: formData.accountingAccountId === "none" ? null : formData.accountingAccountId || null,
       annexCode: formData.annexCode || null,
     }
@@ -206,7 +203,6 @@ export default function BankAccountsPage() {
       alias: formData.alias || null,
       description: formData.description || null,
       isActive: formData.isActive,
-      initialBalance: formData.initialBalance,
       accountingAccountId: formData.accountingAccountId === "none" ? null : formData.accountingAccountId || null,
       annexCode: formData.annexCode || null,
     }
@@ -276,7 +272,6 @@ export default function BankAccountsPage() {
       currency: account.currency,
       alias: account.alias || "",
       description: account.description || "",
-      initialBalance: account.initialBalance,
       isActive: account.isActive,
       accountingAccountId: account.accountingAccountId || "none",
       annexCode: account.annexCode || "",
@@ -373,9 +368,6 @@ export default function BankAccountsPage() {
   const stats = {
     total: bankAccounts.length,
     active: bankAccounts.filter((acc) => acc.isActive).length,
-    totalBalance: bankAccounts.reduce((sum, acc) => sum + acc.currentBalance, 0),
-    penBalance: bankAccounts.filter((acc) => acc.currency === "PEN").reduce((sum, acc) => sum + acc.currentBalance, 0),
-    usdBalance: bankAccounts.filter((acc) => acc.currency === "USD").reduce((sum, acc) => sum + acc.currentBalance, 0),
   }
 
   const filterConfigs = [
@@ -454,7 +446,7 @@ export default function BankAccountsPage() {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -479,33 +471,7 @@ export default function BankAccountsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Saldo Total</p>
-                <p className="text-lg font-bold">
-                  S/ {stats.penBalance.toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <DollarSign className="w-8 h-8 text-emerald-500" />
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Saldo USD</p>
-                <p className="text-lg font-bold">
-                  $ {stats.usdBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <DollarSign className="w-8 h-8 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
 
         <Card>
           <CardContent className="p-4">
@@ -541,7 +507,7 @@ export default function BankAccountsPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <div className="min-w-[1200px]">
+                <div className="min-w-[1000px]">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b">
@@ -550,7 +516,6 @@ export default function BankAccountsPage() {
                         <th className="text-left p-3">Tipo</th>
                         <th className="text-left p-3">Alias</th>
                         <th className="text-left p-3">Cuenta Contable</th>
-                        <th className="text-right p-3">Saldo Actual</th>
                         <th className="text-center p-3">Moneda</th>
                         <th className="text-center p-3">Estado</th>
                         <th className="text-center p-3">Acciones</th>
@@ -612,23 +577,7 @@ export default function BankAccountsPage() {
                               <p className="text-sm text-gray-400">Sin enlazar</p>
                             )}
                           </td>
-                          <td className="p-3 text-right">
-                            <p
-                              className={`font-medium ${account.currentBalance >= 0 ? "text-green-600" : "text-red-600"}`}
-                            >
-                              {account.currency === "PEN" ? "S/" : account.currency === "USD" ? "$" : "€"}{" "}
-                              {Math.abs(account.currentBalance).toLocaleString(
-                                account.currency === "PEN" ? "es-PE" : "en-US",
-                                { minimumFractionDigits: 2 },
-                              )}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Inicial: {account.currency === "PEN" ? "S/" : account.currency === "USD" ? "$" : "€"}{" "}
-                              {account.initialBalance.toLocaleString(account.currency === "PEN" ? "es-PE" : "en-US", {
-                                minimumFractionDigits: 2,
-                              })}
-                            </p>
-                          </td>
+
                           <td className="p-3 text-center">
                             <Badge variant="outline" className="text-xs">
                               {account.currency}
@@ -781,34 +730,21 @@ export default function BankAccountsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="currency">Moneda *</Label>
-                <Select
-                  value={formData.currency}
-                  onValueChange={(value) => setFormData({ ...formData, currency: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PEN">Soles (PEN)</SelectItem>
-                    <SelectItem value="USD">Dólares (USD)</SelectItem>
-                    <SelectItem value="EUR">Euros (EUR)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="initialBalance">Saldo Inicial</Label>
-                <Input
-                  id="initialBalance"
-                  type="number"
-                  step="0.01"
-                  value={formData.initialBalance}
-                  onChange={(e) => setFormData({ ...formData, initialBalance: Number.parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="currency">Moneda *</Label>
+              <Select
+                value={formData.currency}
+                onValueChange={(value) => setFormData({ ...formData, currency: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PEN">Soles (PEN)</SelectItem>
+                  <SelectItem value="USD">Dólares (USD)</SelectItem>
+                  <SelectItem value="EUR">Euros (EUR)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

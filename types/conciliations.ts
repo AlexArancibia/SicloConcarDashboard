@@ -247,7 +247,6 @@ export interface Conciliation extends BaseEntity {
     alias: string | null
     accountType: string
     currency: string
-    currentBalance: number
     bank: {
       id: string
       name: string
