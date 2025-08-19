@@ -41,6 +41,7 @@ import {
   DollarSign,
   Banknote,
   PiggyBank,
+  MoreHorizontal,
 } from "lucide-react"
 import { useBankAccountsStore } from "@/stores/bank-accounts-store"
 import { useBanksStore } from "@/stores/bank-store"
@@ -49,6 +50,13 @@ import { TableSkeleton } from "@/components/ui/table-skeleton"
 import { FiltersBar } from "@/components/ui/filters-bar"
 import type { BankAccount, BankAccountType, CreateBankAccountDto, UpdateBankAccountDto } from "@/types/bank-accounts"
 import { useAuthStore } from "@/stores/authStore"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 // Agregar estas funciones helper después de las importaciones y antes del componente
 const getBankById = (bankId: string, banks: any[]) => {
@@ -157,8 +165,6 @@ export default function BankAccountsPage() {
       return
     }
 
-
-
     const accountData: CreateBankAccountDto = {
       companyId: company.id,
       bankId: formData.bankId,
@@ -192,8 +198,6 @@ export default function BankAccountsPage() {
 
   const handleEditAccount = async () => {
     if (!selectedAccount) return
-
-
 
     const updateData: UpdateBankAccountDto = {
       bankId: formData.bankId,
@@ -507,7 +511,7 @@ export default function BankAccountsPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <div className="min-w-[1000px]">
+                <div className="min-w-[1100px]">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b">
@@ -516,6 +520,7 @@ export default function BankAccountsPage() {
                         <th className="text-left p-3">Tipo</th>
                         <th className="text-left p-3">Alias</th>
                         <th className="text-left p-3">Cuenta Contable</th>
+                        <th className="text-left p-3">Anexo</th>
                         <th className="text-center p-3">Moneda</th>
                         <th className="text-center p-3">Estado</th>
                         <th className="text-center p-3">Acciones</th>
@@ -563,11 +568,6 @@ export default function BankAccountsPage() {
                                     <p className="text-xs text-gray-500 truncate max-w-32" title={accountingAccount.accountName}>
                                       {accountingAccount.accountName}
                                     </p>
-                                    {account.annexCode && (
-                                      <p className="text-xs text-blue-600">
-                                        Anexo: {account.annexCode}
-                                      </p>
-                                    )}
                                   </div>
                                 ) : (
                                   <p className="text-sm text-gray-400">Cuenta no encontrada</p>
@@ -575,6 +575,15 @@ export default function BankAccountsPage() {
                               })()
                             ) : (
                               <p className="text-sm text-gray-400">Sin enlazar</p>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            {account.annexCode ? (
+                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                {account.annexCode}
+                              </Badge>
+                            ) : (
+                              <p className="text-sm text-gray-400">-</p>
                             )}
                           </td>
 
@@ -585,38 +594,42 @@ export default function BankAccountsPage() {
                           </td>
                           <td className="p-3 text-center">{getStatusBadge(account.isActive)}</td>
                           <td className="p-3">
-                            <div className="flex items-center justify-center gap-1">
-                              <Button variant="ghost" size="sm" title="Ver movimientos">
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title="Editar cuenta"
-                                onClick={() => openEditModal(account)}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title={account.isActive ? "Desactivar" : "Activar"}
-                                onClick={() => handleToggleStatus(account)}
-                              >
-                                {account.isActive ? (
-                                  <PowerOff className="w-4 h-4 text-red-500" />
-                                ) : (
-                                  <Power className="w-4 h-4 text-green-500" />
-                                )}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title="Eliminar cuenta"
-                                onClick={() => openDeleteDialog(account)}
-                              >
-                                <Trash2 className="w-4 h-4 text-red-500" />
-                              </Button>
+                            <div className="flex items-center justify-center">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <span className="sr-only">Abrir menú</span>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => openEditModal(account)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    <span>Editar cuenta</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleToggleStatus(account)}>
+                                    {account.isActive ? (
+                                      <>
+                                        <PowerOff className="mr-2 h-4 w-4 text-red-500" />
+                                        <span>Desactivar</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Power className="mr-2 h-4 w-4 text-green-500" />
+                                        <span>Activar</span>
+                                      </>
+                                    )}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem 
+                                    onClick={() => openDeleteDialog(account)}
+                                    className="text-red-600 focus:text-red-600"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    <span>Eliminar</span>
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </td>
                         </tr>

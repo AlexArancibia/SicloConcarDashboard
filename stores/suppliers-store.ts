@@ -224,11 +224,13 @@ export const useSuppliersStore = create<SuppliersState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const { page = 1, limit = 10 } = pagination
-      const response = await apiClient.get<PaginatedResponse<Supplier>>(
-        `/suppliers/company/${companyId}/search?term=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}`,
-      )
+      const url = `/suppliers/company/${companyId}?search=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}`
+      console.log('🔍 Frontend calling URL:', url)
+      
+      const response = await apiClient.get<PaginatedResponse<Supplier>>(url)
 
       const { data, total, totalPages } = response.data
+      console.log('🔍 Frontend received response:', { total, returned: data.length })
 
       set({
         suppliers: data,
@@ -236,6 +238,7 @@ export const useSuppliersStore = create<SuppliersState>((set, get) => ({
         loading: false,
       })
     } catch (error: any) {
+      console.error('🔍 Frontend search error:', error)
       set({
         error: error.response?.data?.message || "Error searching suppliers",
         loading: false,
