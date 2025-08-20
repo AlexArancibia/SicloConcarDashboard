@@ -47,6 +47,9 @@ interface SuppliersState {
   // Métodos utilitarios
   clearSuppliers: () => void
   clearError: () => void
+  
+  // Export functionality
+  exportSuppliers: (companyId: string, format: 'csv' | 'excel', filters?: any) => Promise<void>
 }
 
 export const useSuppliersStore = create<SuppliersState>((set, get) => ({
@@ -302,5 +305,58 @@ export const useSuppliersStore = create<SuppliersState>((set, get) => ({
 
   clearError: () => {
     set({ error: null })
+  },
+
+  exportSuppliers: async (companyId: string, format: 'csv' | 'excel', filters?: any) => {
+    try {
+      // Optionally call backend endpoint for server-side export
+      // This is useful for large datasets or when you want server-side filtering
+      if (filters && Object.keys(filters).length > 0) {
+        try {
+          const params = new URLSearchParams()
+          params.append('format', format)
+          
+          // Add filters
+          if (filters.status && filters.status !== 'all') params.append('status', filters.status)
+          if (filters.supplierType && filters.supplierType !== 'all') params.append('supplierType', filters.supplierType)
+          if (filters.documentType && filters.documentType !== 'all') params.append('documentType', filters.documentType)
+          if (filters.search) params.append('search', filters.search)
+
+          const response = await apiClient.get(`/suppliers/company/${companyId}/export?${params.toString()}`, {
+            responseType: 'blob'
+          })
+
+          // Create download link
+          const url = window.URL.createObjectURL(new Blob([response.data]))
+          const link = document.createElement('a')
+          link.href = url
+          link.setAttribute('download', `proveedores_${companyId}_${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'xlsx' : 'csv'}`)
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+          window.URL.revokeObjectURL(url)
+          
+          return
+        } catch (backendError) {
+          console.warn('Backend export failed, falling back to frontend export:', backendError)
+          // Fall back to frontend export
+        }
+      }
+
+      // Frontend export fallback
+      const currentSuppliers = get().suppliers
+      
+      if (format === 'csv') {
+        // CSV export logic will be handled in the component
+        return
+      } else if (format === 'excel') {
+        // Excel export logic will be handled in the component
+        return
+      }
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Error exporting suppliers",
+      })
+    }
   },
 }))

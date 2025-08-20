@@ -119,6 +119,10 @@ export function ConciliationDialog({
   const [allocationMode, setAllocationMode] = useState<"document" | "item">("document")
   const [error, setError] = useState<string | null>(null)
   const [templateSearchOpen, setTemplateSearchOpen] = useState(false)
+  
+  // Estado local para los montos de conciliación (sincronizado con el prop)
+  const [localConciliationAmounts, setLocalConciliationAmounts] = useState<Record<string, number>>(documentConciliationAmounts)
+  
   // Estado para el asiento contable
   const [entryForm, setEntryForm] = useState<CreateAccountingEntryDto>({
     companyId: "",
@@ -136,6 +140,11 @@ export function ConciliationDialog({
       fetchCostCenters(user.companyId, { page: 1, limit: 1000 })
     }
   }, [open, user?.companyId])
+
+  // Sincronizar el estado local con el prop cuando cambie
+  useEffect(() => {
+    setLocalConciliationAmounts(documentConciliationAmounts)
+  }, [documentConciliationAmounts])
 
   // Sincronizar metadatos del asiento con la transacción
   useEffect(() => {
@@ -155,7 +164,7 @@ export function ConciliationDialog({
   useEffect(() => {
     if (selectedDocuments.length > 0) {
       const allocations = selectedDocuments.map((doc) => {
-        const docAmount = documentConciliationAmounts[doc.id] || 0
+        const docAmount = localConciliationAmounts[doc.id] || 0
 
         // Create items based on real document lines
         const realItems =
@@ -228,12 +237,12 @@ export function ConciliationDialog({
       setDocumentAllocations(allocations)
       debugLog("Initialized document allocations with real document lines", allocations)
     }
-  }, [selectedDocuments, conciliationType, documentConciliationAmounts])
+  }, [selectedDocuments, conciliationType, localConciliationAmounts])
 
   // Calculate totals - CORREGIDO: Los gastos reducen la diferencia
   const totals = useMemo(() => {
     const documentsTotal = selectedDocuments.reduce((sum, doc) => {
-      return sum + (documentConciliationAmounts[doc.id] || 0)
+      return sum + (localConciliationAmounts[doc.id] || 0)
     }, 0)
 
     const transactionAmount = selectedTransaction ? Math.abs(Number.parseFloat(selectedTransaction.amount)) : 0
@@ -255,7 +264,7 @@ export function ConciliationDialog({
 
     debugLog("Calculated totals", result)
     return result
-  }, [selectedDocuments, selectedTransaction, expenses, documentConciliationAmounts])
+  }, [selectedDocuments, selectedTransaction, expenses, localConciliationAmounts])
 
   // Totales del asiento contable
   const entryTotals = useMemo(() => {
@@ -469,7 +478,7 @@ export function ConciliationDialog({
 
     // Generar payloads para items de conciliación
     const conciliationItems = selectedDocuments.map((document) => {
-      const conciliationAmount = documentConciliationAmounts[document.id] || 0
+      const conciliationAmount = localConciliationAmounts[document.id] || 0
       const documentTotal = Number.parseFloat(document.total)
 
       return {
@@ -503,7 +512,7 @@ export function ConciliationDialog({
     user,
     selectedTransaction,
     allocationMode,
-    documentConciliationAmounts,
+    localConciliationAmounts,
   ])
 
   const handleAccountChange = (documentId: string, accountId: string) => {
@@ -898,7 +907,7 @@ export function ConciliationDialog({
       const createdItems: ConciliationItem[] = []
 
       for (const document of selectedDocuments) {
-        const conciliationAmount = documentConciliationAmounts[document.id] || 0
+        const conciliationAmount = localConciliationAmounts[document.id] || 0
         const documentTotal = Number.parseFloat(document.total)
 
         const itemPayload: CreateConciliationItemDto = {
@@ -1206,49 +1215,70 @@ export function ConciliationDialog({
               <CardHeader className="py-2 px-3">
                 <CardTitle className="text-sm">Información de la Transacción</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-xs p-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">RUC</Label>
-                    <div className="font-medium">{selectedTransaction.supplier?.businessName || "No disponible"}</div>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Mov. Bancario</Label>
-                    <div className="font-medium">{selectedTransaction.operationNumber}</div>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Fecha Conciliación</Label>
-                    <div className="font-medium">
-                      {new Date(selectedTransaction.transactionDate).toLocaleDateString("es-PE")}
+              <CardContent className="p-3">
+                <ScrollArea className="h-32">
+                  <div className="space-y-2 text-xs pr-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Proveedor</Label>
+                        <div className="font-medium text-xs truncate">
+                          {selectedDocuments.length > 0 
+                            ? selectedDocuments[0].supplier?.businessName || 'N/A'
+                            : "No disponible"
+                          }
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Mov. Bancario</Label>
+                        <div className="font-medium text-xs">{selectedTransaction.operationNumber}</div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Fecha</Label>
+                        <div className="font-medium text-xs">
+                          {new Date(selectedTransaction.transactionDate).toLocaleDateString("es-PE")}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Docs.</Label>
+                        <div className="font-medium text-xs">{selectedDocuments.length}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Banco</Label>
+                      <div className="font-medium text-xs truncate">
+                        {selectedTransaction.bankAccount?.bank?.name || "No disponible"}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Descripción</Label>
+                      <div className="font-medium text-xs truncate max-h-16 overflow-hidden">
+                        {selectedTransaction.description}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Docs. Conciliados</Label>
-                    <div className="font-medium">{selectedDocuments.length}</div>
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Banco</Label>
-                  <div className="font-medium text-xs">
-                    {selectedTransaction.bankAccount?.bank?.name || "No disponible"}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Descripción</Label>
-                  <div className="font-medium text-xs">{selectedTransaction.description}</div>
-                </div>
+                </ScrollArea>
               </CardContent>
             </Card>
 
             <Card className="h-fit">
               <CardHeader className="py-2 px-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  Resumen Financiero
-                  {totals.isBalanced ? (
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-orange-600" />
-                  )}
+                <CardTitle className="text-sm flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    Resumen Financiero
+                    {totals.isBalanced ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-orange-600" />
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setActiveTab("documents")}
+                    className="h-6 px-2 text-xs"
+                  >
+                    Editar
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs p-3">
@@ -1360,7 +1390,8 @@ export function ConciliationDialog({
 
           {/* Right Column - Tabs */}
           <div className="col-span-9">
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="h-full flex flex-col">
+            <ScrollArea className="h-full">
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="h-full flex flex-col">
               <TabsList className="grid w-full grid-cols-5 h-8">
                 <TabsTrigger value="documents" className="text-xs">
                   {conciliationType === "DOCUMENTS" ? "Documentos" : "Detracciones"}
@@ -1385,7 +1416,7 @@ export function ConciliationDialog({
                   <ScrollArea className="h-full">
                     <div className="p-4 space-y-2">
                       {selectedDocuments.map((document) => {
-                        const conciliationAmount = documentConciliationAmounts[document.id] || 0
+                        const conciliationAmount = localConciliationAmounts[document.id] || 0
                         const pendingAmount =
                           conciliationType === "DOCUMENTS"
                             ? Number.parseFloat(document.pendingAmount || "0")
@@ -2207,6 +2238,7 @@ export function ConciliationDialog({
                 </ScrollArea>
               </TabsContent>
             </Tabs>
+            </ScrollArea>
           </div>
         </div>
       </DialogContent>

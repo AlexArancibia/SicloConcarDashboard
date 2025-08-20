@@ -291,42 +291,50 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
 
   const DocumentsTable = () => (
     <div className="overflow-x-auto">
-      <Table>
+      <Table className="min-w-full">
         <TableHeader>
           <TableRow className="border-slate-200 dark:border-slate-700">
-            <TableHead className="text-slate-700 dark:text-slate-300">Tipo</TableHead>
-            <TableHead className="text-slate-700 dark:text-slate-300">Número</TableHead>
-            <TableHead className="text-slate-700 dark:text-slate-300">Proveedor</TableHead>
-            <TableHead className="text-right text-slate-700 dark:text-slate-300">Monto Doc.</TableHead>
-            <TableHead className="text-right text-slate-700 dark:text-slate-300">Monto Conc.</TableHead>
-            <TableHead className="text-right text-slate-700 dark:text-slate-300">Diferencia</TableHead>
-            <TableHead className="text-center text-slate-700 dark:text-slate-300">Estado</TableHead>
-            <TableHead className="text-center text-slate-700 dark:text-slate-300">Acciones</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300 w-24">Tipo</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300 w-32">Número</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300 w-28">Fecha Doc.</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300 w-64">Descripción</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300 w-48">Proveedor</TableHead>
+            <TableHead className="text-right text-slate-700 dark:text-slate-300 w-32">Monto Doc.</TableHead>
+            <TableHead className="text-right text-slate-700 dark:text-slate-300 w-32">Monto Conc.</TableHead>
+            <TableHead className="text-right text-slate-700 dark:text-slate-300 w-32">Diferencia</TableHead>
+            <TableHead className="text-center text-slate-700 dark:text-slate-300 w-24">Estado</TableHead>
+            <TableHead className="text-center text-slate-700 dark:text-slate-300 w-20">Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {conciliation?.items?.map((item) => (
             <TableRow key={item.id} className="border-slate-200 dark:border-slate-700">
-              <TableCell>{getDocumentTypeBadge(item.document?.documentType as DocumentType)}</TableCell>
-              <TableCell className="font-mono text-slate-800 dark:text-slate-200">
+              <TableCell className="w-24">{getDocumentTypeBadge(item.document?.documentType as DocumentType)}</TableCell>
+              <TableCell className="font-mono text-slate-800 dark:text-slate-200 w-32">
                 {item.document?.fullNumber}
               </TableCell>
-              <TableCell className="text-slate-700 dark:text-slate-300">
+              <TableCell className="text-slate-700 dark:text-slate-300 w-28">
+                {formatShortDate(item.document?.issueDate)}
+              </TableCell>
+              <TableCell className="text-slate-700 dark:text-slate-300 w-64 truncate" title={item.document?.lines?.[0]?.description || ""}>
+                {item.document?.lines?.[0]?.description || "Sin descripción"}
+              </TableCell>
+              <TableCell className="text-slate-700 dark:text-slate-300 w-48">
                 {item.document?.supplier?.businessName || "N/A"}
               </TableCell>
-              <TableCell className="text-right text-slate-700 dark:text-slate-300">
+              <TableCell className="text-right text-slate-700 dark:text-slate-300 w-32">
                 {formatCurrency(item.documentAmount, item.document?.currency)}
               </TableCell>
-              <TableCell className="text-right font-semibold text-slate-800 dark:text-slate-200">
+              <TableCell className="text-right font-semibold text-slate-800 dark:text-slate-200 w-32">
                 {formatCurrency(item.conciliatedAmount, item.document?.currency)}
               </TableCell>
-              <TableCell className="text-right text-slate-700 dark:text-slate-300">
+              <TableCell className="text-right text-slate-700 dark:text-slate-300 w-32">
                 {formatCurrency(item.difference, item.document?.currency)}
               </TableCell>
-              <TableCell className="text-center">
+              <TableCell className="text-center w-24">
                 {getDocumentStatusBadge(item.status as DocumentStatus)}
               </TableCell>
-              <TableCell className="text-center">
+              <TableCell className="text-center w-20">
                 <Link href={`/documents/${item.document?.id}`}>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100" title="Ver Documento">
                     <Eye className="h-4 w-4" />
@@ -342,32 +350,32 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
 
   const DetractionsTable = () => (
     <div className="overflow-x-auto">
-      <Table>
+      <Table className="min-w-full">
         <TableHeader>
           <TableRow className="border-slate-200 dark:border-slate-700">
-            <TableHead className="text-slate-700 dark:text-slate-300">Documento</TableHead>
-            <TableHead className="text-slate-700 dark:text-slate-300">Proveedor</TableHead>
-            <TableHead className="text-right text-slate-700 dark:text-slate-300">Monto Detracción</TableHead>
-            <TableHead className="text-right text-slate-700 dark:text-slate-300">Monto Documento</TableHead>
-            <TableHead className="text-center text-slate-700 dark:text-slate-300">Acciones</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300 w-48">Documento</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300 w-64">Proveedor</TableHead>
+            <TableHead className="text-right text-slate-700 dark:text-slate-300 w-36">Monto Detracción</TableHead>
+            <TableHead className="text-right text-slate-700 dark:text-slate-300 w-36">Monto Documento</TableHead>
+            <TableHead className="text-center text-slate-700 dark:text-slate-300 w-24">Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {conciliation?.documentDetractions?.map((detraction) => (
             <TableRow key={detraction.id} className="border-slate-200 dark:border-slate-700">
-              <TableCell className="font-mono text-slate-800 dark:text-slate-200">
+              <TableCell className="font-mono text-slate-800 dark:text-slate-200 w-48">
                 {detraction.document.fullNumber}
               </TableCell>
-              <TableCell className="text-slate-700 dark:text-slate-300">
+              <TableCell className="text-slate-700 dark:text-slate-300 w-64">
                 {detraction.document.supplier.businessName}
               </TableCell>
-              <TableCell className="text-right text-slate-700 dark:text-slate-300">
+              <TableCell className="text-right text-slate-700 dark:text-slate-300 w-36">
                 {formatCurrency(detraction.amount)}
               </TableCell>
-              <TableCell className="text-right font-semibold text-slate-800 dark:text-slate-200">
+              <TableCell className="text-right font-semibold text-slate-800 dark:text-slate-200 w-36">
                 {formatCurrency(detraction.document.total)}
               </TableCell>
-              <TableCell className="text-center">
+              <TableCell className="text-center w-24">
                 <Link href={`/documents/${detraction.document.id}`}>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100" title="Ver Documento">
                     <Eye className="h-4 w-4" />
@@ -383,32 +391,32 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
 
   const ExpensesTable = () => (
     <div className="overflow-x-auto">
-      <Table>
+      <Table className="min-w-full">
         <TableHeader>
           <TableRow className="border-slate-200 dark:border-slate-700">
-            <TableHead className="text-slate-700 dark:text-slate-300">Descripción</TableHead>
-            <TableHead className="text-right text-slate-700 dark:text-slate-300">Monto</TableHead>
-            <TableHead className="text-slate-700 dark:text-slate-300">Tipo</TableHead>
-            <TableHead className="text-slate-700 dark:text-slate-300">Cuenta Contable</TableHead>
-            <TableHead className="text-slate-700 dark:text-slate-300">Fecha</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300 w-64">Descripción</TableHead>
+            <TableHead className="text-right text-slate-700 dark:text-slate-300 w-32">Monto</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300 w-32">Tipo</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300 w-48">Cuenta Contable</TableHead>
+            <TableHead className="text-slate-700 dark:text-slate-300 w-28">Fecha</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {conciliation?.expenses?.map((expense) => (
             <TableRow key={expense.id} className="border-slate-200 dark:border-slate-700">
-              <TableCell className="text-slate-700 dark:text-slate-300">
+              <TableCell className="text-slate-700 dark:text-slate-300 w-64">
                 {expense.description || "N/A"}
               </TableCell>
-              <TableCell className="text-right text-slate-700 dark:text-slate-300">
+              <TableCell className="text-right text-slate-700 dark:text-slate-300 w-32">
                 {formatCurrency(expense.amount)}
               </TableCell>
-              <TableCell className="text-slate-700 dark:text-slate-300">
+              <TableCell className="text-slate-700 dark:text-slate-300 w-32">
                 {expense.expenseType}
               </TableCell>
-              <TableCell className="text-slate-700 dark:text-slate-300">
+              <TableCell className="text-slate-700 dark:text-slate-300 w-48">
                 {expense.account?.accountName || "N/A"}
               </TableCell>
-              <TableCell className="text-slate-700 dark:text-slate-300">
+              <TableCell className="text-slate-700 dark:text-slate-300 w-28">
                 {formatShortDate(expense.expenseDate)}
               </TableCell>
             </TableRow>
@@ -673,29 +681,59 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
     </div>
   )
 
-  const FinancialDetails = () => (
-    <div className="space-y-3">
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-slate-600 dark:text-slate-400">Tolerancia</span>
-        <span className="font-medium text-slate-900 dark:text-slate-100">
-          {formatCurrency(conciliation?.toleranceAmount)}
-        </span>
+  const FinancialDetails = () => {
+    // Debug: mostrar valores para entender qué está pasando
+    console.log("Financial Details Debug:", {
+      toleranceAmount: conciliation?.toleranceAmount,
+      additionalExpensesTotal: conciliation?.additionalExpensesTotal,
+      totalAmount: conciliation?.totalAmount,
+      expenses: conciliation?.expenses,
+      expensesCount: conciliation?.expenses?.length
+    });
+
+    // Calcular gastos adicionales reales SIEMPRE desde el array de expenses
+    const actualExpensesTotal = conciliation?.expenses?.reduce((sum, expense) => {
+      const amount = typeof expense.amount === 'string' ? Number.parseFloat(expense.amount) : (expense.amount || 0);
+      console.log("Expense amount:", expense.amount, "Parsed:", amount, "Current sum:", sum);
+      return sum + amount;
+    }, 0) || 0;
+
+    // Calcular tolerancia real si no está disponible (usar diferencia como referencia)
+    const actualTolerance = conciliation?.toleranceAmount || 
+      (conciliation?.difference ? Math.abs(Number.parseFloat(conciliation.difference)) : 0);
+
+    console.log("Calculated expenses total:", actualExpensesTotal);
+
+    return (
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-slate-600 dark:text-slate-400">Tolerancia</span>
+          <span className="font-medium text-slate-900 dark:text-slate-100">
+            {formatCurrency(actualTolerance)}
+          </span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-slate-600 dark:text-slate-400">Gastos Adicionales</span>
+          <span className="font-medium text-slate-900 dark:text-slate-100">
+            {formatCurrency(actualExpensesTotal)}
+          </span>
+        </div>
+        <Separator className="dark:bg-slate-700"/>
+        <div className="flex justify-between items-center">
+          <span className="font-medium text-slate-900 dark:text-slate-100">Total Conciliado</span>
+          <span className="font-bold text-lg text-slate-900 dark:text-slate-100">
+            {formatCurrency(conciliation?.totalAmount || 0)}
+          </span>
+        </div>
+        {/* Información adicional para debug */}
+        {conciliation?.expenses && conciliation.expenses.length > 0 && (
+          <div className="text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700">
+            Gastos registrados: {conciliation.expenses.length} items • Total calculado: {formatCurrency(actualExpensesTotal)}
+          </div>
+        )}
       </div>
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-slate-600 dark:text-slate-400">Gastos Adicionales</span>
-        <span className="font-medium text-slate-900 dark:text-slate-100">
-          {formatCurrency(conciliation?.additionalExpensesTotal)}
-        </span>
-      </div>
-      <Separator className="dark:bg-slate-700"/>
-      <div className="flex justify-between items-center">
-        <span className="font-medium text-slate-900 dark:text-slate-100">Total Conciliado</span>
-        <span className="font-bold text-lg text-slate-900 dark:text-slate-100">
-          {formatCurrency(conciliation?.totalAmount || 0)}
-        </span>
-      </div>
-    </div>
-  )
+    );
+  }
 
   const GeneralInfo = () => (
     <div className="space-y-4">

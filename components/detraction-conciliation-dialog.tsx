@@ -231,10 +231,15 @@ export function DetractionConciliationDialog({
                   <CardTitle className="text-sm">Información de la Transacción</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-xs p-3">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <Label className="text-xs text-muted-foreground">RUC</Label>
-                      <div className="font-medium">{selectedTransaction.supplier?.businessName || "No disponible"}</div>
+                      <Label className="text-xs text-muted-foreground">Proveedor</Label>
+                      <div className="font-medium">
+                        {selectedDocuments.length > 0 
+                          ? `${selectedDocuments[0].supplier?.businessName || 'N/A'} (${selectedDocuments[0].supplier?.documentNumber || 'N/A'})`
+                          : "No disponible"
+                        }
+                      </div>
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">Mov. Bancario</Label>

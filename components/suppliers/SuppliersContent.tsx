@@ -5,12 +5,18 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Building2, Eye, Edit, Plus, Phone, Mail, FileText, ChevronLeft, ChevronRight } from "lucide-react"
+import { Building2, Eye, Edit, Plus, Phone, Mail, FileText, ChevronLeft, ChevronRight, Download, ChevronDown } from "lucide-react"
 import { FiltersBar } from "@/components/ui/filters-bar"
 import { useAuthStore } from "@/stores/authStore"
 import type { SupplierType, SupplierStatus } from "@/types/suppliers"
 import { useSuppliersStore } from "@/stores/suppliers-store"
 import { TableSkeleton } from "../ui/table-skeleton"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const SupplierTypeLabels: Record<SupplierType, string> = {
   INDIVIDUAL: "Persona Natural",
@@ -39,6 +45,7 @@ export default function SuppliersContent() {
     status: "",
     supplierType: "",
   })
+  const [exporting, setExporting] = useState(false)
 
   const {
     suppliers,
@@ -201,6 +208,175 @@ export default function SuppliersContent() {
     },
   ]
 
+  const exportSuppliersToCSV = () => {
+    if (!suppliers.length) return
+
+    setExporting(true)
+    
+    try {
+      // Prepare CSV headers - only include fields that exist in the database
+      const headers = [
+        "Tipo Documento",
+        "Número Documento", 
+        "Razón Social",
+        "Nombre Comercial",
+        "Tipo Proveedor",
+        "Email",
+        "Teléfono",
+        "Dirección",
+        "Distrito",
+        "Provincia",
+        "Departamento",
+        "País",
+        "Estado",
+        "Límite de Crédito",
+        "Términos de Pago",
+        "Categoría Tributaria",
+        "Agente de Retención",
+        "Tasa de Retención"
+      ]
+
+      // Prepare CSV data - only include fields that exist in the database
+      const csvData = suppliers.map(supplier => [
+        getDocumentTypeName(supplier.documentType),
+        supplier.documentNumber,
+        supplier.businessName,
+        supplier.tradeName || "",
+        getSupplierTypeName(supplier.supplierType),
+        supplier.email || "",
+        supplier.phone || "",
+        supplier.address || "",
+        supplier.district || "",
+        supplier.province || "",
+        supplier.department || "",
+        supplier.country || "PE",
+        SupplierStatusLabels[supplier.status] || "Desconocido",
+        supplier.creditLimit ? supplier.creditLimit.toString() : "",
+        supplier.paymentTerms ? supplier.paymentTerms.toString() : "",
+        supplier.taxCategory || "",
+        supplier.isRetentionAgent ? "Sí" : "No",
+        supplier.retentionRate ? supplier.retentionRate.toString() : ""
+      ])
+
+      // Combine headers and data
+      const csvContent = [headers, ...csvData]
+        .map(row => row.map(cell => `"${cell}"`).join(','))
+        .join('\n')
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `proveedores_${company?.name || 'empresa'}_${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error exporting suppliers:', error)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const exportSuppliersToExcel = async () => {
+    if (!suppliers.length) return
+
+    setExporting(true)
+    
+    try {
+      // Dynamic import of xlsx library
+      const xlsx = await import('xlsx')
+      
+      // Prepare Excel data - only include fields that exist in the database
+      const excelData = suppliers.map(supplier => ({
+        'Tipo Documento': getDocumentTypeName(supplier.documentType),
+        'Número Documento': supplier.documentNumber,
+        'Razón Social': supplier.businessName,
+        'Nombre Comercial': supplier.tradeName || "",
+        'Tipo Proveedor': getSupplierTypeName(supplier.supplierType),
+        'Email': supplier.email || "",
+        'Teléfono': supplier.phone || "",
+        'Dirección': supplier.address || "",
+        'Distrito': supplier.district || "",
+        'Provincia': supplier.province || "",
+        'Departamento': supplier.department || "",
+        'País': supplier.country || "PE",
+        'Estado': SupplierStatusLabels[supplier.status] || "Desconocido",
+        'Límite de Crédito': supplier.creditLimit || "",
+        'Términos de Pago': supplier.paymentTerms || "",
+        'Categoría Tributaria': supplier.taxCategory || "",
+        'Agente de Retención': supplier.isRetentionAgent ? "Sí" : "No",
+        'Tasa de Retención': supplier.retentionRate || ""
+      }))
+
+      // Create workbook and worksheet
+      const wb = xlsx.utils.book_new()
+      const ws = xlsx.utils.json_to_sheet(excelData)
+
+      // Auto-size columns
+      const colWidths = Object.keys(excelData[0] || {}).map(key => ({
+        wch: Math.max(key.length, ...excelData.map(row => String(row[key as keyof typeof row]).length))
+      }))
+      ws['!cols'] = colWidths
+
+      // Add worksheet to workbook
+      xlsx.utils.book_append_sheet(wb, ws, "Proveedores")
+
+      // Generate Excel file
+      const excelBuffer = xlsx.write(wb, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      
+      // Download file
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `proveedores_${company?.name || 'empresa'}_${new Date().toISOString().split('T')[0]}.xlsx`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error exporting suppliers to Excel:', error)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleExport = (format: 'csv' | 'excel') => {
+    if (format === 'csv') {
+      exportSuppliersToCSV()
+    } else if (format === 'excel') {
+      exportSuppliersToExcel()
+    }
+  }
+
+  const handleExportWithFilters = async (format: 'csv' | 'excel') => {
+    setExporting(true)
+    
+    try {
+      // Check if any filters are applied
+      const hasActiveFilters = Object.values(filters).some(value => value && value !== 'all')
+      
+      if (hasActiveFilters && company?.id) {
+        // Use backend export with filters
+        await useSuppliersStore.getState().exportSuppliers(company.id, format, filters)
+      } else {
+        // Use frontend export
+        handleExport(format)
+      }
+    } catch (error) {
+      console.error('Error exporting with filters:', error)
+      // Fall back to frontend export
+      handleExport(format)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="space-y-6">
@@ -229,10 +405,38 @@ export default function SuppliersContent() {
           <p className="text-gray-600 dark:text-gray-400">Administre la información de sus proveedores y emisores</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <FileText className="w-4 h-4 mr-2" />
-            Exportar
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                disabled={exporting || suppliers.length === 0}
+              >
+                {exporting ? (
+                  <>
+                    <Download className="w-4 h-4 mr-2 animate-pulse" />
+                    Exportando...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Exportar
+                  </>
+                )}
+                <ChevronDown className="w-4 h-4 ml-2" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExportWithFilters('csv')}>
+                <FileText className="w-4 h-4 mr-2" />
+                Exportar CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExportWithFilters('excel')}>
+                <FileText className="w-4 h-4 mr-2" />
+                Exportar Excel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" onClick={() => router.push("/suppliers/new")}>
             <Plus className="w-4 h-4 mr-2" />
             Nuevo Proveedor

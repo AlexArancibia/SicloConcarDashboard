@@ -36,6 +36,7 @@ import type { Document, DocumentStatus, DocumentType  } from "@/types/documents"
 import type { ConciliationType } from "@/types/conciliations"
 import { useToast } from "@/hooks/use-toast"
 import { DetractionConciliationDialog } from "@/components/detraction-conciliation-dialog"
+import { TransactionDetailsDialog } from "@/components/transaction-details-dialog"
 import { Transaction, TransactionType } from "@/types/transactions"
 
 const DEBUG_MODE = true
@@ -76,6 +77,8 @@ export default function ConciliationsPage() {
   // State
   const [showConciliationDialog, setShowConciliationDialog] = useState(false)
   const [showDetractionDialog, setShowDetractionDialog] = useState(false)
+  const [showTransactionDetailsDialog, setShowTransactionDetailsDialog] = useState(false)
+  const [selectedTransactionForDetails, setSelectedTransactionForDetails] = useState<Transaction | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(25)
   const [transactionPage, setTransactionPage] = useState(1)
@@ -509,7 +512,10 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
 
   }
 
-  
+  const handleViewTransactionDetails = (transaction: Transaction) => {
+    setSelectedTransactionForDetails(transaction)
+    setShowTransactionDetailsDialog(true)
+  }
 
   const handleDocumentSelect = async (document: Document) => {
     const isSelected = selectedDocuments.some((doc) => doc.id === document.id)
@@ -521,6 +527,9 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
         delete newAmounts[document.id]
         return newAmounts
       })
+      
+      // Recalcular automáticamente los montos de los documentos restantes
+      setTimeout(() => recalculateRemainingAmounts(), 0)
     } else {
       if (selectedDocuments.length > 0) {
         const firstSupplier = selectedDocuments[0].supplierId
@@ -532,11 +541,27 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
 
       setSelectedDocuments((prev) => [...prev, document])
 
-      const defaultAmount = Number.parseFloat(document.pendingAmount || "0")
-      setDocumentConciliationAmounts((prev) => ({
-        ...prev,
-        [document.id]: defaultAmount,
-      }))
+      // Calcular el monto a conciliar basado en la transacción y retención
+      const transactionAmount = selectedTransaction ? Math.abs(Number.parseFloat(selectedTransaction.amount)) : 0
+      const currentTotal = getSelectedTotal()
+      const availableAmount = transactionAmount - currentTotal
+      
+      // Si hay monto disponible, usar el monto neto del documento (sin retención)
+      if (availableAmount > 0) {
+        const netPayableAmount = Number.parseFloat(document.netPayableAmount || document.pendingAmount || "0")
+        const amountToUse = Math.min(netPayableAmount, availableAmount)
+        
+        setDocumentConciliationAmounts((prev) => ({
+          ...prev,
+          [document.id]: amountToUse,
+        }))
+      } else {
+        // Si no hay monto disponible, usar 0
+        setDocumentConciliationAmounts((prev) => ({
+          ...prev,
+          [document.id]: 0,
+        }))
+      }
     }
 
     debugLog("Document selection changed", { documentId: document.id, isSelected: !isSelected })
@@ -552,14 +577,33 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
         delete newAmounts[document.id]
         return newAmounts
       })
+      
+      // Recalcular automáticamente los montos de las detracciones restantes
+      setTimeout(() => recalculateRemainingDetractionAmounts(), 0)
     } else {
       setSelectedDocuments((prev) => [...prev, document])
 
-      const defaultAmount = Number.parseFloat(document.detraction?.amount || "0")
-      setDocumentConciliationAmounts((prev) => ({
-        ...prev,
-        [document.id]: defaultAmount,
-      }))
+      // Calcular el monto a conciliar basado en la transacción
+      const transactionAmount = selectedTransaction ? Math.abs(Number.parseFloat(selectedTransaction.amount)) : 0
+      const currentTotal = getSelectedTotal()
+      const availableAmount = transactionAmount - currentTotal
+      
+      // Si hay monto disponible, usar el monto de detracción
+      if (availableAmount > 0) {
+        const detractionAmount = Number.parseFloat(document.detraction?.amount || "0")
+        const amountToUse = Math.min(detractionAmount, availableAmount)
+        
+        setDocumentConciliationAmounts((prev) => ({
+          ...prev,
+          [document.id]: amountToUse,
+        }))
+      } else {
+        // Si no hay monto disponible, usar 0
+        setDocumentConciliationAmounts((prev) => ({
+          ...prev,
+          [document.id]: 0,
+        }))
+      }
     }
 
     debugLog("Detraction selection changed", { documentId: document.id, isSelected: !isSelected })
@@ -592,9 +636,9 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
         for (const doc of selectedDocuments) {
           const itemData = {
             documentId: doc.id,
-            documentAmount: Number.parseFloat(doc.pendingAmount || "0"),
+            documentAmount: Number.parseFloat(doc.netPayableAmount || doc.pendingAmount || "0"),
             conciliatedAmount: documentConciliationAmounts[doc.id] || 0,
-            difference: Number.parseFloat(doc.pendingAmount || "0") - (documentConciliationAmounts[doc.id] || 0),
+            difference: Number.parseFloat(doc.netPayableAmount || doc.pendingAmount || "0") - (documentConciliationAmounts[doc.id] || 0),
             status: "CONCILIATED" as const,
           }
 
@@ -727,10 +771,76 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
     })
   }
 
+  const formatDateTime = (date: Date | string) => {
+    return new Date(date).toLocaleString("es-PE", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
   const getSelectedTotal = () => {
     return selectedDocuments.reduce((sum, doc) => {
       return sum + (documentConciliationAmounts[doc.id] || 0)
     }, 0)
+  }
+
+  // Función simple para obtener el monto de la transacción
+  const getMaxAvailableAmount = () => {
+    if (!selectedTransaction) return 0
+    return Math.abs(Number.parseFloat(selectedTransaction.amount))
+  }
+
+  // Función para recalcular automáticamente los montos de los documentos restantes
+  const recalculateRemainingAmounts = () => {
+    if (!selectedTransaction || selectedDocuments.length === 0) return
+    
+    const transactionAmount = Math.abs(Number.parseFloat(selectedTransaction.amount))
+    
+    // Distribuir proporcionalmente el monto disponible entre los documentos restantes
+    const totalOriginal = selectedDocuments.reduce((sum, doc) => {
+      const originalAmount = Number.parseFloat(doc.netPayableAmount || doc.pendingAmount || "0")
+      return sum + originalAmount
+    }, 0)
+    
+    if (totalOriginal > 0) {
+      const adjustmentRatio = transactionAmount / totalOriginal
+      
+      const newAmounts: Record<string, number> = {}
+      selectedDocuments.forEach(doc => {
+        const originalAmount = Number.parseFloat(doc.netPayableAmount || doc.pendingAmount || "0")
+        newAmounts[doc.id] = Number.parseFloat((originalAmount * adjustmentRatio).toFixed(2))
+      })
+      
+      setDocumentConciliationAmounts(newAmounts)
+    }
+  }
+
+  // Función para recalcular automáticamente los montos de las detracciones restantes
+  const recalculateRemainingDetractionAmounts = () => {
+    if (!selectedTransaction || selectedDocuments.length === 0) return
+    
+    const transactionAmount = Math.abs(Number.parseFloat(selectedTransaction.amount))
+    
+    // Distribuir proporcionalmente el monto disponible entre las detracciones restantes
+    const totalOriginal = selectedDocuments.reduce((sum, doc) => {
+      const originalAmount = Number.parseFloat(doc.detraction?.amount || "0")
+      return sum + originalAmount
+    }, 0)
+    
+    if (totalOriginal > 0) {
+      const adjustmentRatio = transactionAmount / totalOriginal
+      
+      const newAmounts: Record<string, number> = {}
+      selectedDocuments.forEach(doc => {
+        const originalAmount = Number.parseFloat(doc.detraction?.amount || "0")
+        newAmounts[doc.id] = Number.parseFloat((originalAmount * adjustmentRatio).toFixed(2))
+      })
+      
+      setDocumentConciliationAmounts(newAmounts)
+    }
   }
 
   const getTransactionAmount = () => {
@@ -974,6 +1084,27 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
 
   const { toast } = useToast()
 
+  const handleDeleteConciliation = async (conciliationId: string) => {
+    if (confirm(`¿Está seguro de que desea eliminar esta conciliación? Esta acción no se puede deshacer.`)) {
+      try {
+        await deleteConciliation(conciliationId);
+        toast({ title: "Éxito", description: "Conciliación eliminada correctamente." });
+        
+        // Refresh data
+        if (user?.companyId) {
+          await fetchConciliations(user.companyId, { page: currentPage, limit: itemsPerPage });
+        }
+      } catch (error) {
+        console.error("Error eliminando conciliación:", error);
+        toast({ 
+          title: "Error", 
+          description: "No se pudo eliminar la conciliación. Revise la consola para más detalles.", 
+          variant: "destructive" 
+        });
+      }
+    }
+  };
+
   const handleDeleteSelectedConciliations = async () => {
     if (selectedConciliationIds.length === 0) {
       toast({ title: "Nada seleccionado", description: "Por favor, seleccione al menos una conciliación para eliminar."});
@@ -1096,12 +1227,13 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                         <TableHead>Fecha</TableHead>
                         <TableHead className="text-right">Monto</TableHead>
                         <TableHead className="text-center">Tipo</TableHead>
+                        <TableHead className="text-center w-20">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {availableDocTransactions.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="h-24 text-center">
+                          <TableCell colSpan={6} className="h-24 text-center">
                             No se encontraron transacciones disponibles.
                           </TableCell>
                         </TableRow>
@@ -1155,6 +1287,20 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                             </TableCell>
                             <TableCell className="text-center">
                               {getTransactionTypeBadge(transaction.transactionType)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation() // Evitar que se seleccione la transacción
+                                  handleViewTransactionDetails(transaction)
+                                }}
+                                className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                                title="Ver Detalles de la Transacción"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))
@@ -1239,7 +1385,8 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                           availableDocuments.map((document) => {
                             const isSelected = selectedDocuments.some((doc) => doc.id === document.id)
                             const pendingAmount = Number.parseFloat(document.pendingAmount || "0")
-                            const conciliationAmount = documentConciliationAmounts[document.id] || pendingAmount
+                            const netPayableAmount = Number.parseFloat(document.netPayableAmount || "0")
+                            const conciliationAmount = documentConciliationAmounts[document.id] || netPayableAmount
                             const hasMatchingAccount = selectedTransaction?.transactionType === "TRANSFER_INBANK" && 
                               document.supplier?.supplierBankAccounts?.some(acc => {
                                 const accountMatch = selectedTransaction.description?.match(/\d{3}\s\d{8}\s\d/)
@@ -1297,7 +1444,7 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <div className="font-bold">
-                                    {formatCurrency(pendingAmount, document.currencyRef?.symbol || "S/")}
+                                    {formatCurrency(netPayableAmount, document.currencyRef?.symbol || "S/")}
                                   </div>
                                   <div className="text-xs text-muted-foreground">
                                     Total: {formatCurrency(document.total, document.currencyRef?.symbol || "S/")}
@@ -1413,7 +1560,7 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                       Conciliación{" "}
                       {getSelectedTotal() <
                       selectedDocuments.reduce((sum, doc) => {
-                        const totalAmount = Number.parseFloat(doc.pendingAmount || "0")
+                        const totalAmount = Number.parseFloat(doc.netPayableAmount || doc.pendingAmount || "0")
                         return sum + totalAmount
                       }, 0)
                         ? "parcial"
@@ -1820,7 +1967,7 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
             </CardHeader>
             <CardContent>
               {loading ? (
-                <TableSkeleton rows={5} columns={6} />
+                <TableSkeleton rows={5} columns={7} />
               ) : conciliations.length === 0 ? (
                 <div className="text-center py-8">
                   <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -1849,7 +1996,7 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                             />
                           </TableHead>
                           <TableHead>Referencia</TableHead>
-                          <TableHead>Fecha</TableHead>
+                          <TableHead>Fecha Conciliación</TableHead>
                           <TableHead>Banco</TableHead>
                           <TableHead className="text-center">Tipo</TableHead>
                           <TableHead className="text-center">Estado</TableHead>
@@ -1883,7 +2030,12 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                                 <div className="text-xs text-blue-600 dark:text-blue-400">Transacción vinculada</div>
                               )}
                             </TableCell>
-                            <TableCell>{formatDate(conciliation.createdAt)}</TableCell>
+                            <TableCell>
+                              <div className="font-medium">{formatDateTime(conciliation.updatedAt)}</div>
+                              <div className="text-xs text-muted-foreground">
+                                Última actualización
+                              </div>
+                            </TableCell>
                             <TableCell>
                               <div>{conciliation.bankAccount?.bank?.name || "Banco"}</div>
                               <div className="text-xs text-muted-foreground">
@@ -1910,21 +2062,51 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                               <div className="font-medium">
                                 {formatCurrency(conciliation.totalAmount, conciliation.bankAccount?.currencyRef?.symbol || "S/")}
                               </div>
-                              {Number.parseFloat(conciliation.difference) !== 0 && (
-                                <div className="text-xs text-orange-600 dark:text-orange-400">
-                                  Dif: {formatCurrency(conciliation.difference, conciliation.bankAccount?.currencyRef?.symbol || "S/")}
-                                </div>
-                              )}
+                              {/* CORREGIDO: Mostrar diferencia real considerando gastos */}
+                              {(() => {
+                                // Calcular el total real (documentos + gastos)
+                                const totalAmount = typeof conciliation.totalAmount === 'string' ? Number.parseFloat(conciliation.totalAmount) : (conciliation.totalAmount || 0);
+                                const expensesTotal = conciliation.expenses?.reduce((sum, expense) => {
+                                  const amount = typeof expense.amount === 'string' ? Number.parseFloat(expense.amount) : (expense.amount || 0);
+                                  return sum + amount;
+                                }, 0) || 0;
+                                const actualTotal = totalAmount + expensesTotal;
+                                
+                                // Calcular diferencia real
+                                const bankBalance = typeof conciliation.bankBalance === 'string' ? Number.parseFloat(conciliation.bankBalance) : (conciliation.bankBalance || 0);
+                                const actualDifference = Math.abs(bankBalance - actualTotal);
+                                
+                                // Solo mostrar si hay diferencia real
+                                if (actualDifference > 0.01) { // Tolerancia de 1 centavo
+                                  return (
+                                    <div className="text-xs text-orange-600 dark:text-orange-400">
+                                      Dif: {formatCurrency(actualDifference, conciliation.bankAccount?.currencyRef?.symbol || "S/")}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </TableCell>
                             <TableCell className="text-center">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => (window.location.href = `/conciliations/${conciliation.id}`)}
-                                title="Ver Detalle"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => (window.location.href = `/conciliations/${conciliation.id}`)}
+                                  title="Ver Detalle"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteConciliation(conciliation.id)}
+                                  title="Eliminar Conciliación"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1990,6 +2172,12 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
         selectedDocuments={selectedDocuments}
         documentConciliationAmounts={documentConciliationAmounts}
         bankAccounts={bankAccounts}
+      />
+
+      <TransactionDetailsDialog
+        open={showTransactionDetailsDialog}
+        onOpenChange={setShowTransactionDetailsDialog}
+        transaction={selectedTransactionForDetails}
       />
     </div>
   )
