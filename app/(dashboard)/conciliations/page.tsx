@@ -37,6 +37,7 @@ import type { ConciliationType } from "@/types/conciliations"
 import { useToast } from "@/hooks/use-toast"
 import { DetractionConciliationDialog } from "@/components/detraction-conciliation-dialog"
 import { TransactionDetailsDialog } from "@/components/transaction-details-dialog"
+import { DocumentDetailsDialog } from "@/components/document-details-dialog"
 import { Transaction, TransactionType } from "@/types/transactions"
 
 const DEBUG_MODE = true
@@ -79,6 +80,8 @@ export default function ConciliationsPage() {
   const [showDetractionDialog, setShowDetractionDialog] = useState(false)
   const [showTransactionDetailsDialog, setShowTransactionDetailsDialog] = useState(false)
   const [selectedTransactionForDetails, setSelectedTransactionForDetails] = useState<Transaction | null>(null)
+  const [showDocumentDetailsDialog, setShowDocumentDetailsDialog] = useState(false)
+  const [selectedDocumentForDetails, setSelectedDocumentForDetails] = useState<Document | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(25)
   const [transactionPage, setTransactionPage] = useState(1)
@@ -515,6 +518,11 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
   const handleViewTransactionDetails = (transaction: Transaction) => {
     setSelectedTransactionForDetails(transaction)
     setShowTransactionDetailsDialog(true)
+  }
+
+  const handleViewDocumentDetails = (document: Document) => {
+    setSelectedDocumentForDetails(document)
+    setShowDocumentDetailsDialog(true)
   }
 
   const handleDocumentSelect = async (document: Document) => {
@@ -1377,7 +1385,7 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                       <TableBody>
                         {availableDocuments.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={6} className="h-24 text-center">
+                            <TableCell colSpan={7} className="h-24 text-center">
                               No se encontraron documentos disponibles.
                             </TableCell>
                           </TableRow>
@@ -1481,6 +1489,19 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                                   ) : (
                                     <div className="text-xs text-muted-foreground">-</div>
                                   )}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleViewDocumentDetails(document)
+                                    }}
+                                    className="h-8 w-8 p-0"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
                                 </TableCell>
                               </TableRow>
                             )
@@ -1754,7 +1775,7 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                       <TableBody>
                         {availableDetractions.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={6} className="h-24 text-center">
+                            <TableCell colSpan={7} className="h-24 text-center">
                               No se encontraron detracciones disponibles.
                             </TableCell>
                           </TableRow>
@@ -1843,6 +1864,19 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                                   ) : (
                                     <div className="text-xs text-muted-foreground">-</div>
                                   )}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleViewDocumentDetails(document)
+                                    }}
+                                    className="h-8 w-8 p-0"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
                                 </TableCell>
                               </TableRow>
                             )
@@ -2178,6 +2212,12 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
         open={showTransactionDetailsDialog}
         onOpenChange={setShowTransactionDetailsDialog}
         transaction={selectedTransactionForDetails}
+      />
+
+      <DocumentDetailsDialog
+        open={showDocumentDetailsDialog}
+        onOpenChange={setShowDocumentDetailsDialog}
+        document={selectedDocumentForDetails}
       />
     </div>
   )

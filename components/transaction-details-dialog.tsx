@@ -170,7 +170,6 @@ export function TransactionDetailsDialog({ open, onOpenChange, transaction }: Tr
                     </p>
                     <p className="text-xs text-slate-600 dark:text-slate-400">
                       {transaction.bankAccount?.bank?.name} ({transaction.bankAccount?.bank?.code})
-                      {transaction.bankAccount?.bank?.country && ` • ${transaction.bankAccount.bank.country}`}
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                       {transaction.bankAccount?.accountNumber}
@@ -180,25 +179,11 @@ export function TransactionDetailsDialog({ open, onOpenChange, transaction }: Tr
                 
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <span className="text-slate-500 dark:text-slate-400">Tipo de Cuenta:</span>
-                    <p className="font-medium text-slate-900 dark:text-slate-100">
-                      {transaction.bankAccount?.accountType || "N/A"}
-                    </p>
-                  </div>
-                  <div>
                     <span className="text-slate-500 dark:text-slate-400">Moneda:</span>
                     <p className="font-medium text-slate-900 dark:text-slate-100">
                       {transaction.bankAccount?.currencyRef?.code || "N/A"}
                     </p>
                   </div>
-                  {transaction.bankAccount?.description && (
-                    <div className="col-span-2">
-                      <span className="text-slate-500 dark:text-slate-400">Descripción:</span>
-                      <p className="font-medium text-slate-900 dark:text-slate-100">
-                        {transaction.bankAccount.description}
-                      </p>
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>
