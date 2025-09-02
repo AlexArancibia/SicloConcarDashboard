@@ -678,8 +678,7 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
             retentionAmount = subtotal * retentionPercentage
           }
           
-          // El IGV es la retención
-          igv = retentionAmount
+ 
           
           // El total es la base menos la retención
           total = subtotal - retentionAmount
@@ -693,8 +692,20 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
 
         if (retentionAmount === 0) {
           subtotal = total
+        }
       }
 
+      // ❌ CORRECCIÓN ADICIONAL: Para todos los RECEIPT, el IGV debe ser 0
+      if (documentType === "RECEIPT") {
+        igv = 0
+        console.log("✅ Documento tipo RECEIPT: IGV establecido en 0")
+        console.log("📊 Montos corregidos para RHE:", {
+          subtotal,
+          igv,
+          retentionAmount,
+          total,
+          hasRetention
+        })
       }
 
       
@@ -858,7 +869,13 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
         } else if (isRHEWithRetention) {
           // Para líneas de retención en RHE
           taxableAmount = rheBaseAmount
-          igvAmount = retentionAmount
+          // ❌ CORREGIDO: Para RHE, el igvAmount debe ser 0, no la retención
+          igvAmount = 0
+        }
+
+        // ❌ CORRECCIÓN ADICIONAL: Para todos los RECEIPT, el igvAmount debe ser 0
+        if (documentType === "RECEIPT") {
+          igvAmount = 0
         }
 
         const lineData = {
@@ -929,7 +946,9 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
           taxSchemeId: lineData.taxSchemeId,
           unitPrice: lineData.unitPrice,
           igvAmount: lineData.igvAmount,
-          taxableAmount: lineData.taxableAmount
+          taxableAmount: lineData.taxableAmount,
+          documentType: documentType,
+          isRHE: documentType === "RECEIPT"
         })
 
         return lineData
@@ -1064,6 +1083,16 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
       lines.forEach((line, index) => {
         console.log(`  Línea ${index + 1}: ${line.taxSchemeId} | ${line.description}`)
       })
+
+      // ✅ VERIFICACIÓN FINAL: Confirmar que los campos IGV estén correctos para RHE
+      if (documentType === "RECEIPT" && lines) {
+        console.log("✅ VERIFICACIÓN FINAL RHE:")
+        console.log(`  - Documento IGV: ${documentPayload.igv}`)
+        console.log(`  - Líneas IGV: ${lines.map(l => l.igvAmount).join(", ")}`)
+        console.log(`  - Retención: ${documentPayload.retentionAmount}`)
+        console.log(`  - Base imponible: ${documentPayload.subtotal}`)
+        console.log(`  - Total neto: ${documentPayload.total}`)
+      }
 
       return documentPayload
     } catch (error) {

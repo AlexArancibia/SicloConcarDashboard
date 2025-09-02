@@ -16,6 +16,7 @@ import { useAccountingAccountsStore } from "@/stores/accounting-accounts-store"
 import { useCostCentersStore } from "@/stores/cost-centers-store"
 import { useAuthStore } from "@/stores/authStore"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
+import { ScrollableTable } from "@/components/ui/scrollable-table"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type {
@@ -30,7 +31,7 @@ import type {
 export default function AccountingPage() {
   const [activeTab, setActiveTab] = useState("accounts")
   const [currentPage, setCurrentPage] = useState(1)
-  const [searchTerm, setSearchTerm] = useState("")
+
 
   // Dialog states
   const [accountDialogOpen, setAccountDialogOpen] = useState(false)
@@ -98,13 +99,7 @@ export default function AccountingPage() {
     }
   }, [user?.companyId, activeTab, currentPage])
 
-  // Search effect
-  useEffect(() => {
-    if (user?.companyId) {
-      setCurrentPage(1)
-      handleSearch()
-    }
-  }, [searchTerm])
+
 
   // Error handling
   useEffect(() => {
@@ -149,23 +144,7 @@ export default function AccountingPage() {
     }
   }
 
-  const handleSearch = async () => {
-    if (!user?.companyId) return
 
-    try {
-      if (searchTerm.trim()) {
-        if (activeTab === "accounts") {
-          await searchAccountingAccounts(user.companyId, searchTerm, { page: currentPage, limit: 10 })
-        } else {
-          await searchCostCenters(user.companyId, searchTerm, { page: currentPage, limit: 10 })
-        }
-      } else {
-        loadAccountingData()
-      }
-    } catch (error) {
-      console.error("Error searching:", error)
-    }
-  }
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
@@ -436,29 +415,19 @@ export default function AccountingPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestión Contable</h1>
-          <p className="text-gray-600 dark:text-gray-400">Administre cuentas contables y centros de costo</p>
-        </div>
-      </div>
-
-      {/* Search */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center space-x-2">
-            <Search className="h-4 w-4 text-gray-400" />
-            <Input
-              placeholder={`Buscar ${activeTab === "accounts" ? "cuentas contables" : "centros de costo"}...`}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-md"
-            />
+    <>
+      {/* Header Section - Título, descripción y botones por fuera */}
+      <div className="space-y-4 sm:space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center py-4 sm:py-8 pl-2 sm:pb-2 pb-2">
+          <div className="space-y-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">Gestión Contable</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Administre cuentas contables y centros de costo
+            </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -692,97 +661,111 @@ export default function AccountingPage() {
         </div>
 
         <TabsContent value="accounts" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="w-5 h-5" />
-                Cuentas Contables ({currentLoading ? "..." : accountsPagination.total})
-              </CardTitle>
+          <Card className="border-0 shadow-none">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-3">
+                <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+                <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                  Cuentas Contables ({currentLoading ? "..." : accountsPagination.total})
+                </CardTitle>
+              </div>
             </CardHeader>
             <CardContent>
               {currentLoading ? (
                 <TableSkeleton rows={8} columns={6} />
               ) : (
                 <>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left p-3">Código</th>
-                          <th className="text-left p-3">Nombre</th>
-                          <th className="text-left p-3">Tipo</th>
-                          <th className="text-left p-3">Cuenta Padre</th>
-                          <th className="text-center p-3">Nivel</th>
-                          <th className="text-center p-3">Estado</th>
-                          <th className="text-center p-3">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {accountingAccounts.length === 0 ? (
-                          <tr>
-                            <td colSpan={8} className="text-center py-8">
-                              <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                              <p className="text-gray-500">No se encontraron cuentas contables</p>
-                            </td>
-                          </tr>
-                        ) : (
-                          accountingAccounts.map((account) => (
-                            <tr key={account.id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
-                              <td className="p-3 font-mono font-semibold">{account.accountCode}</td>
-                              <td className="p-3">
-                                <div className="font-medium">{account.accountName}</div>
-                                {account.description && (
-                                  <div className="text-xs text-gray-500 truncate max-w-48" title={account.description}>
-                                    {account.description}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="p-3">
-                                <Badge variant="outline">{account.accountType}</Badge>
-                              </td>
-                              <td className="p-3">
-                                {account.parentAccount ? (
-                                  <div className="text-sm">
-                                    <div className="font-mono">{account.parentAccount.accountCode}</div>
-                                    <div className="text-xs text-gray-500 truncate max-w-32">
-                                      {account.parentAccount.accountName}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  "-"
-                                )}
-                              </td>
-                              <td className="p-3 text-center">
-                                <Badge variant="outline">{account.level}</Badge>
-                              </td>
-                              <td className="p-3 text-center">{getStatusBadge(account.isActive)}</td>
-                              <td className="p-3">
-                                <div className="flex items-center justify-center gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => openEditAccountDialog(account)}
-                                    title="Editar"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleDeleteAccount(account.id)}
-                                    title="Eliminar"
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                                <ScrollableTable
+                data={accountingAccounts}
+                columns={[
+                  {
+                    key: "accountCode",
+                    header: "Código",
+                    render: (account) => (
+                      <span className="font-mono font-semibold">{account.accountCode}</span>
+                    ),
+                  },
+                  {
+                    key: "accountName",
+                    header: "Nombre",
+                    render: (account) => (
+                      <div>
+                        <div className="font-medium">{account.accountName}</div>
+                        {account.description && (
+                          <div className="text-xs text-gray-500 truncate max-w-48" title={account.description}>
+                            {account.description}
+                          </div>
                         )}
-                      </tbody>
-                    </table>
-                  </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "accountType",
+                    header: "Tipo",
+                    render: (account) => <Badge variant="outline">{account.accountType}</Badge>,
+                  },
+                  {
+                    key: "parentAccount",
+                    header: "Cuenta Padre",
+                    render: (account) => (
+                      account.parentAccount ? (
+                        <div className="text-sm">
+                          <div className="font-mono">{account.parentAccount.accountCode}</div>
+                          <div className="text-xs text-gray-500 truncate max-w-32">
+                            {account.parentAccount.accountName}
+                          </div>
+                        </div>
+                      ) : (
+                        "-"
+                      )
+                    ),
+                  },
+                  {
+                    key: "level",
+                    header: "Nivel",
+                    render: (account) => (
+                      <div className="text-center">
+                        <Badge variant="outline">{account.level}</Badge>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "status",
+                    header: "Estado",
+                    render: (account) => (
+                      <div className="text-center">{getStatusBadge(account.isActive)}</div>
+                    ),
+                  },
+                  {
+                    key: "actions",
+                    header: "Acciones",
+                    render: (account) => (
+                      <div className="flex items-center justify-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditAccountDialog(account)}
+                          title="Editar"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteAccount(account.id)}
+                          title="Eliminar"
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ),
+                  },
+                ]}
+                              emptyTitle="No se encontraron cuentas contables"
+              emptyDescription="No hay cuentas contables registradas"
+              emptyIcon={<Building2 className="h-10 w-10" />}
+              />
 
                   {/* Pagination */}
                   {currentPagination.totalPages > 1 && (
@@ -824,96 +807,109 @@ export default function AccountingPage() {
         </TabsContent>
 
         <TabsContent value="cost-centers" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="w-5 h-5" />
-                Centros de Costo ({currentLoading ? "..." : costCentersPagination.total})
-              </CardTitle>
+          <Card className="border-0 shadow-none">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-3">
+                <Target className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+                <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                  Centros de Costo ({currentLoading ? "..." : costCentersPagination.total})
+                </CardTitle>
+              </div>
             </CardHeader>
             <CardContent>
               {currentLoading ? (
                 <TableSkeleton rows={8} columns={8} />
               ) : (
                 <>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left p-3">Código</th>
-                          <th className="text-left p-3">Nombre</th>
-                          <th className="text-left p-3">Centro Padre</th>
-                          <th className="text-center p-3">Nivel</th>
-                          <th className="text-center p-3">Estado</th>
-                          <th className="text-center p-3">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {costCenters.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="text-center py-8">
-                              <Target className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                              <p className="text-gray-500">No se encontraron centros de costo</p>
-                            </td>
-                          </tr>
-                        ) : (
-                          costCenters.map((costCenter) => (
-                            <tr key={costCenter.id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
-                              <td className="p-3 font-mono font-semibold">{costCenter.code}</td>
-                              <td className="p-3">
-                                <div className="font-medium">{costCenter.name}</div>
-                                {costCenter.description && (
-                                  <div
-                                    className="text-xs text-gray-500 truncate max-w-48"
-                                    title={costCenter.description}
-                                  >
-                                    {costCenter.description}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="p-3">
-                                {costCenter.parentCostCenter ? (
-                                  <div className="text-sm">
-                                    <div className="font-mono">{costCenter.parentCostCenter.code}</div>
-                                    <div className="text-xs text-gray-500 truncate max-w-32">
-                                      {costCenter.parentCostCenter.name}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  "-"
-                                )}
-                              </td>
-                              <td className="p-3 text-center">
-                                <Badge variant="outline">{costCenter.level}</Badge>
-                              </td>
-                              <td className="p-3 text-center">{getStatusBadge(costCenter.isActive)}</td>
-                              <td className="p-3">
-                                <div className="flex items-center justify-center gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => openEditCostCenterDialog(costCenter)}
-                                    title="Editar"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleDeleteCostCenter(costCenter.id)}
-                                    title="Eliminar"
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ScrollableTable
+                    data={costCenters}
+                    columns={[
+                      {
+                        key: "code",
+                        header: "Código",
+                        render: (costCenter) => (
+                          <span className="font-mono font-semibold">{costCenter.code}</span>
+                        ),
+                      },
+                      {
+                        key: "name",
+                        header: "Nombre",
+                        render: (costCenter) => (
+                          <div>
+                            <div className="font-medium">{costCenter.name}</div>
+                            {costCenter.description && (
+                              <div
+                                className="text-xs text-gray-500 truncate max-w-48"
+                                title={costCenter.description}
+                              >
+                                {costCenter.description}
+                              </div>
+                            )}
+                          </div>
+                        ),
+                      },
+                      {
+                        key: "parentCostCenter",
+                        header: "Centro Padre",
+                        render: (costCenter) => (
+                          costCenter.parentCostCenter ? (
+                            <div className="text-sm">
+                              <div className="font-mono">{costCenter.parentCostCenter.code}</div>
+                              <div className="text-xs text-gray-500 truncate max-w-32">
+                                {costCenter.parentCostCenter.name}
+                              </div>
+                            </div>
+                          ) : (
+                            "-"
+                          )
+                        ),
+                      },
+                      {
+                        key: "level",
+                        header: "Nivel",
+                        render: (costCenter) => (
+                          <div className="text-center">
+                            <Badge variant="outline">{costCenter.level}</Badge>
+                          </div>
+                    ),
+                      },
+                      {
+                        key: "status",
+                        header: "Estado",
+                        render: (costCenter) => (
+                          <div className="text-center">{getStatusBadge(costCenter.isActive)}</div>
+                        ),
+                      },
+                      {
+                        key: "actions",
+                        header: "Acciones",
+                        render: (costCenter) => (
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditCostCenterDialog(costCenter)}
+                              title="Editar"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteCostCenter(costCenter.id)}
+                              title="Eliminar"
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ),
+                      },
+                    ]}
+                    emptyTitle="No se encontraron centros de costo"
+                    emptyDescription="No hay centros de costo registrados"
+                    emptyIcon={<Target className="h-10 w-10" />}
+                  />
 
                   {/* Pagination */}
                   {currentPagination.totalPages > 1 && (
@@ -955,45 +951,43 @@ export default function AccountingPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Cuentas</p>
-              <p className="text-2xl font-bold">{accountsLoading ? "..." : accountsPagination.total}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Cuentas Activas</p>
-              <p className="text-2xl font-bold text-green-600">
-                {accountsLoading ? "..." : accountingAccounts.filter((a) => a.isActive).length}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Centros</p>
-              <p className="text-2xl font-bold">{costCentersLoading ? "..." : costCentersPagination.total}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Centros Activos</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {costCentersLoading ? "..." : costCenters.filter((c) => c.isActive).length}
-              </p>
+        {/* Summary Statistics Cards */}
+        <Card className="border-0 shadow-none">
+          <CardHeader>
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Resumen de Gestión Contable
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {accountsLoading ? "..." : accountsPagination.total}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Total Cuentas</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="text-2xl sm:text-3xl font-medium text-green-600 dark:text-green-400 mb-2">
+                  {accountsLoading ? "..." : accountingAccounts.filter((a) => a.isActive).length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-green-700 dark:text-green-300">Cuentas Activas</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {costCentersLoading ? "..." : costCentersPagination.total}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Total Centros</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                <div className="text-2xl sm:text-3xl font-medium text-amber-600 dark:text-amber-400 mb-2">
+                  {costCentersLoading ? "..." : costCenters.filter((c) => c.isActive).length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-amber-700 dark:text-amber-300">Centros Activos</p>
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
-    </div>
+    </>
   )
 }

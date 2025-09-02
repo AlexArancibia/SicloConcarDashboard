@@ -1164,20 +1164,23 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Conciliaciones Bancarias</h1>
-          <p className="text-gray-600 dark:text-gray-400">Selecciona transacciones y documentos para conciliar</p>
+    <>
+      {/* Header Section - Título, descripción y botones por fuera */}
+      <div className="space-y-4 sm:space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center py-4 sm:py-8 pl-2 sm:pb-2 pb-2">
+          <div className="space-y-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">Conciliaciones Bancarias</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Selecciona transacciones y documentos para conciliar
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <Button variant="outline" size="default" className="w-full sm:w-auto">
+              <Download className="w-4 h-4 mr-2" />
+              Exportar
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="sm">
-            <Download className="w-4 h-4 mr-2" />
-            Exportar
-          </Button>
-        </div>
-      </div>
 
       {/* Business Rules Alerts */}
       {/* {selectedTransaction && isTransactionConciliated(selectedTransaction.id) && (
@@ -1202,10 +1205,10 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
         {/* Document Conciliation Tab */}
         <TabsContent value="documents" className="space-y-6">
           {/* Transaction Selection */}
-          <Card>
+          <Card className="border-0 shadow-none">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <CreditCard className="h-4 w-4" />
+                <CreditCard className="h-4 w-4 text-blue-600" />
                 Transacciones Disponibles  
               </CardTitle>
               <CardDescription className="text-xs">
@@ -1215,12 +1218,19 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Transaction Filters */}
-              <Card>
-                <FiltersBar
-                  filters={transactionFilterConfigs}
-                  values={transactionFilters}
-                  onChange={handleTransactionFilterChange}
-                />
+              <Card className="border-0 shadow-none">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                    Filtros de Transacciones
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <FiltersBar
+                    filters={transactionFilterConfigs}
+                    values={transactionFilters}
+                    onChange={handleTransactionFilterChange}
+                  />
+                </CardContent>
               </Card>
 
               {loading ? (
@@ -1289,9 +1299,7 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                               }`}>
                                 {formatCurrency(transaction.amount)}
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                Saldo: {formatCurrency(transaction.balance)}
-                              </div>
+
                             </TableCell>
                             <TableCell className="text-center">
                               {getTransactionTypeBadge(transaction.transactionType)}
@@ -1350,7 +1358,7 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
+                  <FileText className="h-4 w-4 text-blue-600" />
                   Documentos Disponibles ({availableDocuments.length})
                 </CardTitle>
                 <CardDescription className="text-xs">
@@ -1359,12 +1367,19 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Document Filters */}
-                <Card>
-                  <FiltersBar
-                    filters={documentFilterConfigs}
-                    values={documentFilters}
-                    onChange={handleDocumentFilterChange}
-                  />
+                <Card className="border-0 shadow-none">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                      Filtros de Documentos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <FiltersBar
+                      filters={documentFilterConfigs}
+                      values={documentFilters}
+                      onChange={handleDocumentFilterChange}
+                    />
+                  </CardContent>
                 </Card>
 
                 {loading ? (
@@ -1607,10 +1622,10 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
         {/* Detraction Conciliation Tab */}
         <TabsContent value="detractions" className="space-y-6">
           {/* Transaction Selection */}
-          <Card>
+          <Card className="border-0 shadow-none">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <CreditCard className="h-4 w-4" />
+                <CreditCard className="h-4 w-4 text-blue-600" />
                 Transacciones de Detracción Disponibles  
               </CardTitle>
               <CardDescription className="text-xs">
@@ -1620,12 +1635,19 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Transaction Filters */}
-              <Card>
-                <FiltersBar
-                  filters={transactionFilterConfigs}
-                  values={transactionFilters}
-                  onChange={handleTransactionFilterChange}
-                />
+              <Card className="border-0 shadow-none">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                    Filtros de Transacciones
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <FiltersBar
+                    filters={transactionFilterConfigs}
+                    values={transactionFilters}
+                    onChange={handleTransactionFilterChange}
+                  />
+                </CardContent>
               </Card>
 
               {loading ? (
@@ -1693,9 +1715,7 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                               }`}>
                                 {formatCurrency(transaction.amount)}
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                Saldo: {formatCurrency(transaction.balance)}
-                              </div>
+
                             </TableCell>
                             <TableCell className="text-center">
                               {getTransactionTypeBadge(transaction.transactionType)}
@@ -1737,10 +1757,10 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
 
           {/* Detraction Selection */}
           {selectedTransaction && (
-            <Card>
+            <Card className="border-0 shadow-none">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
+                  <FileText className="h-4 w-4 text-blue-600" />
                   Detracciones Disponibles ({availableDetractions.length})
                 </CardTitle>
                 <CardDescription className="text-xs">
@@ -1749,12 +1769,19 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Document Filters */}
-                <Card>
-                  <FiltersBar
-                    filters={documentFilterConfigs}
-                    values={documentFilters}
-                    onChange={handleDocumentFilterChange}
-                  />
+                <Card className="border-0 shadow-none">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                      Filtros de Detracciones
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <FiltersBar
+                      filters={documentFilterConfigs}
+                      values={documentFilters}
+                      onChange={handleDocumentFilterChange}
+                    />
+                  </CardContent>
                 </Card>
 
                 {loading ? (
@@ -1973,30 +2000,32 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
 
         {/* Existing Conciliations Tab */}
         <TabsContent value="existing" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
+          <Card className="border-0 shadow-none">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 <div>
-                  <CardTitle>Conciliaciones Existentes</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                    Conciliaciones Existentes
+                  </CardTitle>
+                  <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
                     {conciliations.length} conciliaciones registradas.{" "}
                     {selectedConciliationIds.length > 0 && (
-                      <span className="text-primary font-medium">{selectedConciliationIds.length} seleccionada(s)</span>
+                      <span className="text-blue-600 dark:text-blue-400 font-medium">{selectedConciliationIds.length} seleccionada(s)</span>
                     )}
                   </CardDescription>
                 </div>
-                <div>
-                  {selectedConciliationIds.length > 0 && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleDeleteSelectedConciliations}
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Eliminar Seleccionadas ({selectedConciliationIds.length})
-                    </Button>
-                  )}
-                </div>
+                {selectedConciliationIds.length > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDeleteSelectedConciliations}
+                    className="ml-auto"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Eliminar Seleccionadas ({selectedConciliationIds.length})
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -2219,7 +2248,8 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
         onOpenChange={setShowDocumentDetailsDialog}
         document={selectedDocumentForDetails}
       />
-    </div>
+      </div>
+    </>
   )
 }
 

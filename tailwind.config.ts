@@ -9,6 +9,10 @@ export default {
   ],
   theme: {
   	extend: {
+  		fontFamily: {
+  			sans: ['Avenir', 'Avenir Next', 'Helvetica Neue', 'sans-serif'],
+  			avenir: ['Avenir', 'Avenir Next', 'Helvetica Neue', 'sans-serif'],
+  		},
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',

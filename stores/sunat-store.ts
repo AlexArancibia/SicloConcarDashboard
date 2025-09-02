@@ -124,7 +124,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
         params: { 
           page, 
           limit, 
-          searchTerm,
+          search: searchTerm,
           startDate,
           endDate
         },
@@ -243,7 +243,7 @@ export const useSunatStore = create<SunatStore>((set, get) => ({
         params: { 
           page, 
           limit, 
-          searchTerm,
+          search: searchTerm,
           period,
           startDate,
           endDate

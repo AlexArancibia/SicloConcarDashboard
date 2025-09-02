@@ -5,10 +5,8 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Upload, Download, FileText, Eye, Edit, Trash2, ChevronLeft, ChevronRight, MoreHorizontal, CheckCircle } from "lucide-react"
+import { Upload, Download, FileText, Eye, Edit, Trash2, MoreHorizontal, CheckCircle } from "lucide-react"
 import { useDocumentsStore } from "@/stores/documents-store"
-import { TableSkeleton } from "@/components/ui/table-skeleton"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +22,7 @@ import { useAuthStore } from "@/stores/authStore"
 import XMLImportModal from "./xml-import-modal"
 import { Checkbox } from "../ui/checkbox"
 import SunatValidationDialog from "./sunat-validation-dialog"
+import { ScrollableTable, type ScrollableTableColumn } from "@/components/ui/scrollable-table"
 
 export default function DocumentsPage() {
   const [filters, setFilters] = useState<{
@@ -39,11 +38,11 @@ export default function DocumentsPage() {
     hasDetraction: string // "yes", "no", "all"
   }>({
     search: "",
-    type: "",
-    status: "",
+    type: "all",
+    status: "all",
     dateRange: { from: undefined, to: undefined },
     dueDateRange: { from: undefined, to: undefined },
-    currency: "",
+    currency: "all",
     minAmount: "",
     maxAmount: "",
     hasRetention: "all",
@@ -107,7 +106,7 @@ export default function DocumentsPage() {
     }
   }, [error, toast, clearError])
 
-  const loadDocuments = async () => {
+  const loadDocuments = async (opts?: { page?: number; limit?: number }) => {
     if (!company?.id) {
       console.log("No company ID available")
       return
@@ -115,27 +114,29 @@ export default function DocumentsPage() {
 
     console.log("Loading documents for company:", company.id)
     console.log("Current filters:", filters)
-    console.log("Current page:", currentPage)
+    console.log("Current page:", opts?.page ?? currentPage)
 
     try {
       const query = {
-        page: currentPage,
-        limit: 1000, // Aumentar límite para validación SUNAT
-        ...(filters.search && { search: filters.search }),
-        ...(filters.type && filters.type !== "all" && { documentType: filters.type as DocumentType }),
-        ...(filters.status && filters.status !== "all" && { status: filters.status as DocumentStatus }),
+        page: opts?.page ?? currentPage,
+        limit: opts?.limit ?? pagination.limit ?? 10,
+        ...(filters.search && filters.search.trim() !== "" && { search: filters.search }),
+        ...(filters.type && filters.type !== "" && filters.type !== "all" && { documentType: filters.type as DocumentType }),
+        ...(filters.status && filters.status !== "" && filters.status !== "all" && { status: filters.status as DocumentStatus }),
         ...(filters.dateRange.from && { issueDateFrom: filters.dateRange.from.toISOString().split("T")[0] }),
         ...(filters.dateRange.to && { issueDateTo: filters.dateRange.to.toISOString().split("T")[0] }),
         ...(filters.dueDateRange.from && { dueDateFrom: filters.dueDateRange.from.toISOString().split("T")[0] }),
         ...(filters.dueDateRange.to && { dueDateTo: filters.dueDateRange.to.toISOString().split("T")[0] }),
-        ...(filters.currency && filters.currency !== "all" && { currency: filters.currency }),
-        ...(filters.minAmount && { minAmount: parseFloat(filters.minAmount) }),
-        ...(filters.maxAmount && { maxAmount: parseFloat(filters.maxAmount) }),
+        ...(filters.currency && filters.currency !== "" && filters.currency !== "all" && { currency: filters.currency }),
+        ...(filters.minAmount && filters.minAmount.trim() !== "" && { minAmount: parseFloat(filters.minAmount) }),
+        ...(filters.maxAmount && filters.maxAmount.trim() !== "" && { maxAmount: parseFloat(filters.maxAmount) }),
         ...(filters.hasRetention !== "all" && { hasRetention: filters.hasRetention === "yes" }),
         ...(filters.hasDetraction !== "all" && { hasDetraction: filters.hasDetraction === "yes" }),
       }
 
       console.log("Query being sent:", query)
+      console.log("Query keys:", Object.keys(query))
+      console.log("Query values:", Object.values(query))
       await fetchDocuments(company.id, query)
       console.log("Documents loaded successfully")
     } catch (err) {
@@ -232,11 +233,18 @@ export default function DocumentsPage() {
       key: "search",
       type: "search" as const,
       placeholder: "RUC, Serie, Proveedor...",
+      priority: "high" as const,
+    },
+    {
+      key: "dateRange",
+      type: "daterange" as const,
+      placeholder: "Período de emisión",
+      priority: "high" as const,
     },
     {
       key: "type",
       type: "select" as const,
-      placeholder: "Tipo de documento",
+      placeholder: "Seleccionar tipo de documento",
       options: [
         { value: "all", label: "Todos los tipos" },
         { value: "INVOICE", label: "Facturas" },
@@ -246,12 +254,13 @@ export default function DocumentsPage() {
         { value: "PURCHASE_ORDER", label: "O. Compra" },
         { value: "CONTRACT", label: "Contratos" },
       ],
-      className: "min-w-40",
+      maxWidth: "w-44",
+      priority: "medium" as const,
     },
     {
       key: "status",
       type: "select" as const,
-      placeholder: "Estado del documento",
+      placeholder: "Seleccionar estado del documento",
       options: [
         { value: "all", label: "Todos los estados" },
         { value: "DRAFT", label: "Borrador" },
@@ -261,67 +270,75 @@ export default function DocumentsPage() {
         { value: "PAID", label: "Pagado" },
         { value: "CANCELLED", label: "Cancelado" },
       ],
-      className: "min-w-40",
-    },
-    {
-      key: "dateRange",
-      type: "daterange" as const,
-      placeholder: "Período de emisión",
+      maxWidth: "w-44",
+      priority: "medium" as const,
     },
     {
       key: "dueDateRange",
       type: "daterange" as const,
-      placeholder: "Período de vencimiento",
+      placeholder: "Seleccionar período de vencimiento",
+      priority: "medium" as const,
     },
     {
       key: "currency",
       type: "select" as const,
-      placeholder: "Moneda",
+      placeholder: "Seleccionar tipo de moneda",
       options: [
-        { value: "all", label: "Todas" },
+        { value: "all", label: "Todas las monedas" },
         { value: "PEN", label: "PEN" },
         { value: "USD", label: "USD" },
       ],
-      className: "min-w-28",
+      maxWidth: "w-32",
+      priority: "low" as const,
     },
     {
       key: "minAmount",
       type: "search" as const,
-      placeholder: "Monto Mín.",
-      className: "w-32",
+      placeholder: "Ingresar monto mínimo",
+      maxWidth: "w-28",
+      priority: "low" as const,
     },
     {
       key: "maxAmount",
       type: "search" as const,
-      placeholder: "Monto Máx.",
-      className: "w-32",
+      placeholder: "Ingresar monto máximo",
+      maxWidth: "w-28",
+      priority: "low" as const,
     },
     {
       key: "hasRetention",
       type: "select" as const,
-      placeholder: "Retención",
+      placeholder: "Seleccionar estado de retención",
       options: [
-        { value: "all", label: "Ambos" },
-        { value: "yes", label: "Sí" },
-        { value: "no", label: "No" },
+        { value: "all", label: "Cualquier estado" },
+        { value: "yes", label: "Con retención" },
+        { value: "no", label: "Sin retención" },
       ],
-      className: "min-w-28",
+      maxWidth: "w-40",
+      priority: "low" as const,
     },
     {
       key: "hasDetraction",
       type: "select" as const,
-      placeholder: "Detracción",
+      placeholder: "Seleccionar estado de detracción",
       options: [
-        { value: "all", label: "Ambos" },
-        { value: "yes", label: "Sí" },
-        { value: "no", label: "No" },
+        { value: "all", label: "Cualquier estado" },
+        { value: "yes", label: "Con detracción" },
+        { value: "no", label: "Sin detracción" },
       ],
-      className: "min-w-28",
+      maxWidth: "w-40",
+      priority: "low" as const,
     },
   ]
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
+  }
+
+  const handleLimitChange = (newLimit: number) => {
+    setCurrentPage(1)
+    // Fetch immediately with new limit and reset to page 1
+    loadDocuments({ page: 1, limit: newLimit })
   }
 
   const formatDate = (date: Date | string) => {
@@ -376,32 +393,31 @@ export default function DocumentsPage() {
 
   return (
     <>
-      <div className="space-y-4">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestión de Documentos</h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Administre facturas, recibos por honorarios y notas de crédito
-            </p>
+      {/* Header Section - Título, descripción y botones por fuera */}
+      <div className="space-y-4 sm:space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center py-4 sm:py-8 pl-2 sm:pb-2 pb-2">
+          <div className="space-y-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">Gestión de Documentos</h1>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <Button variant="outline" size="default" className="w-full sm:w-auto">
               <Download className="w-4 h-4 mr-2" />
               Exportar
             </Button>
-            <Button size="sm" onClick={() => setXmlImportOpen(true)}>
+            <Button size="default" onClick={() => setXmlImportOpen(true)} className="w-full sm:w-auto">
               <Upload className="w-4 h-4 mr-2" />
               Importar XML
             </Button>
             <Button 
               variant="outline" 
-              size="sm" 
+              size="default" 
               onClick={() => setSunatValidationOpen(true)}
               disabled={documents.length === 0}
+              className="w-full sm:w-auto"
             >
               <CheckCircle className="w-4 h-4 mr-2" />
-              Validación SUNAT
+              <span className="hidden sm:inline">Validación SUNAT</span>
+              <span className="sm:hidden">SUNAT</span>
               {documents.length > 0 && (
                 <Badge variant="secondary" className="ml-2 text-xs">
                   {documents.length}
@@ -411,241 +427,220 @@ export default function DocumentsPage() {
           </div>
         </div>
 
-        {/* Filters */}
-        <Card>
-          <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
+        {/* Filters Card */}
+        <Card className="border-0 shadow-none">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Filtros de Búsqueda
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
+          </CardContent>
         </Card>
 
-        {/* Documents Table */}
- 
-            <div className="flex justify-start items-center font-semibold">
-   
-                <FileText className="w-5 h-5 mr-2" />
-                  Documentos ({loading ? "..." : pagination.total})
-                {selectedDocumentIds.length > 0 && (
-                  <span className="text-sm text-primary font-medium ml-2">
-                    ({selectedDocumentIds.length} seleccionado(s))
-                  </span>
-                )}
-               <div>
-                {selectedDocumentIds.length > 0 && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleDeleteSelectedDocuments}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Eliminar Seleccionados ({selectedDocumentIds.length})
-                  </Button>
-                )}
+        {/* Documents Table Card */}
+        <Card className="border-0 shadow-none">
+          <CardHeader className="pb-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+                <div>
+                  <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                    Documentos ({loading ? "..." : pagination.total})
+                  </CardTitle>
+                  {selectedDocumentIds.length > 0 && (
+                    <p className="text-sm text-blue-600 dark:text-blue-400 font-normal">
+                      {selectedDocumentIds.length} documento(s) seleccionado(s)
+                    </p>
+                  )}
+                </div>
+              </div>
+              {selectedDocumentIds.length > 0 && (
+                <Button
+                  variant="destructive"
+                  size="default"
+                  onClick={handleDeleteSelectedDocuments}
+                  className="w-full sm:w-auto whitespace-nowrap"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  <span className="hidden sm:inline">Eliminar Seleccionados ({selectedDocumentIds.length})</span>
+                  <span className="sm:hidden">Eliminar ({selectedDocumentIds.length})</span>
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const columns: ScrollableTableColumn<any>[] = [
+                {
+                  key: "select",
+                  header: (
+                    <Checkbox
+                      checked={documents.length > 0 && selectedDocumentIds.length === documents.length}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedDocumentIds(documents.map((d) => d.id))
+                        } else {
+                          setSelectedDocumentIds([])
+                        }
+                      }}
+                      aria-label="Seleccionar todos los documentos en esta página"
+                    />
+                  ),
+                  className: "w-12 px-2",
+                  width: "48px",
+                  render: (doc: any) => (
+                    <Checkbox
+                      checked={selectedDocumentIds.includes(doc.id)}
+                      onCheckedChange={(checked) => {
+                        setSelectedDocumentIds((prev) =>
+                          checked ? [...prev, doc.id] : prev.filter((id) => id !== doc.id),
+                        )
+                      }}
+                      aria-label={`Seleccionar documento ${doc.fullNumber}`}
+                    />
+                  ),
+                },
+                { key: "type", header: "Tipo", render: (doc: any) => getTypeBadge(doc.documentType) },
+                { key: "fullNumber", header: "Serie - Número", className: "font-avenir", render: (doc: any) => doc.fullNumber },
+                { key: "issueDate", header: "Fecha Emisión", render: (doc: any) => formatDate(doc.issueDate) },
+                { key: "dueDate", header: "Fecha Vencimiento", render: (doc: any) => (doc.dueDate ? formatDate(doc.dueDate) : "-") },
+                {
+                  key: "supplier",
+                  header: "Proveedor",
+                  className: "max-w-[200px] truncate",
+                  render: (doc: any) => (
+                    <span title={doc.supplier?.businessName || ""}>{doc.supplier?.businessName || "Sin proveedor"}</span>
+                  ),
+                },
+                { key: "ruc", header: "RUC", className: "font-avenir", render: (doc: any) => doc.supplier?.documentNumber || "Sin RUC" },
+                {
+                  key: "subtotal",
+                  header: "Subtotal",
+                  className: "text-right font-avenir",
+                  render: (doc: any) => formatCurrency(doc.subtotal, doc.currency),
+                },
+                {
+                  key: "igv",
+                  header: "IGV/ Ret.",
+                  className: "text-right font-avenir",
+                  render: (doc: any) => formatCurrency(doc.igv, doc.currency),
+                },
+                {
+                  key: "total",
+                  header: "Total",
+                  className: "text-right font-avenir font-medium",
+                  render: (doc: any) => formatCurrency(doc.total, doc.currency),
+                },
+                {
+                  key: "detraction",
+                  header: "Detracción",
+                  className: "text-right font-avenir",
+                  render: (doc: any) =>
+                    doc.detraction?.amount && Number.parseFloat(doc.detraction.amount) > 0
+                      ? formatCurrency(doc.detraction.amount, doc.currency)
+                      : "-",
+                },
+                {
+                  key: "pendingAmount",
+                  header: "Pendiente",
+                  className: "text-right font-avenir font-medium text-green-600 dark:text-green-400",
+                  render: (doc: any) => formatCurrency(doc.pendingAmount, doc.currency),
+                },
+                { key: "status", header: "Estado", className: "text-center", render: (doc: any) => getStatusBadge(doc.status) },
+                {
+                  key: "actions",
+                  header: "Acciones",
+                  className: "text-center",
+                  render: (doc: any) => (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <span className="sr-only">Abrir menú</span>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/documents/${doc.id}`}>
+                            <Eye className="mr-2 h-4 w-4" /> Ver Detalles
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/documents/${doc.id}/edit`}>
+                            <Edit className="mr-2 h-4 w-4" /> Editar
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => handleDeleteDocument(doc.id)}
+                          className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-700/20 dark:focus:text-red-500"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ),
+                },
+              ]
+
+              return (
+                <ScrollableTable
+                  data={documents}
+                  columns={columns}
+                  loading={loading}
+                  pagination={pagination}
+                  onPageChange={handlePageChange}
+                  onLimitChange={handleLimitChange}
+                  emptyTitle="No se encontraron documentos"
+                  emptyDescription="No se encontraron documentos con los filtros aplicados."
+                  stickyHeader
+                />
+              )
+            })()}
+          </CardContent>
+        </Card>
+
+        {/* Summary Statistics Cards */}
+        <Card className="border-0 shadow-none">
+          <CardHeader>
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Resumen de Documentos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {loading ? "..." : pagination.total}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Total Documentos</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                <div className="text-2xl sm:text-3xl font-medium text-amber-600 dark:text-amber-400 mb-2">
+                  {loading ? "..." : documents.filter((d) => d.status === "PENDING").length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-amber-700 dark:text-amber-300">Pendientes</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {loading ? "..." : documents.filter((d) => d.status === "APPROVED").length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Aprobados</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="text-2xl sm:text-3xl font-medium text-green-600 dark:text-green-400 mb-2">
+                  {loading ? "..." : documents.filter((d) => d.status === "PAID").length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-green-700 dark:text-green-300">Pagados</p>
               </div>
             </div>
-  
-            {loading ? (
-              <TableSkeleton rows={8} columns={14} />
-            ) : (
-              <>
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-12 px-2">
-                           <Checkbox
-                            checked={
-                              documents.length > 0 &&
-                              selectedDocumentIds.length === documents.length 
-                              // This checks against all loaded documents. 
-                              // For true paginated select-all, this logic would need to fetch all IDs or handle server-side.
-                              // For now, it selects all on the current page.
-                            }
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedDocumentIds(documents.map((d) => d.id))
-                              } else {
-                                setSelectedDocumentIds([])
-                              }
-                            }}
-                            aria-label="Seleccionar todos los documentos en esta página"
-                          />
-                        </TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Serie - Número</TableHead>
-                        <TableHead>Fecha Emisión</TableHead>
-                        <TableHead>Fecha Vencimiento</TableHead>
-                        <TableHead>Proveedor</TableHead>
-                        <TableHead>RUC</TableHead>
-                        <TableHead className="text-right">Subtotal</TableHead>
-                        <TableHead className="text-right">IGV</TableHead>
-                        <TableHead className="text-right">Total</TableHead>
-                        <TableHead className="text-right">Detracción</TableHead>
-                        <TableHead className="text-right">Pendiente</TableHead>
-                        <TableHead className="text-center">Estado</TableHead>
-                        <TableHead className="text-center">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {documents.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={13} className="h-24 text-center">
-                            No se encontraron documentos con los filtros aplicados.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        documents.map((doc) => (
-                          <TableRow 
-                            key={doc.id}
-                            data-state={selectedDocumentIds.includes(doc.id) && "selected"}
-                          >
-                            <TableCell className="px-2">
-                              <Checkbox
-                                checked={selectedDocumentIds.includes(doc.id)}
-                                onCheckedChange={(checked) => {
-                                  setSelectedDocumentIds((prev) =>
-                                    checked ? [...prev, doc.id] : prev.filter((id) => id !== doc.id),
-                                  )
-                                }}
-                                aria-label={`Seleccionar documento ${doc.fullNumber}`}
-                              />
-                            </TableCell>
-                            <TableCell>{getTypeBadge(doc.documentType)}</TableCell>
-                            <TableCell className="font-mono">{doc.fullNumber}</TableCell>
-                            <TableCell>{formatDate(doc.issueDate)}</TableCell>
-                            <TableCell>{doc.dueDate ? formatDate(doc.dueDate) : "-"}</TableCell>
-                            <TableCell className="max-w-[200px] truncate" title={doc.supplier?.businessName || ""}>
-                              {doc.supplier?.businessName || "Sin proveedor"}
-                            </TableCell>
-                            <TableCell className="font-mono">{doc.supplier?.documentNumber || "Sin RUC"}</TableCell>
-                            <TableCell className="text-right font-mono">
-                              {formatCurrency(doc.subtotal, doc.currency)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono">{formatCurrency(doc.igv, doc.currency)}</TableCell>
-                            <TableCell className="text-right font-mono font-semibold">
-                              {formatCurrency(doc.total, doc.currency)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono">
-                              {doc.detraction?.amount && Number.parseFloat(doc.detraction.amount) > 0
-                                ? formatCurrency(doc.detraction.amount, doc.currency)
-                                : "-"}
-                            </TableCell>
-                            <TableCell className="text-right font-mono font-semibold text-green-600 dark:text-green-400">
-                              {formatCurrency(doc.pendingAmount, doc.currency)}
-                            </TableCell>
-                            <TableCell className="text-center">{getStatusBadge(doc.status)}</TableCell>
-                            <TableCell className="text-center">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" className="h-8 w-8 p-0">
-                                    <span className="sr-only">Abrir menú</span>
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/documents/${doc.id}`}>
-                                      <Eye className="mr-2 h-4 w-4" /> Ver Detalles
-                                    </Link>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/documents/${doc.id}/edit`}>
-                                      <Edit className="mr-2 h-4 w-4" /> Editar
-                                    </Link>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    onClick={() => handleDeleteDocument(doc.id)}
-                                    className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-700/20 dark:focus:text-red-500"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" /> Eliminar
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Pagination */}
-                {pagination.totalPages > 1 && (
-                  <div className="flex items-center justify-end space-x-2 py-4">
-                    <div className="flex-1 text-sm text-muted-foreground">
-                      Mostrando {(pagination.page - 1) * pagination.limit + 1} a{" "}
-                      {Math.min(pagination.page * pagination.limit, pagination.total)} de {pagination.total} documentos
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePageChange(pagination.page - 1)}
-                        disabled={pagination.page <= 1}
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                        Anterior
-                      </Button>
-                      <span className="text-sm">
-                        Página {pagination.page} de {pagination.totalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePageChange(pagination.page + 1)}
-                        disabled={pagination.page >= pagination.totalPages}
-                      >
-                        Siguiente
-                        <ChevronRight className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-   
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-center">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Documentos</p>
-                <p className="text-2xl font-bold">{loading ? "..." : pagination.total}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-center">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Pendientes</p>
-                <p className="text-2xl font-bold text-amber-600">
-                  {loading ? "..." : documents.filter((d) => d.status === "PENDING").length}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-center">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Aprobados</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {loading ? "..." : documents.filter((d) => d.status === "APPROVED").length}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-center">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Pagados</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {loading ? "..." : documents.filter((d) => d.status === "PAID").length}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+          </CardContent>
+        </Card>
       </div>
+
       <XMLImportModal
         open={xmlImportOpen}
         onOpenChange={setXmlImportOpen}

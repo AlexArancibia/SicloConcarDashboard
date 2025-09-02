@@ -16,6 +16,7 @@ import { useAccountingEntryTemplatesStore } from "@/stores/accounting-entry-temp
 import { useAccountingAccountsStore } from "@/stores/accounting-accounts-store"
 import { useAuthStore } from "@/stores/authStore"
 import { TableSkeleton } from "@/components/ui/table-skeleton"
+import { ScrollableTable } from "@/components/ui/scrollable-table"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -323,9 +324,9 @@ export default function AccountingTemplatesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 py-4 sm:py-8 pl-2 sm:pb-2 pb-2">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Plantillas de Asientos Contables</h1>
           <p className="text-gray-600 dark:text-gray-400">Administre plantillas para generar asientos contables automáticamente</p>
@@ -358,116 +359,134 @@ export default function AccountingTemplatesPage() {
       </div>
 
       {/* Templates List */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            Plantillas ({loading ? "..." : templates.length})
-          </CardTitle>
+      <Card className="border-0 shadow-none">
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-3">
+            <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Plantillas ({loading ? "..." : templates.length})
+            </CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
             <TableSkeleton rows={8} columns={7} />
           ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-3">Número</th>
-                      <th className="text-left p-3">Nombre</th>
-                      <th className="text-left p-3">Filtro</th>
-                      <th className="text-left p-3">Moneda</th>
-                      <th className="text-left p-3">Tipo</th>
-                      <th className="text-center p-3">Líneas</th>
-                      <th className="text-center p-3">Estado</th>
-                      <th className="text-center p-3">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {templates.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="text-center py-8">
-                          <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                          <p className="text-gray-500">No se encontraron plantillas</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      templates.map((template) => (
-                        <tr key={template.id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
-                          <td className="p-3 font-mono font-semibold">{template.templateNumber}</td>
-                          <td className="p-3">
-                            <div className="font-medium">{template.name}</div>
-                            {template.description && (
-                              <div className="text-xs text-gray-500 truncate max-w-48" title={template.description}>
-                                {template.description}
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-3">{getFilterBadge(template.filter)}</td>
-                          <td className="p-3">
-                            <Badge variant="outline">{template.currency}</Badge>
-                          </td>
-                          <td className="p-3">
-                            <div className="text-sm">
-                              <div className="font-medium">{template.transactionType}</div>
-                            </div>
-                          </td>
-                          <td className="p-3 text-center">
-                            <Badge variant="outline">{template.lines?.length || 0}</Badge>
-                          </td>
-                          <td className="p-3 text-center">{getStatusBadge(template.isActive)}</td>
-                          <td className="p-3">
-                            <div className="flex items-center justify-center gap-1">
-                              <Button variant="ghost" size="sm" onClick={() => openEditTemplateDialog(template)} title="Editar">
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleDeleteTemplate(template.id)} title="Eliminar" className="text-red-600 hover:text-red-700">
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm" onClick={() => openDevDialog(template)} title="Ver JSON">
-                                <Code className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </>
+            <ScrollableTable
+              data={templates}
+              columns={[
+                {
+                  key: "templateNumber",
+                  header: "Número",
+                  render: (template) => (
+                    <span className="font-mono font-semibold">{template.templateNumber}</span>
+                  ),
+                },
+                {
+                  key: "name",
+                  header: "Nombre",
+                  render: (template) => (
+                    <div>
+                      <div className="font-medium">{template.name}</div>
+                      {template.description && (
+                        <div className="text-xs text-gray-500 truncate max-w-48" title={template.description}>
+                          {template.description}
+                        </div>
+                      )}
+                    </div>
+                  ),
+                },
+                {
+                  key: "filter",
+                  header: "Filtro",
+                  render: (template) => getFilterBadge(template.filter),
+                },
+                {
+                  key: "currency",
+                  header: "Moneda",
+                  render: (template) => <Badge variant="outline">{template.currency}</Badge>,
+                },
+                {
+                  key: "transactionType",
+                  header: "Tipo",
+                  render: (template) => (
+                    <div className="text-sm">
+                      <div className="font-medium">{template.transactionType}</div>
+                    </div>
+                  ),
+                },
+                {
+                  key: "lines",
+                  header: "Líneas",
+                  render: (template) => (
+                    <div className="text-center">
+                      <Badge variant="outline">{template.lines?.length || 0}</Badge>
+                    </div>
+                  ),
+                },
+                {
+                  key: "status",
+                  header: "Estado",
+                  render: (template) => (
+                    <div className="text-center">{getStatusBadge(template.isActive)}</div>
+                  ),
+                },
+                {
+                  key: "actions",
+                  header: "Acciones",
+                  render: (template) => (
+                    <div className="flex items-center justify-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEditTemplateDialog(template)} title="Editar">
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteTemplate(template.id)} title="Eliminar" className="text-red-600 hover:text-red-700">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => openDevDialog(template)} title="Ver JSON">
+                        <Code className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+              emptyTitle="No se encontraron plantillas"
+              emptyDescription="No hay plantillas de asientos contables registradas"
+              emptyIcon={<FileText className="h-10 w-10" />}
+            />
           )}
         </CardContent>
       </Card>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Plantillas</p>
-              <p className="text-2xl font-bold">{loading ? "..." : templates.length}</p>
+      {/* Summary Statistics Cards */}
+      <Card className="border-0 shadow-none">
+          <CardHeader>
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Resumen de Plantillas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {loading ? "..." : templates.length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Total Plantillas</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="text-2xl sm:text-3xl font-medium text-green-600 dark:text-green-400 mb-2">
+                  {loading ? "..." : templates.filter((t) => t.isActive).length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-green-700 dark:text-green-300">Plantillas Activas</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {loading ? "..." : templates.reduce((acc, t) => acc + (t.lines?.length || 0), 0)}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Total Líneas</p>
+              </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Plantillas Activas</p>
-              <p className="text-2xl font-bold text-green-600">{loading ? "..." : templates.filter((t) => t.isActive).length}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Líneas</p>
-              <p className="text-2xl font-bold text-blue-600">{loading ? "..." : templates.reduce((acc, t) => acc + (t.lines?.length || 0), 0)}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Developer JSON Dialog */}
       <Dialog open={devDialogOpen} onOpenChange={setDevDialogOpen}>

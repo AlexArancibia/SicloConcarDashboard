@@ -12,6 +12,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import {
   CreditCard,
   Building2,
   Calendar,
@@ -20,6 +25,7 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  ChevronDown,
 } from "lucide-react"
 import type { Transaction } from "@/types/transactions"
 
@@ -94,6 +100,8 @@ const formatShortDate = (date: string | Date | null | undefined) => {
 }
 
 export function TransactionDetailsDialog({ open, onOpenChange, transaction }: TransactionDetailsDialogProps) {
+  const [isAdditionalInfoOpen, setIsAdditionalInfoOpen] = useState(false)
+  
   if (!transaction) return null
 
   const AmountIcon = getAmountIndicator(transaction.amount).icon
@@ -141,9 +149,6 @@ export function TransactionDetailsDialog({ open, onOpenChange, transaction }: Tr
                   <div className="text-sm text-blue-700 dark:text-blue-300 mb-1">Monto</div>
                   <div className={`text-3xl font-bold ${getAmountIndicator(transaction.amount).color}`}>
                     {formatCurrency(transaction.amount)}
-                  </div>
-                  <div className="text-sm text-blue-600 dark:text-blue-400">
-                    Saldo: {formatCurrency(transaction.balance)}
                   </div>
                 </div>
               </div>
@@ -237,70 +242,83 @@ export function TransactionDetailsDialog({ open, onOpenChange, transaction }: Tr
           </div>
 
           {/* Información adicional */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Hash className="h-5 w-5 text-slate-600" />
-                Información Adicional
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-slate-500 dark:text-slate-400">Fecha de Valor:</span>
-                  <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
-                    {transaction.valueDate ? formatDate(transaction.valueDate) : "Misma fecha"}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-slate-500 dark:text-slate-400">Hora de Operación:</span>
-                  <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
-                    {transaction.operationTime || "No especificada"}
-                  </p>
-                </div>
-                {transaction.operatorUser && (
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-400">Usuario Operador:</span>
-                    <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
-                      {transaction.operatorUser}
-                    </p>
+          <Collapsible open={isAdditionalInfoOpen} onOpenChange={setIsAdditionalInfoOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="pb-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                  <CardTitle className="flex items-center justify-between text-lg">
+                    <div className="flex items-center gap-2">
+                      <Hash className="h-5 w-5 text-slate-600" />
+                      Información Adicional
+                    </div>
+                    <ChevronDown 
+                      className={`h-5 w-5 text-slate-600 transition-transform ${
+                        isAdditionalInfoOpen ? 'rotate-180' : ''
+                      }`} 
+                    />
+                  </CardTitle>
+                </CardHeader>
+              </CollapsibleTrigger>
+                          <CollapsibleContent>
+                <CardContent className="space-y-3 pt-0">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-slate-500 dark:text-slate-400">Fecha de Valor:</span>
+                      <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
+                        {transaction.valueDate ? formatDate(transaction.valueDate) : "Misma fecha"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 dark:text-slate-400">Hora de Operación:</span>
+                      <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
+                        {transaction.operationTime || "No especificada"}
+                      </p>
+                    </div>
+                    {transaction.operatorUser && (
+                      <div>
+                        <span className="text-slate-500 dark:text-slate-400">Usuario Operador:</span>
+                        <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
+                          {transaction.operatorUser}
+                        </p>
+                      </div>
+                    )}
+                    {transaction.utc && (
+                      <div>
+                        <span className="text-slate-500 dark:text-slate-400">UTC:</span>
+                        <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
+                          {transaction.utc}
+                        </p>
+                      </div>
+                    )}
+                    {transaction.fileName && (
+                      <div>
+                        <span className="text-slate-500 dark:text-slate-400">Archivo:</span>
+                        <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
+                          {transaction.fileName}
+                        </p>
+                      </div>
+                    )}
+                    {transaction.importedAt && (
+                      <div>
+                        <span className="text-slate-500 dark:text-slate-400">Importado el:</span>
+                        <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
+                          {formatDate(transaction.importedAt)}
+                        </p>
+                      </div>
+                    )}
+                    {transaction.transactionHash && (
+                      <div className="col-span-2">
+                        <span className="text-slate-500 dark:text-slate-400">Hash de Transacción:</span>
+                        <p className="font-medium text-slate-900 dark:text-slate-100 mt-1 font-mono text-xs break-all">
+                          {transaction.transactionHash}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                )}
-                {transaction.utc && (
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-400">UTC:</span>
-                    <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
-                      {transaction.utc}
-                    </p>
-                  </div>
-                )}
-                {transaction.fileName && (
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-400">Archivo:</span>
-                    <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
-                      {transaction.fileName}
-                    </p>
-                  </div>
-                )}
-                {transaction.importedAt && (
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-400">Importado el:</span>
-                    <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
-                      {formatDate(transaction.importedAt)}
-                    </p>
-                  </div>
-                )}
-                {transaction.transactionHash && (
-                  <div className="col-span-2">
-                    <span className="text-slate-500 dark:text-slate-400">Hash de Transacción:</span>
-                    <p className="font-medium text-slate-900 dark:text-slate-100 mt-1 font-mono text-xs break-all">
-                      {transaction.transactionHash}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
 
         </div>

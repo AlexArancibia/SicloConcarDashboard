@@ -318,7 +318,10 @@ export default function DocumentDetailPage({ params }: DocumentDetailPageProps) 
                       <TableHead>Descripción</TableHead>
                       <TableHead className="text-right">Cantidad</TableHead>
                       <TableHead className="text-right">Precio Unit.</TableHead>
-                      <TableHead className="text-right">IGV</TableHead>
+                      {/* ✅ Ocultar columna IGV para documentos tipo RECEIPT ya que no generan IGV */}
+                      {document.documentType !== "RECEIPT" && (
+                        <TableHead className="text-right">IGV</TableHead>
+                      )}
                       <TableHead className="text-right">Total</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -337,9 +340,12 @@ export default function DocumentDetailPage({ params }: DocumentDetailPageProps) 
                         <TableCell className="text-right">
                           {formatCurrency(line.unitPrice, document.currency)}
                         </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(line.igvAmount || 0, document.currency)}
-                        </TableCell>
+                        {/* ✅ Ocultar celda IGV para documentos tipo RECEIPT ya que no generan IGV */}
+                        {document.documentType !== "RECEIPT" && (
+                          <TableCell className="text-right">
+                            {formatCurrency(line.igvAmount || 0, document.currency)}
+                          </TableCell>
+                        )}
                         <TableCell className="text-right font-medium">
                           {formatCurrency(line.lineTotal, document.currency)}
                         </TableCell>
@@ -368,10 +374,13 @@ export default function DocumentDetailPage({ params }: DocumentDetailPageProps) 
                   <span className="text-muted-foreground">Subtotal:</span>
                   <span className="font-medium">{formatCurrency(document.subtotal, document.currency)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">IGV:</span>
-                  <span className="font-medium">{formatCurrency(document.igv, document.currency)}</span>
-                </div>
+                {/* ✅ Ocultar IGV para documentos tipo RECEIPT ya que no generan IGV */}
+                {document.documentType !== "RECEIPT" && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">IGV:</span>
+                    <span className="font-medium">{formatCurrency(document.igv, document.currency)}</span>
+                  </div>
+                )}
                 {document.otherTaxes && Number.parseFloat(document.otherTaxes) > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Otros Impuestos:</span>

@@ -99,35 +99,35 @@ export function TemplateSearchDialog({ open, onOpenChange, onTemplateSelect }: T
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="w-full sm:max-w-lg md:max-w-2xl lg:max-w-3xl xl:max-w-4xl max-h-[85vh] overflow-hidden flex flex-col p-4 sm:p-5">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            Buscar Plantilla de Asiento Contable
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
+            Buscar plantilla de asiento contable
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col gap-3">
           {/* Filtros */}
-          <div className="flex gap-4 mb-4">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
-                  placeholder="Buscar por número, nombre o tipo de transacción..."
+                  placeholder="Buscar número, nombre o tipo..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 h-9 text-sm"
                 />
               </div>
             </div>
-            <div className="w-48">
+            <div>
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value as AccountingEntryFilter | "ALL")}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
               >
-                <option value="ALL">Todos los filtros</option>
+                <option value="ALL">Todos</option>
                 <option value="INVOICES">FACTURAS</option>
                 <option value="PAYROLL">RH</option>
                 <option value="BOTH">AMBOS</option>
@@ -163,40 +163,32 @@ export function TemplateSearchDialog({ open, onOpenChange, onTemplateSelect }: T
                     }`}
                     onClick={() => handleTemplateSelect(template)}
                   >
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="font-mono font-semibold text-sm bg-gray-100 px-2 py-1 rounded">
+                    <CardContent className="p-3 sm:p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                            <div className="font-mono font-semibold text-[11px] sm:text-sm bg-gray-100 px-2 py-0.5 rounded">
                               {template.templateNumber}
                             </div>
-                            <h3 className="font-medium">{template.name}</h3>
+                            <h3 className="font-medium text-sm truncate">{template.name}</h3>
                             {getFilterBadge(template.filter)}
                             {getStatusBadge(template.isActive)}
                           </div>
                           
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                            <div>
-                              <span className="font-medium">Tipo:</span> {template.transactionType}
-                            </div>
-                            <div>
-                              <span className="font-medium">Moneda:</span> {template.currency}
-                            </div>
-                            <div>
-                              <span className="font-medium">Líneas:</span> {template.lines?.length || 0}
-                            </div>
-                            <div>
-                              <span className="font-medium">Condiciones:</span> {template.condition ? "Sí" : "No"}
-                            </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1 text-xs sm:text-sm text-gray-600">
+                            <div className="truncate"><span className="font-medium">Tipo:</span> {template.transactionType}</div>
+                            <div className="truncate"><span className="font-medium">Moneda:</span> {template.currency}</div>
+                            <div className="truncate"><span className="font-medium">Líneas:</span> {template.lines?.length || 0}</div>
+                            <div className="truncate"><span className="font-medium">Condiciones:</span> {template.condition ? "Sí" : "No"}</div>
                           </div>
 
                           {template.description && (
-                            <p className="text-sm text-gray-500 mt-2">{template.description}</p>
+                            <p className="text-xs sm:text-sm text-gray-500 mt-2 line-clamp-2">{template.description}</p>
                           )}
                         </div>
 
                         {selectedTemplate?.id === template.id && (
-                          <CheckCircle className="w-5 h-5 text-blue-500" />
+                          <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 flex-shrink-0" />
                         )}
                       </div>
                     </CardContent>
@@ -207,21 +199,22 @@ export function TemplateSearchDialog({ open, onOpenChange, onTemplateSelect }: T
           </div>
 
           {/* Acciones */}
-          <div className="flex items-center justify-between pt-4 border-t">
-            <div className="text-sm text-gray-500">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-3 border-t">
+            <div className="text-xs sm:text-sm text-gray-500">
               {selectedTemplate ? (
                 <span>Plantilla seleccionada: <strong>{selectedTemplate.name}</strong></span>
               ) : (
                 "Selecciona una plantilla para continuar"
               )}
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleCancel}>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="outline" onClick={handleCancel} className="flex-1 sm:flex-none h-9 text-sm">
                 Cancelar
               </Button>
               <Button 
                 onClick={handleConfirmSelection}
                 disabled={!selectedTemplate}
+                className="flex-1 sm:flex-none h-9 text-sm"
               >
                 Seleccionar Plantilla
               </Button>

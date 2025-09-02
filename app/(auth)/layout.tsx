@@ -1,12 +1,16 @@
   
 "use client"
 import "../globals.css";
- import { Inter } from 'next/font/google';
+ import { Lato } from 'next/font/google';
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useAuthInitializer } from "@/hooks/useAuthInitializer";
  
 
-const inter = Inter({ subsets: ['latin'] });
+const lato = Lato({ 
+  weight: ['300', '400', '700', '900'],
+  subsets: ['latin'],
+  display: 'swap',
+});
 
  
 
@@ -20,7 +24,7 @@ export default function RootLayout({
  
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={lato.className}>
         <ThemeProvider>
  
               <div className="flex-1 bg-background">

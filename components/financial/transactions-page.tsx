@@ -42,6 +42,7 @@ import TransactionImportModal from "./transaction-import-modal"
 import { Checkbox } from "../ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { TransactionDetailsDialog } from "@/components/transaction-details-dialog"
 
 export default function TransactionsPage() {
   const [filters, setFilters] = useState<{
@@ -66,6 +67,8 @@ export default function TransactionsPage() {
 
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([])
+  const [showTransactionDetailsDialog, setShowTransactionDetailsDialog] = useState(false)
+  const [selectedTransactionForDetails, setSelectedTransactionForDetails] = useState<Transaction | null>(null)
 
   const { toast } = useToast()
   const { company, user } = useAuthStore()
@@ -183,6 +186,11 @@ export default function TransactionsPage() {
     }
   }
 
+  const handleViewTransactionDetails = (transaction: Transaction) => {
+    setSelectedTransactionForDetails(transaction)
+    setShowTransactionDetailsDialog(true)
+  }
+
   const handleBulkDelete = async () => {
     if (selectedTransactionIds.length === 0) {
       toast({ title: "Nada seleccionado", description: "Seleccione transacciones para eliminar." })
@@ -292,21 +300,33 @@ export default function TransactionsPage() {
   }
 
   const filterConfigs = [
-    { key: "search", type: "search" as const, placeholder: "Descripción, Operación, Referencia..." },
+    { 
+      key: "search", 
+      type: "search" as const, 
+      placeholder: "Descripción, Operación, Referencia...",
+      priority: "high" as const,
+    },
+    {
+      key: "dateRange", 
+      type: "daterange" as const, 
+      placeholder: "Período Transacción",
+      priority: "high" as const,
+    },
     {
       key: "bankAccountId",
       type: "select" as const,
-      placeholder: "Cuenta Bancaria",
+      placeholder: "Seleccionar cuenta bancaria",
       options: [
         { value: "all", label: "Todas las Cuentas" },
         ...bankAccounts.map((acc) => ({ value: acc.id, label: `${acc.bank?.name} - ${acc.accountNumber} (${acc.currency})` })),
       ],
-      className: "min-w-48",
+      maxWidth: "min-w-48 max-w-64",
+      priority: "medium" as const,
     },
     {
       key: "status",
       type: "select" as const,
-      placeholder: "Estado",
+      placeholder: "Seleccionar estado de transacción",
       options: [
         { value: "all", label: "Todos los Estados" },
         { value: "PENDING", label: "Pendiente" },
@@ -314,12 +334,13 @@ export default function TransactionsPage() {
         { value: "RECONCILED", label: "Conciliado" },
         { value: "CANCELLED", label: "Cancelado" },
       ],
-      className: "min-w-36",
+      maxWidth: "min-w-36 max-w-44",
+      priority: "medium" as const,
     },
     {
       key: "type",
       type: "select" as const,
-      placeholder: "Tipo",
+      placeholder: "Seleccionar tipo de transacción",
       options: [
         { value: "all", label: "Todos los Tipos" },
         { value: "INCOME_SALES", label: "Venta (Ingreso)" },
@@ -353,11 +374,23 @@ export default function TransactionsPage() {
         { value: "ADJUSTMENT", label: "Ajuste (Egreso)" },
         { value: "REFUND", label: "Devolución (Egreso)" },
       ],
-      className: "min-w-48",
+      maxWidth: "min-w-48 max-w-64",
+      priority: "low" as const,
     },
-    { key: "dateRange", type: "daterange" as const, placeholder: "Período Transacción" },
-    { key: "minAmount", type: "search" as const, placeholder: "Monto Mín.", className: "w-32" },
-    { key: "maxAmount", type: "search" as const, placeholder: "Monto Máx.", className: "w-32" },
+    { 
+      key: "minAmount", 
+      type: "search" as const, 
+      placeholder: "Ingresar monto mínimo", 
+      maxWidth: "w-32",
+      priority: "low" as const,
+    },
+    { 
+      key: "maxAmount", 
+      type: "search" as const, 
+      placeholder: "Ingresar monto máximo", 
+      maxWidth: "w-32",
+      priority: "low" as const,
+    },
   ]
 
   const formatDate = (date: Date | string) => {
@@ -379,7 +412,39 @@ export default function TransactionsPage() {
 
   return (
     <>
-      <div className="space-y-4">
+      {/* Header Section - Título, descripción y botones por fuera */}
+      <div className="space-y-4 sm:space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center py-4 sm:py-8 pl-2 sm:pb-2 pb-2">
+          <div className="space-y-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">Transacciones Bancarias</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Administre las transacciones importadas desde los extractos bancarios.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <Button variant="outline" size="default" className="w-full sm:w-auto">
+              <Download className="w-4 h-4 mr-2" />
+              Exportar
+            </Button>
+            <Button size="default" onClick={() => setImportModalOpen(true)} className="w-full sm:w-auto">
+              <Upload className="w-4 h-4 mr-2" />
+              Importar Excel/CSV
+            </Button>
+            <Button 
+              variant="outline" 
+              size="default" 
+              onClick={() => loadTransactions()} 
+              disabled={loading}
+              className="w-full sm:w-auto"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Actualizar</span>
+              <span className="sm:hidden">Refrescar</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* Error Alert */}
         {error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -392,52 +457,48 @@ export default function TransactionsPage() {
           </Alert>
         )}
 
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Transacciones Bancarias</h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Administre las transacciones importadas desde los extractos bancarios.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm">
-              <Download className="w-4 h-4 mr-2" />
-              Exportar
-            </Button>
-            <Button size="sm" onClick={() => setImportModalOpen(true)}>
-              <Upload className="w-4 h-4 mr-2" />
-              Importar Excel/CSV
-            </Button>
-          </div>
-        </div>
-
-        <Card>
-          <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
+        {/* Filters Card */}
+        <Card className="border-0 shadow-none">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Filtros de Búsqueda
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
+          </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5" />
-                Transacciones ({loading ? "..." : total})
+        {/* Transactions Table Card */}
+        <Card className="border-0 shadow-none">
+          <CardHeader className="pb-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
+              <div className="flex items-center gap-3">
+                <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+                <div>
+                  <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                    Transacciones ({loading ? "..." : total})
+                  </CardTitle>
+                  {selectedTransactionIds.length > 0 && (
+                    <p className="text-sm text-blue-600 dark:text-blue-400 font-normal">
+                      {selectedTransactionIds.length} transacción(es) seleccionada(s)
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
                 {selectedTransactionIds.length > 0 && (
-                  <span className="text-sm text-primary font-medium ml-2">
-                    ({selectedTransactionIds.length} seleccionado(s))
-                  </span>
-                )}
-              </CardTitle>
-              <div className="flex items-center gap-2">
-                {selectedTransactionIds.length > 0 && (
-                  <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+                  <Button
+                    variant="destructive"
+                    size="default"
+                    onClick={handleBulkDelete}
+                    className="w-full sm:w-auto whitespace-nowrap"
+                  >
                     <Trash2 className="w-4 h-4 mr-2" />
-                    Eliminar ({selectedTransactionIds.length})
+                    <span className="hidden sm:inline">Eliminar Seleccionadas ({selectedTransactionIds.length})</span>
+                    <span className="sm:hidden">Eliminar ({selectedTransactionIds.length})</span>
                   </Button>
                 )}
-                <Button variant="outline" size="sm"  onClick={() => loadTransactions()} disabled={loading}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-                  Actualizar
-                </Button>
                 <Select
                   value={limit.toString()}
                   onValueChange={(value) => {
@@ -488,7 +549,6 @@ export default function TransactionsPage() {
                         <TableHead>Referencia/Operación</TableHead>
                         <TableHead className="text-center">Tipo</TableHead>
                         <TableHead className="text-right">Monto</TableHead>
-                        <TableHead className="text-right">Saldo</TableHead>
                         <TableHead className="text-center">Estado</TableHead>
                         <TableHead className="text-center">Acciones</TableHead>
                       </TableRow>
@@ -496,7 +556,7 @@ export default function TransactionsPage() {
                     <TableBody>
                       {transactions.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={10} className="h-24 text-center">
+                          <TableCell colSpan={9} className="h-24 text-center">
                             No se encontraron transacciones con los filtros aplicados.
                           </TableCell>
                         </TableRow>
@@ -536,9 +596,6 @@ export default function TransactionsPage() {
                             <TableCell className="text-right font-mono">
                               {formatCurrency(transaction.amount, transaction.bankAccount?.currencyRef?.symbol)}
                             </TableCell>
-                            <TableCell className="text-right font-mono">
-                              {formatCurrency(transaction.balance, transaction.bankAccount?.currencyRef?.symbol)}
-                            </TableCell>
                             <TableCell className="text-center">{getStatusBadge(transaction.status)}</TableCell>
                             <TableCell className="text-center">
                               <DropdownMenu>
@@ -550,15 +607,8 @@ export default function TransactionsPage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`#`}>
-                                      <Eye className="mr-2 h-4 w-4" /> Ver Detalles
-                                    </Link>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`#`}>
-                                      <Edit className="mr-2 h-4 w-4" /> Editar
-                                    </Link>
+                                  <DropdownMenuItem onClick={() => handleViewTransactionDetails(transaction)}>
+                                    <Eye className="mr-2 h-4 w-4" /> Ver Detalles
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem
@@ -630,7 +680,49 @@ export default function TransactionsPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Summary Statistics Cards */}
+        <Card className="border-0 shadow-none">
+          <CardHeader>
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Resumen de Transacciones
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {loading ? "..." : total}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Total Transacciones</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="text-2xl sm:text-3xl font-medium text-green-600 dark:text-green-400 mb-2">
+                  {loading ? "..." : transactions.filter((t) => t.transactionType.startsWith("INCOME")).length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-green-700 dark:text-green-300">Ingresos</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-800">
+                <div className="text-2xl sm:text-3xl font-medium text-red-600 dark:text-red-400 mb-2">
+                  {loading ? "..." : transactions.filter((t) => t.transactionType.startsWith("EXPENSE") || t.transactionType.startsWith("PAYROLL") || t.transactionType.startsWith("TAX")).length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-red-700 dark:text-red-300">Egresos</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                <div className="text-2xl sm:text-3xl font-medium text-amber-600 dark:text-amber-400 mb-2">
+                  {loading ? "..." : transactions.filter((t) => t.status === "PENDING").length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-amber-700 dark:text-amber-300">Pendientes</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+      <TransactionDetailsDialog
+        open={showTransactionDetailsDialog}
+        onOpenChange={setShowTransactionDetailsDialog}
+        transaction={selectedTransactionForDetails}
+      />
       <TransactionImportModal
         open={importModalOpen}
         onOpenChange={setImportModalOpen}

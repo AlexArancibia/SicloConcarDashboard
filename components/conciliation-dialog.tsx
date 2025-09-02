@@ -726,83 +726,50 @@ export function ConciliationDialog({
       const templateLines: CreateAccountingEntryLineDto[] = template.lines.map((line, index) => {
         let calculatedAmount = 0
 
-        if (shouldCalculateAmounts && line.calculationBase && line.value) {
-          const value = typeof line.value === 'string' ? parseFloat(line.value) : line.value
-          
+        // Calcular base en función del documento seleccionado
+        const doc = shouldCalculateAmounts ? selectedDocuments[0] : null
+        const valueNum = typeof line.value === 'string' ? parseFloat(line.value) : (line.value ?? 0)
+
+        const getBaseAmount = (): number => {
+          if (!doc) return 0
           switch (line.calculationBase) {
             case "SUBTOTAL":
-              // Para subtotal, usar el monto del documento directamente
-              calculatedAmount = documentAmount
-              break
+              return parseFloat(doc.subtotal)
             case "IGV":
-              // Para IGV, calcular el 18% del subtotal
-              calculatedAmount = documentAmount * 0.18
-              break
+              return parseFloat(doc.igv)
             case "TOTAL":
-              // Para total, usar el monto del documento
-              calculatedAmount = documentAmount
-              break
+              return parseFloat(doc.total)
             case "RENT":
-              // Para renta, usar el valor como porcentaje del monto
-              calculatedAmount = (documentAmount * value) / 100
-              break
-            case "TAX":
-              // Para impuestos, usar el valor como porcentaje del monto
-              calculatedAmount = (documentAmount * value) / 100
-              break
             case "RETENTION_AMOUNT":
-              // Para retención, verificar si es porcentaje o valor directo
-              if (line.applicationType === "PERCENTAGE") {
-                calculatedAmount = (documentAmount * value) / 100
-              } else {
-                calculatedAmount = typeof value === 'number' ? value : 0
-              }
-              break
+              return parseFloat(doc.retentionAmount)
+            case "TAX":
+              return parseFloat(doc.otherTaxes)
             case "DETRACTION_AMOUNT":
-              // Para detracción, verificar si es porcentaje o valor directo
-              if (line.applicationType === "PERCENTAGE") {
-                calculatedAmount = (documentAmount * value) / 100
-              } else {
-                calculatedAmount = typeof value === 'number' ? value : 0
-              }
-              break
+              return doc.detraction?.amount ? parseFloat(doc.detraction.amount) : 0
             case "NET_PAYABLE":
-              // Para monto neto a pagar, verificar si es porcentaje o valor directo
-              if (line.applicationType === "PERCENTAGE") {
-                calculatedAmount = (documentAmount * value) / 100
-              } else {
-                calculatedAmount = typeof value === 'number' ? value : 0
-              }
-              break
+              return parseFloat(doc.netPayableAmount)
             case "PENDING_AMOUNT":
-              // Para monto pendiente, verificar si es porcentaje o valor directo
-              if (line.applicationType === "PERCENTAGE") {
-                calculatedAmount = (documentAmount * value) / 100
-              } else {
-                calculatedAmount = typeof value === 'number' ? value : 0
-              }
-              break
+              return parseFloat(doc.pendingAmount)
             case "CONCILIATED_AMOUNT":
-              // Para monto conciliado, verificar si es porcentaje o valor directo
-              if (line.applicationType === "PERCENTAGE") {
-                calculatedAmount = (documentAmount * value) / 100
-              } else {
-                calculatedAmount = typeof value === 'number' ? value : 0
-              }
-              break
-            case "OTHER":
-              // Para otros, usar el valor directamente si es numérico
-              calculatedAmount = typeof value === 'number' ? value : 0
-              break
+              return parseFloat(doc.conciliatedAmount)
             default:
-              // Para otros casos, no calcular
-              calculatedAmount = 0
+              return shouldCalculateAmounts ? documentAmount : 0
           }
         }
 
-        // Si el tipo de aplicación es TRANSACTION_AMOUNT, usar el monto de la transacción
+        // Regla general según tipo de aplicación
         if (line.applicationType === "TRANSACTION_AMOUNT" && selectedTransaction) {
           calculatedAmount = Math.abs(parseFloat(selectedTransaction.amount))
+        } else if (shouldCalculateAmounts) {
+          const baseAmount = getBaseAmount()
+          if (line.applicationType === "PERCENTAGE") {
+            calculatedAmount = (baseAmount * (Number(valueNum) || 0)) / 100
+          } else if (line.applicationType === "FIXED_AMOUNT") {
+            calculatedAmount = Number(valueNum) || 0
+          } else {
+            // Fallback: si no se especifica, usar la base directamente
+            calculatedAmount = baseAmount
+          }
         }
 
         return {
@@ -1271,14 +1238,6 @@ export function ConciliationDialog({
                       <AlertCircle className="h-4 w-4 text-orange-600" />
                     )}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setActiveTab("documents")}
-                    className="h-6 px-2 text-xs"
-                  >
-                    Editar
-                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs p-3">

@@ -880,7 +880,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
             
             {/* Transaction Information */}
             {conciliation.transaction && (
-              <Card className="bg-white dark:bg-slate-800 shadow-sm">
+              <Card className="bg-white dark:bg-slate-800 border-0 shadow-none">
                 <CardHeader className="pb-4">
                   <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-200">
                     <DollarSign className="h-5 w-5 text-slate-600 dark:text-slate-400" />
@@ -894,7 +894,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
             )}
 
             {/* Conciliation Items (Documents or Detractions) */}
-            <Card className="bg-white dark:bg-slate-800 shadow-sm">
+            <Card className="bg-white dark:bg-slate-800 border-0 shadow-none">
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-200">
                   <ReceiptText className="h-5 w-5 text-slate-600 dark:text-slate-400" />
@@ -926,7 +926,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
             
             {/* Conciliation Expenses */}
             {conciliation.expenses && conciliation.expenses.length > 0 && (
-              <Card className="bg-white dark:bg-slate-800 shadow-sm">
+              <Card className="bg-white dark:bg-slate-800 border-0 shadow-none">
                 <CardHeader className="pb-4">
                   <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-200">
                     <Banknote className="h-5 w-5 text-slate-600 dark:text-slate-400" />
@@ -940,7 +940,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
             )}
 
             {/* Accounting Entries related to this conciliation */}
-            <Card className="bg-white dark:bg-slate-800 shadow-sm">
+            <Card className="bg-white dark:bg-slate-800 border-0 shadow-none">
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-200">
                   <Hash className="h-5 w-5 text-slate-600 dark:text-slate-400" />
@@ -954,7 +954,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
 
             {/* Accounting Summary */}
             {conciliation.summary?.accountingSummary && (
-              <Card className="bg-white dark:bg-slate-800 shadow-sm">
+              <Card className="bg-white dark:bg-slate-800 border-0 shadow-none">
                 <CardHeader className="pb-4">
                   <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-200">
                     <Percent className="h-5 w-5 text-slate-600 dark:text-slate-400" />
@@ -971,7 +971,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
           {/* Sidebar Area */}
           <div className="xl:col-span-1 space-y-6">
             {/* General Information */}
-            <Card className="bg-white dark:bg-slate-800 shadow-sm">
+            <Card className="bg-white dark:bg-slate-800 border-0 shadow-none">
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-200">
                   <FileText className="h-5 w-5 text-slate-600 dark:text-slate-400" />

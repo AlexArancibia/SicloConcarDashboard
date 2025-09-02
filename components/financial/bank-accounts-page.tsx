@@ -379,11 +379,12 @@ export default function BankAccountsPage() {
       key: "search",
       type: "search" as const,
       placeholder: "Banco, Número, Alias...",
+      priority: "high" as const,
     },
     {
       key: "accountType",
       type: "select" as const,
-      placeholder: "Tipo de cuenta",
+      placeholder: "Seleccionar tipo de cuenta",
       options: [
         { value: "all", label: "Todos los tipos" },
         { value: "CHECKING", label: "Corriente" },
@@ -391,121 +392,112 @@ export default function BankAccountsPage() {
         { value: "CREDIT", label: "Crédito" },
         { value: "INVESTMENT", label: "Inversión" },
       ],
-      className: "min-w-40",
+      maxWidth: "w-44",
+      priority: "medium" as const,
     },
     {
       key: "currency",
       type: "select" as const,
-      placeholder: "Moneda",
+      placeholder: "Seleccionar tipo de moneda",
       options: [
         { value: "all", label: "Todas las monedas" },
         { value: "PEN", label: "Soles (PEN)" },
         { value: "USD", label: "Dólares (USD)" },
         { value: "EUR", label: "Euros (EUR)" },
       ],
-      className: "min-w-32",
+      maxWidth: "w-36",
+      priority: "medium" as const,
     },
     {
       key: "isActive",
       type: "select" as const,
-      placeholder: "Estado",
+      placeholder: "Seleccionar estado de cuenta",
       options: [
         { value: "all", label: "Todos los estados" },
         { value: "active", label: "Activas" },
         { value: "inactive", label: "Inactivas" },
       ],
-      className: "min-w-32",
+      maxWidth: "w-36",
+      priority: "low" as const,
     },
   ]
 
   return (
-    <div className="space-y-6 w-full">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
-            Gestión de Cuentas Bancarias
-          </h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
-            Administre las cuentas bancarias de la empresa
-          </p>
+    <div className="space-y-4 sm:space-y-4">
+      {/* Header Section - Título, descripción y botones por fuera */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center py-4 sm:py-8 pl-2 sm:pb-2 pb-2">
+          <div className="space-y-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">Gestión de Cuentas Bancarias</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Administre las cuentas bancarias de la empresa
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <Button variant="outline" size="default" className="w-full sm:w-auto">
+              <Building2 className="w-4 h-4 mr-2" />
+              Exportar
+            </Button>
+            <Button size="default" onClick={openCreateModal} className="w-full sm:w-auto">
+              <Plus className="w-4 h-4 mr-2" />
+              Nueva Cuenta
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
-          <Button variant="outline" size="sm" className="border-slate-700 text-slate-300 text-xs sm:text-sm">
-            <Building2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-            <span className="hidden sm:inline">Exportar</span>
-            <span className="sm:hidden">Export</span>
-          </Button>
-          <Button
-            size="sm"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm"
-            onClick={openCreateModal}
-          >
-            <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-            <span className="hidden sm:inline">Nueva Cuenta</span>
-            <span className="sm:hidden">Nueva</span>
-          </Button>
 
-        </div>
-      </div>
-
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Cuentas</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
+        {/* Summary Statistics Cards */}
+        <Card className="border-0 shadow-none">
+          <CardHeader>
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Resumen de Cuentas Bancarias
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {stats.total}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Total Cuentas</p>
               </div>
-              <Wallet className="w-8 h-8 text-blue-500" />
+              <div className="text-center p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="text-2xl sm:text-3xl font-medium text-green-600 dark:text-green-400 mb-2">
+                  {stats.active}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-green-700 dark:text-green-300">Cuentas Activas</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-800">
+                <div className="text-2xl sm:text-3xl font-medium text-red-600 dark:text-red-400 mb-2">
+                  {stats.total - stats.active}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-red-700 dark:text-red-300">Cuentas Inactivas</p>
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Cuentas Activas</p>
-                <p className="text-2xl font-bold text-green-600">{stats.active}</p>
-              </div>
-              <Power className="w-8 h-8 text-green-500" />
-            </div>
+        {/* Filters Card */}
+        <Card className="border-0 shadow-none">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Filtros de Búsqueda
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
           </CardContent>
         </Card>
 
-
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Inactivas</p>
-                <p className="text-2xl font-bold text-red-600">{stats.total - stats.active}</p>
-              </div>
-              <PowerOff className="w-8 h-8 text-red-500" />
+        {/* Bank Accounts Table Card */}
+        <Card className="border-0 shadow-none">
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-3">
+              <Wallet className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+              <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                Cuentas Bancarias ({loading ? "..." : filteredAccounts.length})
+              </CardTitle>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <Card>
-        <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
-      </Card>
-
-      {/* Bank Accounts Table */}
-      <Card>
-        <CardHeader className="p-4 sm:p-6">
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-base sm:text-lg">
-              <Wallet className="w-4 h-4 sm:w-5 sm:h-5" />
-              Cuentas Bancarias ({loading ? "..." : filteredAccounts.length})
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-6 pt-0">
+          </CardHeader>
+          <CardContent>
           {loading ? (
             <TableSkeleton rows={6} columns={9} />
           ) : (

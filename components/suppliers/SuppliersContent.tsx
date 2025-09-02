@@ -166,11 +166,12 @@ export default function SuppliersContent() {
       key: "search",
       type: "search" as const,
       placeholder: "RUC, Razón Social, Nombre...",
+      priority: "high" as const,
     },
     {
       key: "documentType",
       type: "select" as const,
-      placeholder: "Tipo de documento",
+      placeholder: "Seleccionar tipo de documento",
       options: [
         { value: "all", label: "Todos los tipos" },
         { value: "DNI", label: "DNI" },
@@ -178,12 +179,13 @@ export default function SuppliersContent() {
         { value: "CE", label: "CE" },
         { value: "PASSPORT", label: "Pasaporte" },
       ],
-      className: "min-w-40",
+      maxWidth: "min-w-40 max-w-48",
+      priority: "medium" as const,
     },
     {
       key: "status",
       type: "select" as const,
-      placeholder: "Estado del proveedor",
+      placeholder: "Seleccionar estado del proveedor",
       options: [
         { value: "all", label: "Todos los estados" },
         { value: "ACTIVE", label: "Activo" },
@@ -191,12 +193,13 @@ export default function SuppliersContent() {
         { value: "BLOCKED", label: "Bloqueado" },
         { value: "PENDING_APPROVAL", label: "Pendiente" },
       ],
-      className: "min-w-40",
+      maxWidth: "min-w-40 max-w-48",
+      priority: "medium" as const,
     },
     {
       key: "supplierType",
       type: "select" as const,
-      placeholder: "Tipo de proveedor",
+      placeholder: "Seleccionar tipo de proveedor",
       options: [
         { value: "all", label: "Todos los tipos" },
         { value: "INDIVIDUAL", label: "Persona Natural" },
@@ -204,7 +207,8 @@ export default function SuppliersContent() {
         { value: "GOVERNMENT", label: "Entidad Gubernamental" },
         { value: "FOREIGN", label: "Extranjero" },
       ],
-      className: "min-w-40",
+      maxWidth: "min-w-40 max-w-48",
+      priority: "low" as const,
     },
   ]
 
@@ -398,65 +402,82 @@ export default function SuppliersContent() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestión de Proveedores</h1>
-          <p className="text-gray-600 dark:text-gray-400">Administre la información de sus proveedores y emisores</p>
+    <>
+      {/* Header Section - Título, descripción y botones por fuera */}
+      <div className="space-y-4 sm:space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center py-4 sm:py-8 pl-2 sm:pb-2 pb-2">
+          <div className="space-y-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">Gestión de Proveedores</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Administre la información de sus proveedores y emisores
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="default" 
+                  disabled={exporting || suppliers.length === 0}
+                  className="w-full sm:w-auto"
+                >
+                  {exporting ? (
+                    <>
+                      <Download className="w-4 h-4 mr-2 animate-pulse" />
+                      <span className="hidden sm:inline">Exportando...</span>
+                      <span className="sm:hidden">Exportando</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4 mr-2" />
+                      <span className="hidden sm:inline">Exportar</span>
+                      <span className="sm:hidden">Exportar</span>
+                    </>
+                  )}
+                  <ChevronDown className="w-4 h-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleExportWithFilters('csv')}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Exportar CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExportWithFilters('excel')}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Exportar Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button size="default" onClick={() => router.push("/suppliers/new")} className="w-full sm:w-auto">
+              <Plus className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Nuevo Proveedor</span>
+              <span className="sm:hidden">Nuevo</span>
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                disabled={exporting || suppliers.length === 0}
-              >
-                {exporting ? (
-                  <>
-                    <Download className="w-4 h-4 mr-2 animate-pulse" />
-                    Exportando...
-                  </>
-                ) : (
-                  <>
-                    <FileText className="w-4 h-4 mr-2" />
-                    Exportar
-                  </>
-                )}
-                <ChevronDown className="w-4 h-4 ml-2" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleExportWithFilters('csv')}>
-                <FileText className="w-4 h-4 mr-2" />
-                Exportar CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExportWithFilters('excel')}>
-                <FileText className="w-4 h-4 mr-2" />
-                Exportar Excel
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button size="sm" onClick={() => router.push("/suppliers/new")}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nuevo Proveedor
-          </Button>
-        </div>
-      </div>
 
-      <Card>
-        <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
-      </Card>
+        {/* Filters Card */}
+        <Card className="border-0 shadow-none">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Filtros de Búsqueda
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Building2 className="w-5 h-5" />
-              Proveedores ({loading ? "..." : pagination.total})
+        {/* Suppliers Table Card */}
+        <Card className="border-0 shadow-none">
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-3">
+              <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+              <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                Proveedores ({loading ? "..." : pagination.total})
+              </CardTitle>
             </div>
-          </CardTitle>
-        </CardHeader>
+          </CardHeader>
         <CardContent>
           {loading ? (
             <TableSkeleton rows={8} columns={8} />
@@ -587,46 +608,43 @@ export default function SuppliersContent() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Proveedores</p>
-              <p className="text-2xl font-bold">{loading ? "..." : pagination.total}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Activos</p>
-              <p className="text-2xl font-bold text-green-600">
-                {loading ? "..." : suppliers.filter((s) => s.status === "ACTIVE").length}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Persona Natural</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {loading ? "..." : suppliers.filter((s) => s.supplierType === "INDIVIDUAL").length}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Persona Jurídica</p>
-              <p className="text-2xl font-bold text-amber-600">
-                {loading ? "..." : suppliers.filter((s) => s.supplierType === "COMPANY").length}
-              </p>
+        {/* Summary Statistics Cards */}
+        <Card className="border-0 shadow-none">
+          <CardHeader>
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Resumen de Proveedores
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {loading ? "..." : pagination.total}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Total Proveedores</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="text-2xl sm:text-3xl font-medium text-green-600 dark:text-green-400 mb-2">
+                  {loading ? "..." : suppliers.filter((s) => s.status === "ACTIVE").length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-green-700 dark:text-green-300">Activos</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {loading ? "..." : suppliers.filter((s) => s.supplierType === "INDIVIDUAL").length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Persona Natural</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                <div className="text-2xl sm:text-3xl font-medium text-amber-600 dark:text-amber-400 mb-2">
+                  {loading ? "..." : suppliers.filter((s) => s.supplierType === "COMPANY").length}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-amber-700 dark:text-amber-300">Persona Jurídica</p>
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
-    </div>
+    </>
   )
 }

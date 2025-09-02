@@ -1,18 +1,12 @@
 "use client"
 import "../globals.css";
  
-import { DM_Sans } from 'next/font/google';
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useAuthInitializer } from "@/hooks/useAuthInitializer";
 import { Toaster } from "@/components/ui/toaster";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/sidebar";
- 
- 
-
-const inter = DM_Sans({ subsets: ['latin'] });
-
- 
+import { DashboardHeader } from "../../components/dashboard-header";
 
 export default function RootLayout({
   children,
@@ -24,34 +18,23 @@ export default function RootLayout({
  
   return (
     <html lang="en">
-      <body className={inter.className + " bg-blue-50/30"}>
+      <body className="font-avenir bg-blue-50/30">
         <ThemeProvider>
-          <SidebarProvider>
-                    <AppSidebar />
-                    <SidebarInset> 
-                      
-        
-             
-              <div className="flex-1 bg-sidebar p-8">
- 
-                {children}
-                
-                <Toaster />      
- 
-
+          <SidebarProvider defaultOpen={false}>
+            <AppSidebar />
+            <SidebarInset> 
+              <DashboardHeader />
               
- 
-            </div>
+              <div className="flex flex-1 flex-col gap-4 p-4 pt-0 min-h-0 overflow-hidden">
+                <div className="h-full overflow-auto bg-background">
+                  {children}
+                </div>
+                <Toaster />      
+              </div>
             </SidebarInset>
           </SidebarProvider>
- 
         </ThemeProvider>
       </body>
     </html>
   );
 }
-
-// function StoreInitializer() {
-//   useStoreInit()
-//   return null
-// }

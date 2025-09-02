@@ -59,9 +59,7 @@ export default function BankAccountsSummary() {
     },
   ]
 
-  const totalBalancePEN = accounts.filter((acc) => acc.currency === "PEN").reduce((sum, acc) => sum + acc.balance, 0)
 
-  const totalBalanceUSD = accounts.filter((acc) => acc.currency === "USD").reduce((sum, acc) => sum + acc.balance, 0)
 
   const getStatusBadge = (status: string) => {
     return status === "active" ? (
@@ -102,21 +100,7 @@ export default function BankAccountsSummary() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Resumen de Saldos */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4">
-          <div className="text-center p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">Total PEN</p>
-            <p className="text-sm sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">
-              S/ {totalBalancePEN.toLocaleString("es-PE", { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div className="text-center p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
-            <p className="text-xs text-blue-600 dark:text-blue-400">Total USD</p>
-            <p className="text-sm sm:text-lg font-bold text-blue-600 dark:text-blue-400">
-              $ {totalBalanceUSD.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-        </div>
+
 
         {/* Lista de Cuentas */}
         <div className="space-y-2">
@@ -145,13 +129,7 @@ export default function BankAccountsSummary() {
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0 ml-2">
-                    <p className="font-semibold text-card-foreground text-sm">
-                      {account.currency}{" "}
-                      {account.balance.toLocaleString(account.currency === "PEN" ? "es-PE" : "en-US", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </p>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 mt-1">
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
                       <Eye className="w-3 h-3" />
                     </Button>
                   </div>

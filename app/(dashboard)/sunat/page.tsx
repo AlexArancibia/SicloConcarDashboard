@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ScrollArea } from "@/components/ui/scroll-area"
+
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -81,26 +81,26 @@ export default function SunatPage() {
 
   useEffect(() => {
     if (user?.companyId) {
-      fetchSunatRhe(user.companyId)
-      fetchSunatInvoices(user.companyId)
+      fetchSunatRhe(user.companyId, { page: 1, limit: pageSize })
+      fetchSunatInvoices(user.companyId, { page: 1, limit: pageSize })
       getSunatStats(user.companyId)
     }
-  }, [user?.companyId, fetchSunatRhe, fetchSunatInvoices, getSunatStats])
+  }, [user?.companyId, pageSize, fetchSunatRhe, fetchSunatInvoices, getSunatStats])
 
   const handleSearch = (term: string, type: "rhe" | "invoices") => {
     if (!user?.companyId) return
 
     if (term.trim()) {
       if (type === "rhe") {
-        fetchSunatRhe(user.companyId, {searchTerm:term})
+        fetchSunatRhe(user.companyId, {searchTerm:term, page: 1, limit: pageSize})
       } else {
-        fetchSunatInvoices(user.companyId, {searchTerm:term})
+        fetchSunatInvoices(user.companyId, {searchTerm:term, page: 1, limit: pageSize})
       }
     } else {
       if (type === "rhe") {
-        fetchSunatRhe(user.companyId)
+        fetchSunatRhe(user.companyId, {page: 1, limit: pageSize})
       } else {
-        fetchSunatInvoices(user.companyId)
+        fetchSunatInvoices(user.companyId, {page: 1, limit: pageSize})
       }
     }
   }
@@ -111,21 +111,42 @@ export default function SunatPage() {
     clearErrors()
   }
 
-  // Pagination logic
-  const getCurrentPageData = (data: any[], page: number) => {
-    const startIndex = (page - 1) * pageSize
-    const endIndex = startIndex + pageSize
-    return data.slice(startIndex, endIndex)
+  // Handle page size change
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize)
+    setRhePage(1)
+    setInvoicePage(1)
+    
+    if (user?.companyId) {
+      if (activeTab === "rhe") {
+        fetchSunatRhe(user.companyId, { page: 1, limit: newPageSize })
+      } else {
+        fetchSunatInvoices(user.companyId, { page: 1, limit: newPageSize })
+      }
+    }
   }
 
-  const getTotalPages = (totalItems: number) => {
-    return Math.ceil(totalItems / pageSize)
+  // Handle page change
+  const handlePageChange = (newPage: number, type: "rhe" | "invoices") => {
+    if (!user?.companyId) return
+
+    if (type === "rhe") {
+      setRhePage(newPage)
+      fetchSunatRhe(user.companyId, { page: newPage, limit: pageSize })
+    } else {
+      setInvoicePage(newPage)
+      fetchSunatInvoices(user.companyId, { page: newPage, limit: pageSize })
+    }
   }
 
-  const currentRheData = getCurrentPageData(rheRecords, rhePage)
-  const currentInvoiceData = getCurrentPageData(invoices, invoicePage)
-  const rheTotalPages = getTotalPages(rheRecords.length)
-  const invoiceTotalPages = getTotalPages(invoices.length)
+  // Get pagination data from store
+  const { rhePagination, invoicesPagination } = useSunatStore()
+  
+  // Use backend pagination data
+  const currentRheData = rheRecords
+  const currentInvoiceData = invoices
+  const rheTotalPages = rhePagination.totalPages
+  const invoiceTotalPages = invoicesPagination.totalPages
 
   // Selection logic
   const handleSelectRhe = (id: string, checked: boolean) => {
@@ -241,7 +262,7 @@ export default function SunatPage() {
         </span>
         <div className="flex items-center gap-2">
           <span>Filas por página:</span>
-          <Select value={pageSize.toString()} onValueChange={(value) => setPageSize(Number(value))}>
+          <Select value={pageSize.toString()} onValueChange={(value) => handlePageSizeChange(Number(value))}>
             <SelectTrigger className="w-20 h-8">
               <SelectValue />
             </SelectTrigger>
@@ -327,89 +348,66 @@ export default function SunatPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestión SUNAT</h1>
-          <p className="text-gray-600 dark:text-gray-400">Administre registros RHE y facturas importadas desde SUNAT</p>
+    <>
+      {/* Header Section - Título, descripción y botones por fuera */}
+      <div className="space-y-4 sm:space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center py-4 sm:py-8 pl-2 sm:pb-2 pb-2">
+          <div className="space-y-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">Gestión SUNAT</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Administre registros RHE y facturas importadas desde SUNAT
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <Button variant="outline" size="default" className="w-full sm:w-auto">
+              <Download className="w-4 h-4 mr-2" />
+              Exportar
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Download className="w-4 h-4 mr-2" />
-            Exportar
-          </Button>
-        </div>
-      </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total RHE</p>
-                {statsLoading ? (
-                  <Skeleton className="h-8 w-16 mt-1" />
-                ) : (
-                  <p className="text-2xl font-bold">{stats?.totalRheRecords || 0}</p>
-                )}
-                <p className="text-xs text-gray-500 mt-1">{stats?.currentMonthRhe || 0} este mes</p>
+        {/* Summary Statistics Cards */}
+        <Card className="border-0 shadow-none">
+          <CardHeader>
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Resumen de Gestión SUNAT
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {statsLoading ? "..." : stats?.totalRheRecords || 0}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Total RHE</p>
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  {stats?.currentMonthRhe || 0} este mes
+                </p>
               </div>
-              <FileText className="w-8 h-8 text-blue-500" />
+              <div className="text-center p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="text-2xl sm:text-3xl font-medium text-green-600 dark:text-green-400 mb-2">
+                  {statsLoading ? "..." : stats?.totalInvoices || 0}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-green-700 dark:text-green-300">Total Facturas</p>
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  {stats?.currentMonthInvoices || 0} este mes
+                </p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                  {statsLoading ? "..." : formatCurrency(stats?.totalRheAmount || 0)}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Monto RHE</p>
+              </div>
+              <div className="text-center p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="text-2xl sm:text-3xl font-medium text-green-600 dark:text-green-400 mb-2">
+                  {statsLoading ? "..." : formatCurrency(stats?.totalInvoiceAmount || 0)}
+                </div>
+                <p className="text-xs sm:text-sm font-normal text-green-700 dark:text-green-300">Monto Facturas</p>
+              </div>
             </div>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Facturas</p>
-                {statsLoading ? (
-                  <Skeleton className="h-8 w-16 mt-1" />
-                ) : (
-                  <p className="text-2xl font-bold">{stats?.totalInvoices || 0}</p>
-                )}
-                <p className="text-xs text-gray-500 mt-1">{stats?.currentMonthInvoices || 0} este mes</p>
-              </div>
-              <Receipt className="w-8 h-8 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Monto RHE</p>
-                {statsLoading ? (
-                  <Skeleton className="h-8 w-20 mt-1" />
-                ) : (
-                  <p className="text-2xl font-bold text-blue-600">{formatCurrency(stats?.totalRheAmount || 0)}</p>
-                )}
-              </div>
-              <DollarSign className="w-8 h-8 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Monto Facturas</p>
-                {statsLoading ? (
-                  <Skeleton className="h-8 w-20 mt-1" />
-                ) : (
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(stats?.totalInvoiceAmount || 0)}</p>
-                )}
-              </div>
-              <TrendingUp className="w-8 h-8 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -516,96 +514,92 @@ export default function SunatPage() {
                 </div>
               ) : (
                 <div className="border-t">
-                  <div className="overflow-hidden">
-                    <ScrollArea className="h-96 w-full">
-                      <div className="min-w-max">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/50">
-                              <TableHead className="w-12 sticky left-0 bg-muted/50 z-20 border-r">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="w-12 sticky left-0 bg-muted/50 z-20 border-r">
+                            <Checkbox
+                              checked={currentRheData.length > 0 && selectedRheIds.length === currentRheData.length}
+                              onCheckedChange={handleSelectAllRhe}
+                            />
+                          </TableHead>
+                          <TableHead className="sticky left-12 bg-muted/50 z-20 border-r shadow-sm">
+                            Fecha Emisión
+                          </TableHead>
+                          <TableHead className="whitespace-nowrap">Documento</TableHead>
+                          <TableHead className="whitespace-nowrap">Emisor</TableHead>
+                          <TableHead className="whitespace-nowrap">Descripción</TableHead>
+                          <TableHead className="whitespace-nowrap">Moneda</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Renta Bruta</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Impuesto</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Renta Neta</TableHead>
+                          <TableHead className="text-center whitespace-nowrap">Estado</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {currentRheData.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={10} className="text-center py-8">
+                              <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                              <p className="text-gray-500">No se encontraron registros RHE</p>
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          currentRheData.map((record) => (
+                            <TableRow key={record.id} className="hover:bg-muted/30">
+                              <TableCell className="sticky left-0 bg-background z-10 border-r">
                                 <Checkbox
-                                  checked={currentRheData.length > 0 && selectedRheIds.length === currentRheData.length}
-                                  onCheckedChange={handleSelectAllRhe}
+                                  checked={selectedRheIds.includes(record.id)}
+                                  onCheckedChange={(checked) => handleSelectRhe(record.id, checked as boolean)}
                                 />
-                              </TableHead>
-                              <TableHead className="sticky left-12 bg-muted/50 z-20 border-r shadow-sm">
-                                Fecha Emisión
-                              </TableHead>
-                              <TableHead className="whitespace-nowrap">Documento</TableHead>
-                              <TableHead className="whitespace-nowrap">Emisor</TableHead>
-                              <TableHead className="whitespace-nowrap">Descripción</TableHead>
-                              <TableHead className="whitespace-nowrap">Moneda</TableHead>
-                              <TableHead className="text-right whitespace-nowrap">Renta Bruta</TableHead>
-                              <TableHead className="text-right whitespace-nowrap">Impuesto</TableHead>
-                              <TableHead className="text-right whitespace-nowrap">Renta Neta</TableHead>
-                              <TableHead className="text-center whitespace-nowrap">Estado</TableHead>
+                              </TableCell>
+                              <TableCell className="sticky left-12 bg-background z-10 border-r shadow-sm">
+                                {formatDate(record.issueDate)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="font-mono text-xs">
+                                  {record.documentType} {record.documentNumber}
+                                </Badge>
+                              </TableCell>
+                              <TableCell style={{ maxWidth: "200px" }}>
+                                <div className="truncate" title={record.issuerName}>
+                                  {record.issuerName}
+                                </div>
+                              </TableCell>
+                              <TableCell style={{ maxWidth: "250px" }}>
+                                <div className="truncate" title={record.description}>
+                                  {record.description}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">
+                                  {record.currency}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-mono whitespace-nowrap">
+                                {formatCurrency(record.grossIncome, record.currency)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono whitespace-nowrap">
+                                {formatCurrency(record.incomeTax, record.currency)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono whitespace-nowrap">
+                                {formatCurrency(record.netIncome, record.currency)}
+                              </TableCell>
+                              <TableCell className="text-center">{getStatusBadge(record.status)}</TableCell>
                             </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {currentRheData.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={10} className="text-center py-8">
-                                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                                  <p className="text-gray-500">No se encontraron registros RHE</p>
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              currentRheData.map((record) => (
-                                <TableRow key={record.id} className="hover:bg-muted/30">
-                                  <TableCell className="sticky left-0 bg-background z-10 border-r">
-                                    <Checkbox
-                                      checked={selectedRheIds.includes(record.id)}
-                                      onCheckedChange={(checked) => handleSelectRhe(record.id, checked as boolean)}
-                                    />
-                                  </TableCell>
-                                  <TableCell className="sticky left-12 bg-background z-10 border-r shadow-sm">
-                                    {formatDate(record.issueDate)}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline" className="font-mono text-xs">
-                                      {record.documentType} {record.documentNumber}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell style={{ maxWidth: "200px" }}>
-                                    <div className="truncate" title={record.issuerName}>
-                                      {record.issuerName}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell style={{ maxWidth: "250px" }}>
-                                    <div className="truncate" title={record.description}>
-                                      {record.description}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline" className="text-xs">
-                                      {record.currency}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono whitespace-nowrap">
-                                    {formatCurrency(record.grossIncome, record.currency)}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono whitespace-nowrap">
-                                    {formatCurrency(record.incomeTax, record.currency)}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono whitespace-nowrap">
-                                    {formatCurrency(record.netIncome, record.currency)}
-                                  </TableCell>
-                                  <TableCell className="text-center">{getStatusBadge(record.status)}</TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </ScrollArea>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
                   </div>
 
                   {rheRecords.length > 0 && (
                     <PaginationControls
                       currentPage={rhePage}
                       totalPages={rheTotalPages}
-                      onPageChange={setRhePage}
-                      totalItems={rheRecords.length}
+                      onPageChange={(page) => handlePageChange(page, "rhe")}
+                      totalItems={rhePagination.total}
                       itemName="registros RHE"
                     />
                   )}
@@ -649,97 +643,93 @@ export default function SunatPage() {
                 </div>
               ) : (
                 <div className="border-t">
-                  <div className="overflow-hidden">
-                    <ScrollArea className="h-96 w-full">
-                      <div className="min-w-max">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/50">
-                              <TableHead className="w-12 sticky left-0 bg-muted/50 z-20 border-r">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="w-12 sticky left-0 bg-muted/50 z-20 border-r">
+                            <Checkbox
+                              checked={
+                                currentInvoiceData.length > 0 &&
+                                selectedInvoiceIds.length === currentInvoiceData.length
+                              }
+                              onCheckedChange={handleSelectAllInvoices}
+                            />
+                          </TableHead>
+                          <TableHead className="sticky left-12 bg-muted/50 z-20 border-r shadow-sm">
+                            Fecha Emisión
+                          </TableHead>
+                          <TableHead className="whitespace-nowrap">Documento</TableHead>
+                          <TableHead className="whitespace-nowrap">Proveedor</TableHead>
+                          <TableHead className="whitespace-nowrap">RUC</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Base Imponible</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">IGV</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Total</TableHead>
+                          <TableHead className="whitespace-nowrap">Moneda</TableHead>
+                          <TableHead className="text-center whitespace-nowrap">Estado</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {currentInvoiceData.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={10} className="text-center py-8">
+                              <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                              <p className="text-gray-500">No se encontraron facturas</p>
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          currentInvoiceData.map((invoice) => (
+                            <TableRow key={invoice.id} className="hover:bg-muted/30">
+                              <TableCell className="sticky left-0 bg-background z-10 border-r">
                                 <Checkbox
-                                  checked={
-                                    currentInvoiceData.length > 0 &&
-                                    selectedInvoiceIds.length === currentInvoiceData.length
-                                  }
-                                  onCheckedChange={handleSelectAllInvoices}
+                                  checked={selectedInvoiceIds.includes(invoice.id)}
+                                  onCheckedChange={(checked) => handleSelectInvoice(invoice.id, checked as boolean)}
                                 />
-                              </TableHead>
-                              <TableHead className="sticky left-12 bg-muted/50 z-20 border-r shadow-sm">
-                                Fecha Emisión
-                              </TableHead>
-                              <TableHead className="whitespace-nowrap">Documento</TableHead>
-                              <TableHead className="whitespace-nowrap">Proveedor</TableHead>
-                              <TableHead className="whitespace-nowrap">RUC</TableHead>
-                              <TableHead className="text-right whitespace-nowrap">Base Imponible</TableHead>
-                              <TableHead className="text-right whitespace-nowrap">IGV</TableHead>
-                              <TableHead className="text-right whitespace-nowrap">Total</TableHead>
-                              <TableHead className="whitespace-nowrap">Moneda</TableHead>
-                              <TableHead className="text-center whitespace-nowrap">Estado</TableHead>
+                              </TableCell>
+                              <TableCell className="sticky left-12 bg-background z-10 border-r shadow-sm">
+                                {formatDate(invoice.issueDate)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="font-mono text-xs">
+                                  {invoice.documentType} {invoice.series}-{invoice.documentNumber}
+                                </Badge>
+                              </TableCell>
+                              <TableCell style={{ maxWidth: "200px" }}>
+                                <div className="truncate" title={invoice.customerName || "N/A"}>
+                                  {invoice.customerName || "N/A"}
+                                </div>
+                              </TableCell>
+                              <TableCell className="font-mono">{invoice.identityDocumentNumber || "N/A"}</TableCell>
+                              <TableCell className="text-right font-mono whitespace-nowrap">
+                                {formatCurrency(invoice.taxableBase, invoice.currency)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono whitespace-nowrap">
+                                {formatCurrency(invoice.igv, invoice.currency)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono whitespace-nowrap">
+                                {formatCurrency(invoice.total, invoice.currency)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">
+                                  {invoice.currency}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {getStatusBadge(invoice.invoiceStatus || "N/A")}
+                              </TableCell>
                             </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {currentInvoiceData.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={10} className="text-center py-8">
-                                  <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                                  <p className="text-gray-500">No se encontraron facturas</p>
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              currentInvoiceData.map((invoice) => (
-                                <TableRow key={invoice.id} className="hover:bg-muted/30">
-                                  <TableCell className="sticky left-0 bg-background z-10 border-r">
-                                    <Checkbox
-                                      checked={selectedInvoiceIds.includes(invoice.id)}
-                                      onCheckedChange={(checked) => handleSelectInvoice(invoice.id, checked as boolean)}
-                                    />
-                                  </TableCell>
-                                  <TableCell className="sticky left-12 bg-background z-10 border-r shadow-sm">
-                                    {formatDate(invoice.issueDate)}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline" className="font-mono text-xs">
-                                      {invoice.documentType} {invoice.series}-{invoice.documentNumber}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell style={{ maxWidth: "200px" }}>
-                                    <div className="truncate" title={invoice.customerName || "N/A"}>
-                                      {invoice.customerName || "N/A"}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="font-mono">{invoice.identityDocumentNumber || "N/A"}</TableCell>
-                                  <TableCell className="text-right font-mono whitespace-nowrap">
-                                    {formatCurrency(invoice.taxableBase, invoice.currency)}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono whitespace-nowrap">
-                                    {formatCurrency(invoice.igv, invoice.currency)}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono whitespace-nowrap">
-                                    {formatCurrency(invoice.total, invoice.currency)}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline" className="text-xs">
-                                      {invoice.currency}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    {getStatusBadge(invoice.invoiceStatus || "N/A")}
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </ScrollArea>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
                   </div>
 
                   {invoices.length > 0 && (
                     <PaginationControls
                       currentPage={invoicePage}
                       totalPages={invoiceTotalPages}
-                      onPageChange={setInvoicePage}
-                      totalItems={invoices.length}
+                      onPageChange={(page) => handlePageChange(page, "invoices")}
+                      totalItems={invoicesPagination.total}
                       itemName="facturas"
                     />
                   )}
@@ -751,6 +741,7 @@ export default function SunatPage() {
       </Tabs>
 
       <SunatImportModal open={importModalOpen} onOpenChange={setImportModalOpen} type={importType} />
-    </div>
+      </div>
+    </>
   )
 }

@@ -183,36 +183,51 @@ export default function DetractionsPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Gestión de Detracciones</h1>
-          <p className="text-muted-foreground">Visualiza y gestiona las detracciones de documentos.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Download className="w-4 h-4 mr-2" /> Exportar
-          </Button>
-        </div>
-      </div>
-
-      <Card>
-        <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle>
-              Lista de Detracciones ({loading ? "..." : detractionDocuments.length})
-              {selectedDetractionIds.length > 0 && (
-                <span className="text-sm text-primary font-medium ml-2">
-                  ({selectedDetractionIds.length} seleccionada(s))
-                </span>
-              )}
-            </CardTitle>
+    <>
+      {/* Header Section - Título, descripción y botones por fuera */}
+      <div className="space-y-4 sm:space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center py-4 sm:py-8 pl-2 sm:pb-2 pb-2">
+          <div className="space-y-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">Gestión de Detracciones</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Visualiza y gestiona las detracciones de documentos.
+            </p>
           </div>
-        </CardHeader>
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <Button variant="outline" size="default" className="w-full sm:w-auto">
+              <Download className="w-4 h-4 mr-2" />
+              Exportar
+            </Button>
+          </div>
+        </div>
+
+        {/* Filters Card */}
+        <Card className="border-0 shadow-none">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Filtros de Búsqueda
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <FiltersBar filters={filterConfigs} values={filters} onChange={handleFilterChange} />
+          </CardContent>
+        </Card>
+
+        {/* Detractions Table Card */}
+        <Card className="border-0 shadow-none">
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-3">
+              <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+              <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                Lista de Detracciones ({loading ? "..." : detractionDocuments.length})
+              </CardTitle>
+              {selectedDetractionIds.length > 0 && (
+                <p className="text-sm text-blue-600 dark:text-blue-400 font-normal">
+                  {selectedDetractionIds.length} detracción(es) seleccionada(s)
+                </p>
+              )}
+            </div>
+          </CardHeader>
         <CardContent>
           {loading && paginatedDetractions.length === 0 ? (
             <TableSkeleton rows={itemsPerPage} columns={9} />
@@ -309,6 +324,44 @@ export default function DetractionsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Summary Statistics Cards */}
+      <Card className="border-0 shadow-none">
+        <CardHeader>
+          <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+            Resumen de Detracciones
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+            <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
+                {detractionDocuments.length}
+              </div>
+              <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Total Detracciones</p>
+            </div>
+            <div className="text-center p-3 sm:p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+              <div className="text-2xl sm:text-3xl font-medium text-amber-600 dark:text-amber-400 mb-2">
+                {detractionDocuments.filter(doc => !doc.detraction?.paymentDate).length}
+              </div>
+              <p className="text-xs sm:text-sm font-normal text-amber-700 dark:text-amber-300">Pendientes</p>
+            </div>
+            <div className="text-center p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+              <div className="text-2xl sm:text-3xl font-medium text-green-600 dark:text-green-400 mb-2">
+                {detractionDocuments.filter(doc => doc.detraction?.paymentDate).length}
+              </div>
+              <p className="text-xs sm:text-sm font-normal text-green-700 dark:text-green-300">Pagadas</p>
+            </div>
+            <div className="text-center p-3 sm:p-4 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800">
+              <div className="text-2xl sm:text-3xl font-medium text-purple-600 dark:text-purple-400 mb-2">
+                S/ {detractionDocuments.reduce((sum, doc) => sum + (parseFloat(doc.detraction?.amount || "0") || 0), 0).toLocaleString("es-PE", { minimumFractionDigits: 2 })}
+              </div>
+              <p className="text-xs sm:text-sm font-normal text-purple-700 dark:text-purple-300">Monto Total</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
+    </>
   )
 }

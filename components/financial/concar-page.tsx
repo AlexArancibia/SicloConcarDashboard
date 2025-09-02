@@ -2268,7 +2268,7 @@ export default function ConcarPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card className="md:col-span-1">
                 <CardHeader>
-                  <CardTitle>Cargar archivo de gastos</CardTitle>
+                  <CardTitle className="text-base font-semibold text-slate-700 dark:text-slate-300">Cargar archivo de gastos</CardTitle>
                   <CardDescription>Sube tu archivo de gastos para generar todos los formatos CONCAR</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -2442,7 +2442,7 @@ export default function ConcarPage() {
 
               <Card className="md:col-span-2">
                 <CardHeader>
-                  <CardTitle>Formatos CONCAR generados</CardTitle>
+                  <CardTitle className="text-base font-semibold text-slate-700 dark:text-slate-300">Formatos CONCAR generados</CardTitle>
                   <CardDescription>
                     {generatedFiles.length > 0
                       ? `Se han generado ${generatedFiles.length} formato(s) CONCAR`
@@ -2586,7 +2586,7 @@ export default function ConcarPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card className="md:col-span-1">
                 <CardHeader>
-                  <CardTitle>Plantillas CONCAR</CardTitle>
+                  <CardTitle className="text-base font-semibold text-slate-700 dark:text-slate-300">Plantillas CONCAR</CardTitle>
                   <CardDescription>Seleccione una plantilla para ver su estructura</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">

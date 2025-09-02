@@ -13,6 +13,7 @@ import { useAuthStore } from "@/stores/authStore"
 import { useBankAccountsStore } from "@/stores/bank-accounts-store"
 import apiClient from "@/lib/axiosConfig"
 import { Loader2, Download, FileText, Database, BarChart3 } from "lucide-react"
+import { ScrollableTable } from "@/components/ui/scrollable-table"
 
 interface ConcarQueryParams {
   companyId?: string
@@ -514,61 +515,79 @@ export default function ConcarReportPage() {
               </TabsList>
 
               <TabsContent value="table" className="mt-4">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-2">Cuenta</th>
-                        <th className="text-left p-2">Tipo</th>
-                        <th className="text-left p-2">Proveedor</th>
-                        <th className="text-left p-2">Documento</th>
-                        <th className="text-left p-2">Monto</th>
-                        <th className="text-left p-2">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {results.slice(0, 50).map((result, index) => (
-                        <tr key={index} className="border-b hover:bg-gray-50">
-                          <td className="p-2">
-                            <div className="font-medium">{result.accountNumber}</div>
-                            <div className="text-xs text-gray-500">{result.alias || result.description}</div>
-                          </td>
-                          <td className="p-2">
-                            <Badge variant="outline">{result.conciliation_type}</Badge>
-                          </td>
-                          <td className="p-2">
-                            <div className="font-medium">{result.tradeName || "-"}</div>
-                            <div className="text-xs text-gray-500">{result.supplier_documentNumber || "-"}</div>
-                          </td>
-                          <td className="p-2">
-                            <div className="font-medium">{result.fullNumber || "-"}</div>
-                            <div className="text-xs text-gray-500">{result.documentType || "-"}</div>
-                          </td>
-                          <td className="p-2">
-                            <div className="font-medium">
-                              {formatCurrency(result.document_total)}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {result.document_conciliated_amount ? `Conciliado: ${formatCurrency(result.document_conciliated_amount)}` : "-"}
-                            </div>
-                          </td>
-                          <td className="p-2">
-                            <Badge 
-                              variant={result.conciliation_status === "COMPLETED" ? "default" : "secondary"}
-                            >
-                              {result.conciliation_status}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {results.length > 50 && (
-                    <div className="mt-4 text-center text-sm text-gray-500">
-                      Mostrando 50 de {results.length} resultados. Use los parámetros para filtrar más.
-                    </div>
-                  )}
-                </div>
+                <ScrollableTable
+                  data={results.slice(0, 50)}
+                  columns={[
+                    {
+                      key: "account",
+                      header: "Cuenta",
+                      cell: (result) => (
+                        <div>
+                          <div className="font-medium">{result.accountNumber}</div>
+                          <div className="text-xs text-gray-500">{result.alias || result.description}</div>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: "type",
+                      header: "Tipo",
+                      cell: (result) => <Badge variant="outline">{result.conciliation_type}</Badge>,
+                    },
+                    {
+                      key: "supplier",
+                      header: "Proveedor",
+                      cell: (result) => (
+                        <div>
+                          <div className="font-medium">{result.tradeName || "-"}</div>
+                          <div className="text-xs text-gray-500">{result.supplier_documentNumber || "-"}</div>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: "document",
+                      header: "Documento",
+                      cell: (result) => (
+                        <div>
+                          <div className="font-medium">{result.fullNumber || "-"}</div>
+                          <div className="text-xs text-gray-500">{result.documentType || "-"}</div>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: "amount",
+                      header: "Monto",
+                      cell: (result) => (
+                        <div>
+                          <div className="font-medium">
+                            {formatCurrency(result.document_total)}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {result.document_conciliated_amount ? `Conciliado: ${formatCurrency(result.document_conciliated_amount)}` : "-"}
+                          </div>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: "status",
+                      header: "Estado",
+                      cell: (result) => (
+                        <Badge 
+                          variant={result.conciliation_status === "COMPLETED" ? "default" : "secondary"}
+                        >
+                          {result.conciliation_status}
+                        </Badge>
+                      ),
+                    },
+                  ]}
+                  emptyTitle="No hay resultados"
+                  emptyDescription="No se encontraron registros con los parámetros especificados"
+                  emptyIcon={<FileText className="h-10 w-10" />}
+                />
+                {results.length > 50 && (
+                  <div className="mt-4 text-center text-sm text-gray-500">
+                    Mostrando 50 de {results.length} resultados. Use los parámetros para filtrar más.
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="json" className="mt-4">

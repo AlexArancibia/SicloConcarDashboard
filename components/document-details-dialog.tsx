@@ -234,12 +234,15 @@ export function DocumentDetailsDialog({ open, onOpenChange, document }: Document
                     {formatCurrency(document.subtotal, document.currency)}
                   </p>
                 </div>
-                <div>
-                  <span className="text-slate-500 dark:text-slate-400">IGV:</span>
-                  <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
-                    {formatCurrency(document.igv, document.currency)}
-                  </p>
-                </div>
+                {/* ✅ Ocultar IGV para documentos tipo RECEIPT ya que no generan IGV */}
+                {document.documentType !== "RECEIPT" && (
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400">IGV:</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
+                      {formatCurrency(document.igv, document.currency)}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <span className="text-slate-500 dark:text-slate-400">Total:</span>
                   <p className="font-medium text-slate-900 dark:text-slate-100 mt-1">
