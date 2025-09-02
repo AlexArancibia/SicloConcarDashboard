@@ -521,7 +521,7 @@ export default function ConcarReportPage() {
                     {
                       key: "account",
                       header: "Cuenta",
-                      cell: (result) => (
+                      render: (result) => (
                         <div>
                           <div className="font-medium">{result.accountNumber}</div>
                           <div className="text-xs text-gray-500">{result.alias || result.description}</div>
@@ -531,12 +531,12 @@ export default function ConcarReportPage() {
                     {
                       key: "type",
                       header: "Tipo",
-                      cell: (result) => <Badge variant="outline">{result.conciliation_type}</Badge>,
+                      render: (result) => <Badge variant="outline">{result.conciliation_type}</Badge>,
                     },
                     {
                       key: "supplier",
                       header: "Proveedor",
-                      cell: (result) => (
+                      render: (result) => (
                         <div>
                           <div className="font-medium">{result.tradeName || "-"}</div>
                           <div className="text-xs text-gray-500">{result.supplier_documentNumber || "-"}</div>
@@ -546,7 +546,7 @@ export default function ConcarReportPage() {
                     {
                       key: "document",
                       header: "Documento",
-                      cell: (result) => (
+                      render: (result) => (
                         <div>
                           <div className="font-medium">{result.fullNumber || "-"}</div>
                           <div className="text-xs text-gray-500">{result.documentType || "-"}</div>
@@ -556,7 +556,7 @@ export default function ConcarReportPage() {
                     {
                       key: "amount",
                       header: "Monto",
-                      cell: (result) => (
+                      render: (result) => (
                         <div>
                           <div className="font-medium">
                             {formatCurrency(result.document_total)}
@@ -570,7 +570,7 @@ export default function ConcarReportPage() {
                     {
                       key: "status",
                       header: "Estado",
-                      cell: (result) => (
+                      render: (result) => (
                         <Badge 
                           variant={result.conciliation_status === "COMPLETED" ? "default" : "secondary"}
                         >
