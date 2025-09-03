@@ -69,7 +69,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (isAuthenticated) {
       // Redirección inmediata sin delay
-      router.replace("/") // Cambiado a "/" y usando replace para mejor performance
+      router.replace("/documents") // Redirigir a documentos después del login
     }
   }, [isAuthenticated, router])
 

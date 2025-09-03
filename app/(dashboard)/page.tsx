@@ -1,9 +1,13 @@
-import React from 'react'
+"use client"
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
-function page() {
-  return (
-    <div>page</div>
-  )
+export default function Page() {
+  const router = useRouter()
+
+  useEffect(() => {
+    router.replace('/documents')
+  }, [router])
+
+  return null
 }
-
-export default page

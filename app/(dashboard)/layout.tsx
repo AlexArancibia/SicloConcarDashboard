@@ -20,7 +20,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-avenir bg-blue-50/30">
         <ThemeProvider>
-          <SidebarProvider defaultOpen={false}>
+          <SidebarProvider defaultOpen={true}>
             <AppSidebar />
             <SidebarInset> 
               <DashboardHeader />

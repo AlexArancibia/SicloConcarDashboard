@@ -1175,10 +1175,7 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-            <Button variant="outline" size="default" className="w-full sm:w-auto">
-              <Download className="w-4 h-4 mr-2" />
-              Exportar
-            </Button>
+
           </div>
         </div>
 

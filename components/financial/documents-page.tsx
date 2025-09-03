@@ -400,10 +400,6 @@ export default function DocumentsPage() {
             <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">Gestión de Documentos</h1>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-            <Button variant="outline" size="default" className="w-full sm:w-auto">
-              <Download className="w-4 h-4 mr-2" />
-              Exportar
-            </Button>
             <Button size="default" onClick={() => setXmlImportOpen(true)} className="w-full sm:w-auto">
               <Upload className="w-4 h-4 mr-2" />
               Importar XML

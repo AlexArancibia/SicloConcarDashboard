@@ -433,10 +433,7 @@ export default function BankAccountsPage() {
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-            <Button variant="outline" size="default" className="w-full sm:w-auto">
-              <Building2 className="w-4 h-4 mr-2" />
-              Exportar
-            </Button>
+
             <Button size="default" onClick={openCreateModal} className="w-full sm:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Nueva Cuenta

@@ -12,7 +12,6 @@ import {
   GitMerge,
   TrendingDown,
   Database,
-  Home,
   Shield,
   BookText,
   List,
@@ -250,16 +249,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           backdropFilter: 'none'
         }}
       >
-        {/* Dashboard standalone */}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <NavItem href="/dashboard" icon={Home}>
-                Dashboard
-              </NavItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* Dashboard standalone removed */}
 
         {/* Gestión */}
         <SidebarGroup>

@@ -336,9 +336,6 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
               </TableCell>
               <TableCell className="text-center w-20">
                 <Link href={`/documents/${item.document?.id}`}>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100" title="Ver Documento">
-                    <Eye className="h-4 w-4" />
-                  </Button>
                 </Link>
               </TableCell>
             </TableRow>
@@ -377,9 +374,6 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
               </TableCell>
               <TableCell className="text-center w-24">
                 <Link href={`/documents/${detraction.document.id}`}>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100" title="Ver Documento">
-                    <Eye className="h-4 w-4" />
-                  </Button>
                 </Link>
               </TableCell>
             </TableRow>
@@ -799,10 +793,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
             <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">Conciliación no encontrada</h3>
             <p className="text-slate-600 dark:text-slate-400 mb-6">La conciliación que buscas no existe o no tienes permisos para verla.</p>
             <Link href="/conciliations">
-              <Button variant="outline" className="bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Volver al listado
-              </Button>
+
             </Link>
           </div>
         </div>
@@ -821,10 +812,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link href="/conciliations">
-                <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Volver
-                </Button>
+
               </Link>
               <div className="h-6 w-px bg-slate-300 dark:bg-slate-600" />
               <div>
@@ -845,10 +833,7 @@ export default function ConciliationDetailPage({ params }: ConciliationDetailPag
             </div>
 
             <div className="flex items-center gap-3">
-              <Button variant="outline" size="sm" className="bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">
-                <Download className="h-4 w-4 mr-2" />
-                Exportar
-              </Button>
+
               {conciliation.status !== "COMPLETED" && conciliation.status !== "CANCELLED" && (
                 <>
                   <Button

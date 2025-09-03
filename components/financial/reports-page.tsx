@@ -530,17 +530,7 @@ export default function ReportsPage() {
               Archivo de gastos y reportes contables
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-            <Button variant="outline" size="default" className="w-full sm:w-auto">
-              <Download className="w-4 h-4 mr-2" />
-              Exportar Excel
-            </Button>
-            <Button size="default" className="w-full sm:w-auto">
-              <Calendar className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Generar Reporte</span>
-              <span className="sm:hidden">Reporte</span>
-            </Button>
-          </div>
+
         </div>
 
         {/* Filters Card */}
