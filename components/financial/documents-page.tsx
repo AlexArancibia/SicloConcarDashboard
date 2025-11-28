@@ -5,16 +5,8 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Upload, Download, FileText, Eye, Edit, Trash2, MoreHorizontal, CheckCircle } from "lucide-react"
+import { Upload, Download, FileText, Eye, Trash2, CheckCircle } from "lucide-react"
 import { useDocumentsStore } from "@/stores/documents-store"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { FiltersBar } from "@/components/ui/filters-bar"
 import { useToast } from "@/hooks/use-toast"
 import type { DocumentStatus, DocumentType } from "@/types/documents"
@@ -550,34 +542,23 @@ export default function DocumentsPage() {
                   header: "Acciones",
                   className: "text-center",
                   render: (doc: any) => (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Abrir menú</span>
-                          <MoreHorizontal className="h-4 w-4" />
+                    <div className="flex items-center justify-center gap-2">
+                      <Link href={`/documents/${doc.id}`}>
+                        <Button variant="ghost" className="h-8 w-8 p-0" title="Ver Detalles">
+                          <span className="sr-only">Ver detalles</span>
+                          <Eye className="h-4 w-4" />
                         </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                        <DropdownMenuItem asChild>
-                          <Link href={`/documents/${doc.id}`}>
-                            <Eye className="mr-2 h-4 w-4" /> Ver Detalles
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href={`/documents/${doc.id}/edit`}>
-                            <Edit className="mr-2 h-4 w-4" /> Editar
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => handleDeleteDocument(doc.id)}
-                          className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-700/20 dark:focus:text-red-500"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" /> Eliminar
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 dark:text-red-500 dark:hover:text-red-400"
+                        onClick={() => handleDeleteDocument(doc.id)}
+                        title="Eliminar"
+                      >
+                        <span className="sr-only">Eliminar</span>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   ),
                 },
               ]

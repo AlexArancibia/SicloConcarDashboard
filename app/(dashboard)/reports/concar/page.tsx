@@ -8,12 +8,14 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useAuthStore } from "@/stores/authStore"
 import { useBankAccountsStore } from "@/stores/bank-accounts-store"
 import apiClient from "@/lib/axiosConfig"
-import { Loader2, Download, FileText, Database, BarChart3 } from "lucide-react"
+import { Loader2, Download, FileText, Database, BarChart3, ChevronDown, FileSpreadsheet } from "lucide-react"
 import { ScrollableTable } from "@/components/ui/scrollable-table"
+import { MonthYearPicker } from "@/components/ui/month-year-picker"
 
 interface ConcarQueryParams {
   companyId?: string
@@ -21,103 +23,55 @@ interface ConcarQueryParams {
   endDate?: string
   bankAccountId?: string | "all"
   conciliationType?: string
-  status?: string
+  documentClassification?: string
   limit?: number
   offset?: number
 }
 
+// Interfaz según el formato CONCAR Export (39 campos A-AD)
 interface ConcarResult {
-  // Bank accounts
-  accountNumber: string
-  accountType: string
-  currency: string
-  alias: string | null
-  description: string | null
+  campo: string // A - Identificador único
+  subDiario: string // B - Código del subdiario (15 o 11)
+  numeroComprobante: string // C - Número de comprobante (MMNNNN)
+  fechaComprobante: string // D - Fecha del comprobante (dd/mm/yyyy)
+  codigoMoneda: string // E - Código de moneda
+  glosaPrincipal: string // F - Descripción principal
+  tipoCambio: string // G - Tipo de cambio
+  tipoConversion: string // H - Tipo de conversión (V)
+  flagConversionMoneda: string // I - Flag de conversión (S)
+  fechaTipoCambio: string // J - Fecha del tipo de cambio
+  cuentaContable: string // K - Código de cuenta contable
+  codigoAnexo: string // L - Código anexo/auxiliar
+  centroCosto: string // M - Centro de costo
+  debeHaber: string // N - Tipo de movimiento (D o H)
+  importeOriginal: string // O - Importe original (formato: 1,234.56)
+  importeDolares: string // P - Importe en dólares
+  importeSoles: string // Q - Importe en soles
+  tipoDocumento: string // R - Tipo de documento (RH o FACTURA)
+  numeroDocumento: string // S - Número de documento
+  fechaDocumento: string // T - Fecha de emisión (dd/mm/yyyy)
+  fechaVencimiento: string // U - Fecha de vencimiento (dd/mm/yyyy)
+  codigoArea: string // V - Código de área
+  glosaDetalle: string // W - Glosa detalle
+  codigoAnexoAuxiliar: string // X - Código anexo auxiliar
+  medioPago: string // Y - Medio de pago
+  tipoDocumentoReferencia: string // Z - Tipo de documento de referencia
+  numeroDocumentoReferencia: string // AA - Número de documento de referencia
+  fechaDocumentoReferencia: string // AB - Fecha de documento de referencia
+  nroRegRegistradorTipoDocRef: string // AC - Número de registro registrador
+  baseImponibleDocumentoReferencia: string // AD - Base imponible de documento de referencia
+}
 
-  // Transactions
-  transactionDate: Date | null
-  transaction_description: string | null
-  transactionType: string | null
-  amount: number | null
-  balance: number | null
-  branch: string | null
-  operationNumber: string | null
-  operationTime: string | null
-  operatorUser: string | null
-  utc: string | null
-  transaction_reference: string | null
+interface ConcarExportSummary {
+  totalRecords: number
+  totalEntries: number
+  period: string
+  subDiario: string
+}
 
-  // Suppliers
-  tradeName: string | null
-  supplier_documentType: string | null
-  supplier_documentNumber: string | null
-
-  // Conciliations
-  conciliation_type: string
-  bankBalance: number
-  bookBalance: number
-  toleranceAmount: number
-  conciliation_status: string
-  additionalExpensesTotal: number
-  totalAmount: number | null
-  paymentAmount: number | null
-
-  // Conciliation items
-  conciliation_item_id: string | null
-  itemType: string | null
-  documentId: string | null
-  documentAmount: number | null
-  item_conciliated_amount: number | null
-  item_difference: number | null
-  distributionPercentage: number | null
-  item_status: string | null
-  item_notes: string | null
-  systemNotes: string | null
-  conciliatedBy: string | null
-
-  // Conciliation expenses
-  expense_id: string | null
-  expense_description: string | null
-  expense_amount: number | null
-  expenseType: string | null
-  accountId: string | null
-  expense_notes: string | null
-  isTaxDeductible: boolean | null
-  supportingDocument: string | null
-  expenseDate: Date | null
-
-  // Documents
-  document_id: string | null
-  document_companyId: string | null
-  documentType: string | null
-  series: string | null
-  number: string | null
-  fullNumber: string | null
-  supplierId: string | null
-  issueDate: Date | null
-  issueTime: string | null
-  dueDate: Date | null
-  receptionDate: Date | null
-  document_currency: string | null
-  exchangeRate: number | null
-  subtotal: number | null
-  igv: number | null
-  otherTaxes: number | null
-  document_total: number | null
-  hasRetention: boolean | null
-  retentionAmount: number | null
-  retentionPercentage: number | null
-  netPayableAmount: number | null
-  document_conciliated_amount: number | null
-  document_pending_amount: number | null
-  paymentMethod: string | null
-  document_description: string | null
-  observations: string | null
-  tags: string[] | null
-  document_status: string | null
-  orderReference: string | null
-  contractNumber: string | null
-  additionalNotes: string | null
+interface ConcarExportResponse {
+  data: ConcarResult[]
+  summary: ConcarExportSummary
 }
 
 export default function ConcarReportPage() {
@@ -127,18 +81,63 @@ export default function ConcarReportPage() {
     endDate: "",
     bankAccountId: "all",
     conciliationType: "",
-    status: "",
-    limit: 100,
-    offset: 0
+    documentClassification: ""
   })
+
+  // Estados para mes y año
+  const [selectedMonth, setSelectedMonth] = useState<string>("")
+  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
 
   const [results, setResults] = useState<ConcarResult[]>([])
   const [loading, setLoading] = useState(false)
   const [responseInfo, setResponseInfo] = useState<any>(null)
+  const [downloading, setDownloading] = useState(false)
 
   const { toast } = useToast()
   const { company } = useAuthStore()
   const { bankAccounts, loading: bankAccountsLoading, getBankAccountsByCompany } = useBankAccountsStore()
+
+  // Función para obtener el primer y último día del mes
+  const getMonthDateRange = (year: string, month: string) => {
+    if (!year || !month) return { startDate: "", endDate: "" }
+    
+    const yearNum = parseInt(year)
+    const monthNum = parseInt(month)
+    const firstDay = new Date(yearNum, monthNum - 1, 1)
+    const lastDay = new Date(yearNum, monthNum, 0) // Último día del mes
+    
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+    
+    return {
+      startDate: formatDate(firstDay),
+      endDate: formatDate(lastDay)
+    }
+  }
+
+  // Actualizar fechas cuando cambie el mes o año
+  useEffect(() => {
+    if (selectedMonth && selectedYear) {
+      const { startDate, endDate } = getMonthDateRange(selectedYear, selectedMonth)
+      setQueryParams(prev => ({
+        ...prev,
+        startDate,
+        endDate
+      }))
+    }
+  }, [selectedMonth, selectedYear])
+
+  // Inicializar mes actual si no hay uno seleccionado
+  useEffect(() => {
+    if (!selectedMonth) {
+      const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
+      setSelectedMonth(currentMonth)
+    }
+  }, [selectedMonth])
 
   // Inicializar companyId y cargar cuentas bancarias cuando esté disponible
   useEffect(() => {
@@ -150,13 +149,7 @@ export default function ConcarReportPage() {
   }, [company?.id, getBankAccountsByCompany])
 
   const handleParamChange = (key: keyof ConcarQueryParams, value: string | number) => {
-    // Asegurar que limit y offset sean números
-    if (key === "limit" || key === "offset") {
-      const numValue = typeof value === "string" ? parseInt(value) || 0 : value
-      setQueryParams(prev => ({ ...prev, [key]: numValue }))
-    } else {
-      setQueryParams(prev => ({ ...prev, [key]: value }))
-    }
+    setQueryParams(prev => ({ ...prev, [key]: value }))
   }
 
   const executeQuery = async () => {
@@ -169,80 +162,134 @@ export default function ConcarReportPage() {
       return
     }
 
+    // Validar campos requeridos
+    if (!queryParams.bankAccountId || queryParams.bankAccountId === "all") {
+      toast({
+        title: "Error",
+        description: "Por favor selecciona una cuenta bancaria",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!queryParams.conciliationType) {
+      toast({
+        title: "Error",
+        description: "Por favor selecciona un tipo de conciliación",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!queryParams.documentClassification) {
+      toast({
+        title: "Error",
+        description: "Por favor selecciona una clasificación de documento",
+        variant: "destructive"
+      })
+      return
+    }
+
     setLoading(true)
     setResults([])
     setResponseInfo(null)
 
     try {
-      // Construir query string con companyId automático
+      // Construir query string según el formato del nuevo endpoint
       const queryString = new URLSearchParams()
+      
+      // Parámetros requeridos
       queryString.append("companyId", company.id)
+      queryString.append("bankAccountIds", queryParams.bankAccountId)
+      queryString.append("conciliationType", queryParams.conciliationType)
+      queryString.append("documentType", queryParams.documentClassification)
       
-      Object.entries(queryParams).forEach(([key, value]) => {
-        if (key !== "companyId" && value !== undefined && value !== null && value !== "" && value !== "all") {
-          queryString.append(key, String(value))
+      // Parámetros opcionales de fecha (si están disponibles)
+      if (selectedYear && selectedMonth) {
+        queryString.append("year", selectedYear)
+        queryString.append("month", selectedMonth)
+        
+        // Calcular startDay y endDay del mes
+        const { startDate, endDate } = getMonthDateRange(selectedYear, selectedMonth)
+        if (startDate && endDate) {
+          const startDay = parseInt(startDate.split('-')[2])
+          const endDay = parseInt(endDate.split('-')[2])
+          queryString.append("startDay", startDay.toString())
+          queryString.append("endDay", endDay.toString())
         }
-      })
+      }
 
-      console.log("Sending query to /concar:", { companyId: company.id, ...queryParams })
-      console.log("Query string:", queryString.toString())
-      console.log("Param types:", {
-        limit: typeof queryParams.limit,
-        offset: typeof queryParams.offset,
-        startDate: typeof queryParams.startDate,
-        endDate: typeof queryParams.endDate
+      console.log("Sending query to /accounting-entries/concar-export:", {
+        companyId: company.id,
+        bankAccountIds: queryParams.bankAccountId,
+        conciliationType: queryParams.conciliationType,
+        documentType: queryParams.documentClassification,
+        year: selectedYear || undefined,
+        month: selectedMonth || undefined,
+        startDay: selectedYear && selectedMonth ? parseInt(getMonthDateRange(selectedYear, selectedMonth).startDate.split('-')[2]) : undefined,
+        endDay: selectedYear && selectedMonth ? parseInt(getMonthDateRange(selectedYear, selectedMonth).endDate.split('-')[2]) : undefined,
       })
+      console.log("Query string:", queryString.toString())
       
-      const response = await apiClient.get(`/concar?${queryString.toString()}`)
+      const response = await apiClient.get<ConcarExportResponse>(`/accounting-entries/concar-export?${queryString.toString()}`)
       
-      console.log("Concar response:", response.data)
+      console.log("Concar export response:", response.data)
       
-      if (response.data.success) {
+      if (response.data && response.data.data) {
         const data = response.data.data || []
-        console.log("Sample result data:", data[0])
-        console.log("Data types:", data[0] ? Object.entries(data[0]).map(([key, value]) => 
-          `${key}: ${typeof value} (${value})`
-        ) : "No data")
+        const summary = response.data.summary || {
+          totalRecords: data.length,
+          totalEntries: 0,
+          period: selectedYear && selectedMonth ? `${selectedMonth}/${selectedYear}` : "Todos",
+          subDiario: queryParams.documentClassification || ""
+        }
         
         setResults(data)
         setResponseInfo({
           success: true,
-          message: response.data.message,
-          count: response.data.count,
-          query: response.data.query
+          message: `Reporte generado exitosamente`,
+          count: summary.totalRecords,
+          summary: summary,
+          query: Object.fromEntries(queryString)
         })
         
         toast({
           title: "Éxito",
-          description: `Reporte generado con ${response.data.count} resultados`,
+          description: `Reporte generado con ${summary.totalRecords} registros (${summary.totalEntries} entradas)`,
         })
       } else {
         setResponseInfo({
           success: false,
-          message: response.data.message,
-          error: response.data.error,
-          query: response.data.query
+          message: "Formato de respuesta no reconocido",
+          error: "La respuesta del servidor no tiene el formato esperado",
+          query: Object.fromEntries(queryString)
         })
         
         toast({
           title: "Error",
-          description: response.data.message || "Error generando reporte",
+          description: "Formato de respuesta no reconocido",
           variant: "destructive"
         })
       }
     } catch (error: any) {
-      console.error("Error executing Concar query:", error)
+      console.error("Error executing Concar export query:", error)
+      
+      const errorMessage = error.response?.data?.message 
+        ? (Array.isArray(error.response.data.message) 
+            ? error.response.data.message.join(", ")
+            : error.response.data.message)
+        : error.message || "Error desconocido"
       
       setResponseInfo({
         success: false,
         message: "Error de conexión",
-        error: error.message,
+        error: errorMessage,
         query: queryParams
       })
       
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Error ejecutando consulta",
+        description: errorMessage,
         variant: "destructive"
       })
     } finally {
@@ -250,31 +297,156 @@ export default function ConcarReportPage() {
     }
   }
 
-  const downloadResults = () => {
+  const downloadResultsCSV = () => {
     if (results.length === 0) return
+
+    // Definir los nombres de las columnas según el formato CONCAR (39 campos A-AD)
+    const columnNames = [
+      "Campo", "Subdiario", "Número Comprobante", "Fecha Comprobante", "Código Moneda",
+      "Glosa Principal", "Tipo Cambio", "Tipo Conversión", "Flag Conversión Moneda", "Fecha Tipo Cambio",
+      "Cuenta Contable", "Código Anexo", "Centro Costo", "Debe/Haber", "Importe Original",
+      "Importe Dólares", "Importe Soles", "Tipo Documento", "Número Documento", "Fecha Documento",
+      "Fecha Vencimiento", "Código Área", "Glosa Detalle", "Código Anexo Auxiliar", "Medio Pago",
+      "Tipo Documento Referencia", "Número Documento Referencia", "Fecha Documento Referencia",
+      "Nro Reg Registrador Tipo Doc Ref", "Base Imponible Documento Referencia"
+    ]
 
     const csvContent = [
       // Headers
-      Object.keys(results[0]).join(","),
+      columnNames.join(","),
       // Data rows
       ...results.map(row => 
-        Object.values(row).map(value => {
-          if (value === null || value === undefined) return ""
-          if (typeof value === "string") return `"${value}"`
-          if (typeof value === "number") return value.toString()
-          if (Array.isArray(value)) return `"${value.join(", ")}"`
+        columnNames.map((_, index) => {
+          const value = Object.values(row)[index]
+          if (value === null || value === undefined || value === "") return ""
+          if (typeof value === "string") {
+            // Escapar comillas y envolver en comillas si contiene comas
+            const escaped = value.replace(/"/g, '""')
+            return `"${escaped}"`
+          }
           return `"${String(value)}"`
         }).join(",")
       )
     ].join("\n")
 
-    const blob = new Blob([csvContent], { type: "text/csv" })
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `concar-report-${new Date().toISOString().split("T")[0]}.csv`
+    const period = responseInfo?.summary?.period || new Date().toISOString().split("T")[0]
+    a.download = `concar-export-${period.replace(/\//g, "-")}.csv`
     a.click()
     window.URL.revokeObjectURL(url)
+  }
+
+  const downloadResultsXLSX = async () => {
+    if (results.length === 0) return
+
+    setDownloading(true)
+    
+    try {
+      // Dynamic import of xlsx library
+      const xlsx = await import('xlsx')
+      
+      // Definir los nombres de las columnas según el formato CONCAR (39 campos A-AD)
+      const columnHeaders = [
+        "Campo", "Subdiario", "Número Comprobante", "Fecha Comprobante", "Código Moneda",
+        "Glosa Principal", "Tipo Cambio", "Tipo Conversión", "Flag Conversión Moneda", "Fecha Tipo Cambio",
+        "Cuenta Contable", "Código Anexo", "Centro Costo", "Debe/Haber", "Importe Original",
+        "Importe Dólares", "Importe Soles", "Tipo Documento", "Número Documento", "Fecha Documento",
+        "Fecha Vencimiento", "Código Área", "Glosa Detalle", "Código Anexo Auxiliar", "Medio Pago",
+        "Tipo Documento Referencia", "Número Documento Referencia", "Fecha Documento Referencia",
+        "Nro Reg Registrador Tipo Doc Ref", "Base Imponible Documento Referencia"
+      ]
+
+      // Preparar datos para Excel
+      const excelData = results.map(row => ({
+        "Campo": row.campo || "",
+        "Subdiario": row.subDiario || "",
+        "Número Comprobante": row.numeroComprobante || "",
+        "Fecha Comprobante": row.fechaComprobante || "",
+        "Código Moneda": row.codigoMoneda || "",
+        "Glosa Principal": row.glosaPrincipal || "",
+        "Tipo Cambio": row.tipoCambio || "",
+        "Tipo Conversión": row.tipoConversion || "",
+        "Flag Conversión Moneda": row.flagConversionMoneda || "",
+        "Fecha Tipo Cambio": row.fechaTipoCambio || "",
+        "Cuenta Contable": row.cuentaContable || "",
+        "Código Anexo": row.codigoAnexo || "",
+        "Centro Costo": row.centroCosto || "",
+        "Debe/Haber": row.debeHaber || "",
+        "Importe Original": row.importeOriginal || "",
+        "Importe Dólares": row.importeDolares || "",
+        "Importe Soles": row.importeSoles || "",
+        "Tipo Documento": row.tipoDocumento || "",
+        "Número Documento": row.numeroDocumento || "",
+        "Fecha Documento": row.fechaDocumento || "",
+        "Fecha Vencimiento": row.fechaVencimiento || "",
+        "Código Área": row.codigoArea || "",
+        "Glosa Detalle": row.glosaDetalle || "",
+        "Código Anexo Auxiliar": row.codigoAnexoAuxiliar || "",
+        "Medio Pago": row.medioPago || "",
+        "Tipo Documento Referencia": row.tipoDocumentoReferencia || "",
+        "Número Documento Referencia": row.numeroDocumentoReferencia || "",
+        "Fecha Documento Referencia": row.fechaDocumentoReferencia || "",
+        "Nro Reg Registrador Tipo Doc Ref": row.nroRegRegistradorTipoDocRef || "",
+        "Base Imponible Documento Referencia": row.baseImponibleDocumentoReferencia || ""
+      }))
+
+      // Create workbook and worksheet
+      const wb = xlsx.utils.book_new()
+      const ws = xlsx.utils.json_to_sheet(excelData)
+
+      // Auto-size columns
+      const colWidths = columnHeaders.map(header => {
+        const maxLength = Math.max(
+          header.length,
+          ...excelData.map(row => String(row[header as keyof typeof row] || "").length)
+        )
+        return { wch: Math.min(maxLength + 2, 50) } // Máximo 50 caracteres de ancho
+      })
+      ws['!cols'] = colWidths
+
+      // Add worksheet to workbook
+      const sheetName = responseInfo?.summary?.subDiario 
+        ? `CONCAR ${responseInfo.summary.subDiario}` 
+        : "CONCAR Export"
+      xlsx.utils.book_append_sheet(wb, ws, sheetName)
+
+      // Generate Excel file
+      const excelBuffer = xlsx.write(wb, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([excelBuffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      })
+      
+      // Download file
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      const period = responseInfo?.summary?.period 
+        ? responseInfo.summary.period.replace(/\//g, "-") 
+        : new Date().toISOString().split("T")[0]
+      link.setAttribute('download', `concar-export-${period}.xlsx`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      toast({
+        title: "Éxito",
+        description: "Archivo Excel descargado correctamente",
+      })
+    } catch (error: any) {
+      console.error('Error exporting to Excel:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Error al exportar a Excel",
+        variant: "destructive"
+      })
+    } finally {
+      setDownloading(false)
+    }
   }
 
   const formatValue = (value: any): string => {
@@ -321,119 +493,101 @@ export default function ConcarReportPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="companyId">Empresa</Label>
-              <div className="p-3 bg-gray-50 border rounded-md">
-                <div className="font-medium">{company?.name || "Cargando..."}</div>
-                <div className="text-sm text-gray-500">{company?.id || "ID no disponible"}</div>
+          <div className="space-y-4">
+            {/* Primera fila: Empresa, Período, Fecha Inicio, Fecha Fin */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="companyId">Empresa</Label>
+                <div className="p-3 bg-gray-50 dark:bg-gray-900 border rounded-md">
+                  <div className="font-medium">{company?.name || "Cargando..."}</div>
+                  <div className="text-sm text-gray-500">{company?.id || "ID no disponible"}</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Período (Mes y Año)</Label>
+                <MonthYearPicker
+                  month={selectedMonth}
+                  year={selectedYear}
+                  onMonthChange={setSelectedMonth}
+                  onYearChange={setSelectedYear}
+                  placeholder="Seleccionar mes y año"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Fecha Inicio</Label>
+                <div className="p-3 bg-gray-50 dark:bg-gray-900 border rounded-md text-sm font-mono">
+                  {queryParams.startDate || "-"}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Fecha Fin</Label>
+                <div className="p-3 bg-gray-50 dark:bg-gray-900 border rounded-md text-sm font-mono">
+                  {queryParams.endDate || "-"}
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="startDate">Fecha Inicio</Label>
-              <Input
-                id="startDate"
-                type="date"
-                value={queryParams.startDate}
-                onChange={(e) => handleParamChange("startDate", e.target.value)}
-              />
-            </div>
+            {/* Resto de campos en grid de 3 columnas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="bankAccountId">Cuenta Bancaria</Label>
+                <Select
+                  value={queryParams.bankAccountId}
+                  onValueChange={(value) => handleParamChange("bankAccountId", value)}
+                  disabled={bankAccountsLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={bankAccountsLoading ? "Cargando..." : "Seleccionar cuenta"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las cuentas</SelectItem>
+                    {bankAccounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.accountNumber} - {account.alias || account.description || "Sin alias"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="endDate">Fecha Fin</Label>
-              <Input
-                id="endDate"
-                type="date"
-                value={queryParams.endDate}
-                onChange={(e) => handleParamChange("endDate", e.target.value)}
-              />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="conciliationType">Tipo Conciliación</Label>
+                <Select
+                  value={queryParams.conciliationType}
+                  onValueChange={(value) => handleParamChange("conciliationType", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DOCUMENTS">Documentos</SelectItem>
+                    <SelectItem value="DETRACTIONS">Detracciones</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="bankAccountId">Cuenta Bancaria</Label>
-              <Select
-                value={queryParams.bankAccountId}
-                onValueChange={(value) => handleParamChange("bankAccountId", value)}
-                disabled={bankAccountsLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={bankAccountsLoading ? "Cargando..." : "Seleccionar cuenta"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las cuentas</SelectItem>
-                  {bankAccounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.accountNumber} - {account.alias || account.description || "Sin alias"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="documentClassification">Clasificación de Documento</Label>
+                <Select
+                  value={queryParams.documentClassification}
+                  onValueChange={(value) => handleParamChange("documentClassification", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar clasificación" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15">15 - RH</SelectItem>
+                    <SelectItem value="11">11 - COMPRAS (FACTURAS)</SelectItem>
+                    <SelectItem value="22" disabled className="text-muted-foreground/50">22 - LIBRO DE EGRESOS</SelectItem>
+                    <SelectItem value="21" disabled className="text-muted-foreground/50">21 - LIBRO DE INGRESOS</SelectItem>
+                    <SelectItem value="31" disabled className="text-muted-foreground/50">31 - LIBRO DIARIO</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="conciliationType">Tipo Conciliación</Label>
-              <Select
-                value={queryParams.conciliationType}
-                onValueChange={(value) => handleParamChange("conciliationType", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DOCUMENTS">Documentos</SelectItem>
-                  <SelectItem value="DETRACTIONS">Detracciones</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Estado</Label>
-              <Select
-                value={queryParams.status}
-                onValueChange={(value) => handleParamChange("status", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar estado" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PENDING">Pendiente</SelectItem>
-                  <SelectItem value="IN_PROGRESS">En Progreso</SelectItem>
-                  <SelectItem value="COMPLETED">Completado</SelectItem>
-                  <SelectItem value="CANCELLED">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="limit">Límite</Label>
-              <Input
-                id="limit"
-                type="number"
-                value={queryParams.limit || ""}
-                onChange={(e) => {
-                  const value = e.target.value === "" ? 100 : parseInt(e.target.value) || 100
-                  handleParamChange("limit", value)
-                }}
-                placeholder="100"
-                min="1"
-                max="1000"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="offset">Offset</Label>
-              <Input
-                id="offset"
-                type="number"
-                value={queryParams.offset || ""}
-                onChange={(e) => {
-                  const value = e.target.value === "" ? 0 : parseInt(e.target.value) || 0
-                  handleParamChange("offset", value)
-                }}
-                placeholder="0"
-                min="0"
-              />
             </div>
           </div>
 
@@ -457,10 +611,37 @@ export default function ConcarReportPage() {
             </Button>
 
             {results.length > 0 && (
-              <Button variant="outline" onClick={downloadResults}>
-                <Download className="w-4 h-4 mr-2" />
-                Descargar CSV
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    disabled={downloading}
+                  >
+                    {downloading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Exportando...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4 mr-2" />
+                        Descargar
+                        <ChevronDown className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={downloadResultsCSV}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Descargar CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={downloadResultsXLSX}>
+                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    Descargar XLSX
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </CardContent>
@@ -479,7 +660,27 @@ export default function ConcarReportPage() {
           <CardContent>
             <div className="space-y-2">
               <p><strong>Mensaje:</strong> {responseInfo.message}</p>
-              {responseInfo.count !== undefined && (
+              {responseInfo.summary && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Total Registros</p>
+                    <p className="text-lg font-semibold">{responseInfo.summary.totalRecords}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Total Entradas</p>
+                    <p className="text-lg font-semibold">{responseInfo.summary.totalEntries}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Período</p>
+                    <p className="text-lg font-semibold">{responseInfo.summary.period}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Subdiario</p>
+                    <p className="text-lg font-semibold">{responseInfo.summary.subDiario}</p>
+                  </div>
+                </div>
+              )}
+              {responseInfo.count !== undefined && !responseInfo.summary && (
                 <p><strong>Resultados:</strong> {responseInfo.count}</p>
               )}
               {responseInfo.error && (
@@ -516,78 +717,90 @@ export default function ConcarReportPage() {
 
               <TabsContent value="table" className="mt-4">
                 <ScrollableTable
-                  data={results.slice(0, 50)}
+                  data={results}
                   columns={[
                     {
-                      key: "account",
-                      header: "Cuenta",
+                      key: "subDiario",
+                      header: "Subdiario",
                       render: (result) => (
-                        <div>
-                          <div className="font-medium">{result.accountNumber}</div>
-                          <div className="text-xs text-gray-500">{result.alias || result.description}</div>
-                        </div>
+                        <Badge variant="outline">{result.subDiario}</Badge>
                       ),
                     },
                     {
-                      key: "type",
-                      header: "Tipo",
-                      render: (result) => <Badge variant="outline">{result.conciliation_type}</Badge>,
-                    },
-                    {
-                      key: "supplier",
-                      header: "Proveedor",
+                      key: "numeroComprobante",
+                      header: "Comprobante",
                       render: (result) => (
-                        <div>
-                          <div className="font-medium">{result.tradeName || "-"}</div>
-                          <div className="text-xs text-gray-500">{result.supplier_documentNumber || "-"}</div>
-                        </div>
+                        <div className="font-mono">{result.numeroComprobante}</div>
                       ),
                     },
                     {
-                      key: "document",
-                      header: "Documento",
+                      key: "fechaComprobante",
+                      header: "Fecha",
+                      render: (result) => result.fechaComprobante || "-",
+                    },
+                    {
+                      key: "cuentaContable",
+                      header: "Cuenta Contable",
                       render: (result) => (
-                        <div>
-                          <div className="font-medium">{result.fullNumber || "-"}</div>
-                          <div className="text-xs text-gray-500">{result.documentType || "-"}</div>
-                        </div>
+                        <div className="font-mono">{result.cuentaContable || "-"}</div>
                       ),
                     },
                     {
-                      key: "amount",
-                      header: "Monto",
+                      key: "debeHaber",
+                      header: "D/H",
                       render: (result) => (
-                        <div>
-                          <div className="font-medium">
-                            {formatCurrency(result.document_total)}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {result.document_conciliated_amount ? `Conciliado: ${formatCurrency(result.document_conciliated_amount)}` : "-"}
-                          </div>
-                        </div>
-                      ),
-                    },
-                    {
-                      key: "status",
-                      header: "Estado",
-                      render: (result) => (
-                        <Badge 
-                          variant={result.conciliation_status === "COMPLETED" ? "default" : "secondary"}
-                        >
-                          {result.conciliation_status}
+                        <Badge variant={result.debeHaber === "D" ? "default" : "secondary"}>
+                          {result.debeHaber}
                         </Badge>
                       ),
+                    },
+                    {
+                      key: "importeOriginal",
+                      header: "Importe",
+                      render: (result) => (
+                        <div className="font-medium text-right">
+                          {result.importeOriginal || "-"}
+                        </div>
+                      ),
+                    },
+                    {
+                      key: "tipoDocumento",
+                      header: "Tipo Doc.",
+                      render: (result) => (
+                        <Badge variant="outline">{result.tipoDocumento || "-"}</Badge>
+                      ),
+                    },
+                    {
+                      key: "numeroDocumento",
+                      header: "N° Documento",
+                      render: (result) => (
+                        <div className="text-sm">{result.numeroDocumento || "-"}</div>
+                      ),
+                    },
+                    {
+                      key: "fechaDocumento",
+                      header: "F. Documento",
+                      render: (result) => result.fechaDocumento || "-",
+                    },
+                    {
+                      key: "glosaPrincipal",
+                      header: "Glosa",
+                      render: (result) => (
+                        <div className="text-sm max-w-md truncate" title={result.glosaPrincipal}>
+                          {result.glosaPrincipal || "-"}
+                        </div>
+                      ),
+                    },
+                    {
+                      key: "codigoMoneda",
+                      header: "Moneda",
+                      render: (result) => result.codigoMoneda || "-",
                     },
                   ]}
                   emptyTitle="No hay resultados"
                   emptyDescription="No se encontraron registros con los parámetros especificados"
                   emptyIcon={<FileText className="h-10 w-10" />}
                 />
-                {results.length > 50 && (
-                  <div className="mt-4 text-center text-sm text-gray-500">
-                    Mostrando 50 de {results.length} resultados. Use los parámetros para filtrar más.
-                  </div>
-                )}
               </TabsContent>
 
               <TabsContent value="json" className="mt-4">

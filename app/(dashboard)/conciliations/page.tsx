@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Trash2,
   Info,
+  Sparkles,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FiltersBar } from "@/components/ui/filters-bar"
@@ -118,6 +119,9 @@ export default function ConciliationsPage() {
     maxAmount: "",
   })
 
+  // Estado para ordenamiento inteligente
+  const [intelligentSorting, setIntelligentSorting] = useState(false)
+
   const loading = conciliationsLoading || documentsLoading || transactionsLoading
   const error = conciliationsError
 
@@ -135,6 +139,28 @@ export default function ConciliationsPage() {
       })
     }
   }, [user?.companyId, fetchConciliations, fetchAllDocuments, fetchAllTransactions, fetchBankAccounts])
+
+  // Recargar documentos cuando se active el ordenamiento inteligente
+  useEffect(() => {
+    if (user?.companyId && intelligentSorting && selectedTransaction) {
+      debugLog("Loading documents with intelligent sorting", {
+        transactionId: selectedTransaction.id,
+        companyId: user.companyId,
+      })
+      fetchAllDocuments(user.companyId, {
+        page: 1,
+        limit: 1000,
+        transactionId: selectedTransaction.id,
+      }).catch((error) => {
+        debugLog("Error loading documents with intelligent sorting", error)
+      })
+    } else if (user?.companyId && !intelligentSorting) {
+      // Recargar sin ordenamiento inteligente si se desactiva
+      fetchAllDocuments(user.companyId, { page: 1, limit: 1000 }).catch((error) => {
+        debugLog("Error reloading documents", error)
+      })
+    }
+  }, [user?.companyId, intelligentSorting, selectedTransaction?.id, fetchAllDocuments])
 
   // Check if transaction is already conciliated
   const isTransactionConciliated = useCallback(
@@ -1366,9 +1392,39 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                 {/* Document Filters */}
                 <Card className="border-0 shadow-none">
                   <CardHeader className="pb-4">
-                    <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
-                      Filtros de Documentos
-                    </CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                        Filtros de Documentos
+                      </CardTitle>
+                      {/* Checkbox de Ordenamiento Inteligente */}
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="intelligent-sorting"
+                          checked={intelligentSorting}
+                          onCheckedChange={(checked) => {
+                            setIntelligentSorting(checked === true)
+                          }}
+                          disabled={!selectedTransaction}
+                          className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                        />
+                        <Label
+                          htmlFor="intelligent-sorting"
+                          className={`text-sm font-medium cursor-pointer flex items-center gap-2 ${
+                            !selectedTransaction
+                              ? "text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                              : "text-slate-700 dark:text-slate-300"
+                          }`}
+                        >
+                          <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          Ordenamiento Inteligente
+                        </Label>
+                      </div>
+                    </div>
+                    {!selectedTransaction && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                        Selecciona una transacción para activar el ordenamiento inteligente
+                      </p>
+                    )}
                   </CardHeader>
                   <CardContent>
                     <FiltersBar
@@ -1412,6 +1468,16 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                                 const accountMatch = selectedTransaction.description?.match(/\d{3}\s\d{8}\s\d/)
                                 return accountMatch && acc.accountNumber === accountMatch[0]
                               })
+                            
+                            // Obtener matchProbability si está disponible (cuando se usa ordenamiento inteligente)
+                            const matchProbability = (document as any).matchProbability as number | undefined
+                            const getProbabilityColor = (prob?: number) => {
+                              if (!prob) return ""
+                              if (prob >= 0.9) return "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-600"
+                              if (prob >= 0.7) return "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
+                              if (prob >= 0.5) return "bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-600"
+                              return "bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-600"
+                            }
 
                             return (
                               <TableRow
@@ -1428,17 +1494,28 @@ const { availableDocuments, totalDocumentPages, matchingAccountCount } = useMemo
                                     {getTypeBadge(document.documentType)}
                                     <div>
                                       <div className="font-medium">{document.fullNumber}</div>
-                                      {hasMatchingAccount && (
-                                        <Badge variant="outline" className="text-xs bg-green-100 text-green-800">
-                                          Cuenta coincidente
-                                        </Badge>
-                                      )}
- 
-                                      {document.detraction?.hasDetraction && (
-                                        <Badge variant="secondary" className="text-xs mt-1">
-                                          Detracción
-                                        </Badge>
-                                      )}
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {matchProbability !== undefined && (
+                                          <Badge 
+                                            variant="outline" 
+                                            className={`text-xs ${getProbabilityColor(matchProbability)}`}
+                                            title={`Probabilidad de coincidencia: ${(matchProbability * 100).toFixed(1)}%`}
+                                          >
+                                            <Sparkles className="h-3 w-3 mr-1" />
+                                            {Math.round(matchProbability * 100)}%
+                                          </Badge>
+                                        )}
+                                        {hasMatchingAccount && (
+                                          <Badge variant="outline" className="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                                            Cuenta coincidente
+                                          </Badge>
+                                        )}
+                                        {document.detraction?.hasDetraction && (
+                                          <Badge variant="secondary" className="text-xs">
+                                            Detracción
+                                          </Badge>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
                                 </TableCell>

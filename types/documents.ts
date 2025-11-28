@@ -270,6 +270,7 @@ export interface DocumentQueryDto extends PaginationDto {
   hasDigitalSignature?: boolean
   accountId?: string
   costCenterId?: string
+  transactionId?: string
 }
 
 export interface CreateDocumentDto {
@@ -468,6 +469,23 @@ export interface ConciliateDocumentDto {
 }
 
 export interface DocumentResponseDto extends Document {}
+
+// Interfaz extendida para documentos con probabilidad de coincidencia
+export interface DocumentWithMatchProbability extends Document {
+  matchProbability?: number // 0-1, solo presente cuando se usa transactionId
+}
+
+// Información sobre la transacción usada para ordenar
+export interface SortedByInfo {
+  transactionId: string
+  transactionAmount: string
+  transactionDescription: string
+}
+
+// Respuesta paginada con ordenamiento inteligente
+export interface DocumentsResponseWithMatching extends PaginatedResponse<DocumentWithMatchProbability> {
+  sortedBy?: SortedByInfo // Solo presente cuando se usa transactionId
+}
 
 export interface DocumentSummaryResponseDto {
   totalDocuments: number

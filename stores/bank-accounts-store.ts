@@ -137,7 +137,10 @@ export const useBankAccountsStore = create<BankAccountsState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<BankAccount[]>(`/bank-accounts/company/${companyId}/active`)
-      set({ loading: false })
+      set({ 
+        bankAccounts: response.data,
+        loading: false 
+      })
       return response.data
     } catch (error: any) {
       set({

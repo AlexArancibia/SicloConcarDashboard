@@ -5,10 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Building2, Eye, Edit, Plus, Phone, Mail, FileText, ChevronLeft, ChevronRight, Download, ChevronDown } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Building2, Eye, Edit, Plus, Phone, Mail, FileText, ChevronLeft, ChevronRight, Download, ChevronDown, AlertTriangle } from "lucide-react"
 import { FiltersBar } from "@/components/ui/filters-bar"
 import { useAuthStore } from "@/stores/authStore"
-import type { SupplierType, SupplierStatus } from "@/types/suppliers"
+import type { Supplier, SupplierType, SupplierStatus } from "@/types/suppliers"
 import { useSuppliersStore } from "@/stores/suppliers-store"
 import { TableSkeleton } from "../ui/table-skeleton"
 import {
@@ -160,6 +161,16 @@ export default function SuppliersContent() {
     return [...filteredSuppliers].sort((a, b) => 
       a.businessName.localeCompare(b.businessName, 'es', { sensitivity: 'base' }))
   }, [filteredSuppliers])
+
+  // Helper function to check if supplier has active bank accounts
+  const hasActiveBankAccounts = (supplier: Supplier) => {
+    return supplier.supplierBankAccounts?.some(acc => acc.isActive) ?? false
+  }
+
+  // Count suppliers without active bank accounts
+  const suppliersWithoutAccounts = useMemo(() => {
+    return sortedSuppliers.filter(supplier => !hasActiveBankAccounts(supplier)).length
+  }, [sortedSuppliers])
 
   const filterConfigs = [
     {
@@ -471,11 +482,19 @@ export default function SuppliersContent() {
         {/* Suppliers Table Card */}
         <Card className="border-0 shadow-none">
           <CardHeader className="pb-4">
-            <div className="flex items-center gap-3">
-              <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-              <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
-                Proveedores ({loading ? "..." : pagination.total})
-              </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+                <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">
+                  Proveedores ({loading ? "..." : pagination.total})
+                </CardTitle>
+              </div>
+              {!loading && suppliersWithoutAccounts > 0 && (
+                <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                  <span>Sin cuenta bancaria registrada</span>
+                </div>
+              )}
             </div>
           </CardHeader>
         <CardContent>
@@ -498,10 +517,28 @@ export default function SuppliersContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedSuppliers.map((supplier) => (
-                      <tr key={supplier.id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
+                    {sortedSuppliers.map((supplier) => {
+                      const hasActiveAccounts = hasActiveBankAccounts(supplier)
+                      return (
+                      <tr 
+                        key={supplier.id} 
+                        className={`border-b ${
+                          !hasActiveAccounts 
+                            ? 'bg-red-50/60 dark:bg-red-950/50 hover:bg-red-100/70 dark:hover:bg-red-900/60' 
+                            : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                        }`}
+                      >
                         <td className="p-3">
-                          <Badge variant="outline">{getDocumentTypeName(supplier.documentType)}</Badge>
+                          <div className="flex items-center gap-2">
+                            {!hasActiveAccounts && (
+                              <span title="Sin cuentas bancarias activas">
+                                <AlertTriangle 
+                                  className="w-4 h-4 text-red-500 flex-shrink-0" 
+                                />
+                              </span>
+                            )}
+                            <Badge variant="outline">{getDocumentTypeName(supplier.documentType)}</Badge>
+                          </div>
                         </td>
                         <td className="p-3 font-mono">{supplier.documentNumber}</td>
                         <td className="p-3 max-w-48 truncate" title={supplier.businessName}>
@@ -560,7 +597,8 @@ export default function SuppliersContent() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
