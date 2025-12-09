@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,8 +9,9 @@ import { Upload, Download, FileText, Eye, Trash2, CheckCircle } from "lucide-rea
 import { useDocumentsStore } from "@/stores/documents-store"
 import { FiltersBar } from "@/components/ui/filters-bar"
 import { useToast } from "@/hooks/use-toast"
-import type { DocumentStatus, DocumentType } from "@/types/documents"
+import type { DocumentStatus, DocumentType, DocumentSummaryResponseDto } from "@/types/documents"
 import { useAuthStore } from "@/stores/authStore"
+import { useSuppliersStore } from "@/stores/suppliers-store"
 import XMLImportModal from "./xml-import-modal"
 import { Checkbox } from "../ui/checkbox"
 import SunatValidationDialog from "./sunat-validation-dialog"
@@ -28,6 +29,9 @@ export default function DocumentsPage() {
     maxAmount: string
     hasRetention: string // "yes", "no", "all"
     hasDetraction: string // "yes", "no", "all"
+    supplierId: string
+    tags: string
+    hasXmlData: string // "yes", "no", "all"
   }>({
     search: "",
     type: "all",
@@ -39,56 +43,249 @@ export default function DocumentsPage() {
     maxAmount: "",
     hasRetention: "all",
     hasDetraction: "all",
+    supplierId: "all",
+    tags: "",
+    hasXmlData: "all",
   })
   const [currentPage, setCurrentPage] = useState(1)
   const [xmlImportOpen, setXmlImportOpen] = useState(false)
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
   const [sunatValidationOpen, setSunatValidationOpen] = useState(false)
+  const [summary, setSummary] = useState<DocumentSummaryResponseDto | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
 
   const { toast } = useToast()
   const { company, user } = useAuthStore() // Assuming user has updatedById
 
-  // Zustand store
-  const { documents, loading, error, pagination, fetchDocuments, deleteDocument, bulkDeleteDocuments, clearError } = useDocumentsStore()
+  // Zustand stores
+  const { documents, loading, error, pagination, fetchDocuments, deleteDocument, bulkDeleteDocuments, clearError, getDocumentSummary } = useDocumentsStore()
+  const { suppliers, fetchSuppliers } = useSuppliersStore()
 
-  // Initial load
+  // Cargar proveedores para el filtro
+  useEffect(() => {
+    if (company?.id && suppliers.length === 0) {
+      fetchSuppliers(company.id, { page: 1, limit: 100 })
+    }
+  }, [company?.id, suppliers.length, fetchSuppliers])
+
+  // Ref para trackear el último estado de filtros y evitar llamadas duplicadas
+  const lastFilterKeysRef = useRef<string>("")
+  const isInitialMountRef = useRef(true)
+
+  // Cargar resumen una sola vez al montar el componente
   useEffect(() => {
     if (company?.id) {
-      console.log("Initial load triggered")
-      loadDocuments()
+      console.log("📊 [DocumentsPage] Cargando resumen de documentos para empresa:", company.id)
+      const loadSummary = async () => {
+        setSummaryLoading(true)
+        const summaryData = await getDocumentSummary(company.id)
+        if (summaryData) {
+          console.log("✅ [DocumentsPage] Resumen cargado:", {
+            total: summaryData.totalDocuments,
+            pending: summaryData.pending,
+            approved: summaryData.approved,
+            paid: summaryData.paid,
+          })
+          setSummary(summaryData)
+        } else {
+          console.warn("⚠️ [DocumentsPage] No se pudo cargar el resumen")
+        }
+        setSummaryLoading(false)
+      }
+      loadSummary()
     }
-  }, [company?.id])
+  }, [company?.id, getDocumentSummary])
 
-  // Page change
-  useEffect(() => {
-    if (company?.id && currentPage > 1) {
-      console.log("Page change triggered:", currentPage)
-      loadDocuments()
+  // Construir query de forma memoizada
+  const buildQuery = useCallback((page: number, limit: number) => {
+    const query: any = {
+      page,
+      limit,
     }
-  }, [currentPage])
 
-  // Filter changes
-  useEffect(() => {
-    if (company?.id) {
-      console.log("Filters changed, resetting to page 1")
-      setCurrentPage(1)
-      loadDocuments()
+    // Aplicar filtros solo si tienen valores válidos
+    // Helper para verificar si un filtro de select está activo (no es "all" ni "")
+    const isFilterActive = (value: string | undefined) => {
+      return value && value !== "all" && value !== ""
     }
+
+    if (filters.search?.trim()) {
+      query.search = filters.search.trim()
+    }
+    if (isFilterActive(filters.type)) {
+      query.documentType = filters.type as DocumentType
+    }
+    if (isFilterActive(filters.status)) {
+      query.status = filters.status as DocumentStatus
+    }
+    if (filters.dateRange.from) {
+      query.issueDateFrom = filters.dateRange.from.toISOString().split("T")[0]
+    }
+    if (filters.dateRange.to) {
+      query.issueDateTo = filters.dateRange.to.toISOString().split("T")[0]
+    }
+    if (filters.dueDateRange.from) {
+      query.dueDateFrom = filters.dueDateRange.from.toISOString().split("T")[0]
+    }
+    if (filters.dueDateRange.to) {
+      query.dueDateTo = filters.dueDateRange.to.toISOString().split("T")[0]
+    }
+    if (isFilterActive(filters.currency)) {
+      query.currency = filters.currency
+    }
+    if (filters.minAmount?.trim()) {
+      const minAmount = parseFloat(filters.minAmount)
+      if (!isNaN(minAmount)) {
+        query.minAmount = minAmount
+      }
+    }
+    if (filters.maxAmount?.trim()) {
+      const maxAmount = parseFloat(filters.maxAmount)
+      if (!isNaN(maxAmount)) {
+        query.maxAmount = maxAmount
+      }
+    }
+    if (isFilterActive(filters.hasRetention)) {
+      query.hasRetention = filters.hasRetention === "yes"
+    }
+    if (isFilterActive(filters.hasDetraction)) {
+      query.hasDetraction = filters.hasDetraction === "yes"
+    }
+    if (isFilterActive(filters.supplierId)) {
+      query.supplierId = filters.supplierId
+    }
+    if (filters.tags?.trim()) {
+      query.tags = filters.tags.trim()
+    }
+    if (isFilterActive(filters.hasXmlData)) {
+      query.hasXmlData = filters.hasXmlData === "yes"
+    }
+
+    return query
   }, [
-    filters.search, 
-    filters.type, 
-    filters.status, 
-    filters.dateRange, 
-    filters.dueDateRange, 
-    filters.currency, 
-    filters.minAmount, 
-    filters.maxAmount, 
-    filters.hasRetention, 
-    filters.hasDetraction
+    filters.search,
+    filters.type,
+    filters.status,
+    filters.dateRange.from,
+    filters.dateRange.to,
+    filters.dueDateRange.from,
+    filters.dueDateRange.to,
+    filters.currency,
+    filters.minAmount,
+    filters.maxAmount,
+    filters.hasRetention,
+    filters.hasDetraction,
+    filters.supplierId,
+    filters.tags,
+    filters.hasXmlData,
+  ])
+
+  // Función optimizada para cargar documentos
+  const loadDocuments = useCallback(async (opts?: { page?: number; limit?: number; reason?: string }) => {
+    if (!company?.id) {
+      console.warn("⚠️ [DocumentsPage] No hay company ID disponible")
+      return
+    }
+
+    const targetPage = opts?.page ?? currentPage
+    const targetLimit = opts?.limit ?? pagination.limit ?? 10
+    const query = buildQuery(targetPage, targetLimit)
+
+    console.log(`🔄 [DocumentsPage] Cargando documentos - ${opts?.reason || "trigger desconocido"}`)
+    console.log("📋 [DocumentsPage] Query params:", {
+      page: query.page,
+      limit: query.limit,
+      filters: Object.keys(query).filter(k => !["page", "limit"].includes(k)),
+      companyId: company.id,
+    })
+
+    try {
+      await fetchDocuments(company.id, query)
+      console.log("✅ [DocumentsPage] Documentos cargados exitosamente")
+    } catch (err) {
+      console.error("❌ [DocumentsPage] Error cargando documentos:", err)
+    }
+  }, [company?.id, currentPage, pagination.limit, buildQuery, fetchDocuments])
+
+  // Efecto unificado para cargar documentos cuando cambian filtros, página o company
+  useEffect(() => {
+    if (!company?.id) {
+      console.log("⏸️ [DocumentsPage] Esperando company ID...")
+      return
+    }
+
+    // Detectar qué cambió usando una clave única basada en los filtros
+    const filterKeys = [
+      filters.search,
+      filters.type,
+      filters.status,
+      filters.dateRange.from?.getTime(),
+      filters.dateRange.to?.getTime(),
+      filters.dueDateRange.from?.getTime(),
+      filters.dueDateRange.to?.getTime(),
+      filters.currency,
+      filters.minAmount,
+      filters.maxAmount,
+      filters.hasRetention,
+      filters.hasDetraction,
+      filters.supplierId,
+      filters.tags,
+      filters.hasXmlData,
+    ].join("|")
+
+    const filtersChanged = filterKeys !== lastFilterKeysRef.current
+    const isInitialMount = isInitialMountRef.current
+
+    // Usar un pequeño delay para evitar múltiples llamadas cuando cambian varios filtros a la vez
+    const timeoutId = setTimeout(() => {
+      if (isInitialMount) {
+        console.log("🚀 [DocumentsPage] Carga inicial de documentos")
+        isInitialMountRef.current = false
+        lastFilterKeysRef.current = filterKeys
+        loadDocuments({ reason: "carga inicial" })
+      } else if (filtersChanged) {
+        console.log("🔄 [DocumentsPage] Filtros cambiaron, reseteando a página 1")
+        lastFilterKeysRef.current = filterKeys
+        if (currentPage !== 1) {
+          // Resetear página y cargar documentos en página 1
+          setCurrentPage(1)
+          loadDocuments({ page: 1, reason: "filtros cambiados" })
+        } else {
+          // Ya estamos en página 1, solo recargar
+          loadDocuments({ page: 1, reason: "filtros cambiados" })
+        }
+      } else {
+        // Solo cambió la página, no los filtros
+        console.log(`📄 [DocumentsPage] Cambio de página a ${currentPage}`)
+        loadDocuments({ reason: "cambio de página" })
+      }
+    }, 150) // Aumentado a 150ms para mejor debouncing
+
+    return () => clearTimeout(timeoutId)
+  }, [
+    company?.id,
+    currentPage,
+    filters.search,
+    filters.type,
+    filters.status,
+    filters.dateRange.from,
+    filters.dateRange.to,
+    filters.dueDateRange.from,
+    filters.dueDateRange.to,
+    filters.currency,
+    filters.minAmount,
+    filters.maxAmount,
+    filters.hasRetention,
+    filters.hasDetraction,
+    filters.supplierId,
+    filters.tags,
+    filters.hasXmlData,
+    loadDocuments,
   ])
 
   useEffect(() => {
     if (error) {
+      console.error("❌ [DocumentsPage] Error en store:", error)
       toast({
         title: "Error",
         description: error,
@@ -98,46 +295,18 @@ export default function DocumentsPage() {
     }
   }, [error, toast, clearError])
 
-  const loadDocuments = async (opts?: { page?: number; limit?: number }) => {
-    if (!company?.id) {
-      console.log("No company ID available")
-      return
-    }
-
-    console.log("Loading documents for company:", company.id)
-    console.log("Current filters:", filters)
-    console.log("Current page:", opts?.page ?? currentPage)
-
-    try {
-      const query = {
-        page: opts?.page ?? currentPage,
-        limit: opts?.limit ?? pagination.limit ?? 10,
-        ...(filters.search && filters.search.trim() !== "" && { search: filters.search }),
-        ...(filters.type && filters.type !== "" && filters.type !== "all" && { documentType: filters.type as DocumentType }),
-        ...(filters.status && filters.status !== "" && filters.status !== "all" && { status: filters.status as DocumentStatus }),
-        ...(filters.dateRange.from && { issueDateFrom: filters.dateRange.from.toISOString().split("T")[0] }),
-        ...(filters.dateRange.to && { issueDateTo: filters.dateRange.to.toISOString().split("T")[0] }),
-        ...(filters.dueDateRange.from && { dueDateFrom: filters.dueDateRange.from.toISOString().split("T")[0] }),
-        ...(filters.dueDateRange.to && { dueDateTo: filters.dueDateRange.to.toISOString().split("T")[0] }),
-        ...(filters.currency && filters.currency !== "" && filters.currency !== "all" && { currency: filters.currency }),
-        ...(filters.minAmount && filters.minAmount.trim() !== "" && { minAmount: parseFloat(filters.minAmount) }),
-        ...(filters.maxAmount && filters.maxAmount.trim() !== "" && { maxAmount: parseFloat(filters.maxAmount) }),
-        ...(filters.hasRetention !== "all" && { hasRetention: filters.hasRetention === "yes" }),
-        ...(filters.hasDetraction !== "all" && { hasDetraction: filters.hasDetraction === "yes" }),
-      }
-
-      console.log("Query being sent:", query)
-      console.log("Query keys:", Object.keys(query))
-      console.log("Query values:", Object.values(query))
-      await fetchDocuments(company.id, query)
-      console.log("Documents loaded successfully")
-    } catch (err) {
-      console.error("Error loading documents:", err)
-    }
-  }
-
   const handleFilterChange = (key: string, value: any) => {
-    setFilters((prev) => ({ ...prev, [key]: value }))
+    setFilters((prev) => {
+      // Normalizar valores vacíos a "all" para filtros de tipo select
+      const normalizedValue = (value === "" || value === undefined) && 
+        (key === "type" || key === "status" || key === "currency" || 
+         key === "hasRetention" || key === "hasDetraction" || 
+         key === "supplierId" || key === "hasXmlData")
+        ? "all"
+        : value
+      
+      return { ...prev, [key]: normalizedValue }
+    })
   }
 
   const handleDeleteDocument = async (documentId: string) => {
@@ -321,16 +490,50 @@ export default function DocumentsPage() {
       maxWidth: "w-40",
       priority: "low" as const,
     },
+    {
+      key: "supplierId",
+      type: "select" as const,
+      placeholder: "Seleccionar proveedor",
+      options: [
+        { value: "all", label: "Todos los proveedores" },
+        ...suppliers.map((supplier) => ({
+          value: supplier.id,
+          label: `${supplier.documentNumber} - ${supplier.businessName || supplier.tradeName || "Sin nombre"}`,
+        })),
+      ],
+      maxWidth: "w-64",
+      priority: "medium" as const,
+    },
+    {
+      key: "tags",
+      type: "search" as const,
+      placeholder: "Buscar por tags...",
+      maxWidth: "w-48",
+      priority: "low" as const,
+    },
+    {
+      key: "hasXmlData",
+      type: "select" as const,
+      placeholder: "Documentos con XML",
+      options: [
+        { value: "all", label: "Todos" },
+        { value: "yes", label: "Con XML" },
+        { value: "no", label: "Sin XML" },
+      ],
+      maxWidth: "w-36",
+      priority: "low" as const,
+    },
   ]
 
   const handlePageChange = (newPage: number) => {
+    console.log(`📄 [DocumentsPage] Cambiando a página ${newPage}`)
     setCurrentPage(newPage)
   }
 
   const handleLimitChange = (newLimit: number) => {
+    console.log(`📊 [DocumentsPage] Cambiando límite a ${newLimit}`)
     setCurrentPage(1)
-    // Fetch immediately with new limit and reset to page 1
-    loadDocuments({ page: 1, limit: newLimit })
+    loadDocuments({ page: 1, limit: newLimit, reason: "cambio de límite" })
   }
 
   const formatDate = (date: Date | string) => {
@@ -375,13 +578,23 @@ export default function DocumentsPage() {
     }
   };
 
-  console.log("Render state:", {
-    loading,
-    error,
-    documentsCount: documents.length,
-    pagination,
-    companyId: company?.id,
-  })
+  // Log de estado solo en desarrollo y cuando hay cambios significativos
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      console.log("📊 [DocumentsPage] Estado actualizado:", {
+        loading,
+        error: error ? "Sí" : "No",
+        documentsCount: documents.length,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total: pagination.total,
+          totalPages: pagination.totalPages,
+        },
+        companyId: company?.id,
+      })
+    }
+  }, [loading, error, documents.length, pagination.page, pagination.limit, pagination.total, pagination.totalPages, company?.id])
 
   return (
     <>
@@ -591,25 +804,25 @@ export default function DocumentsPage() {
             <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
               <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
                 <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
-                  {loading ? "..." : pagination.total}
+                  {summaryLoading ? "..." : (summary?.totalDocuments ?? 0)}
                 </div>
                 <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Total Documentos</p>
               </div>
               <div className="text-center p-3 sm:p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
                 <div className="text-2xl sm:text-3xl font-medium text-amber-600 dark:text-amber-400 mb-2">
-                  {loading ? "..." : documents.filter((d) => d.status === "PENDING").length}
+                  {summaryLoading ? "..." : (summary?.pending ?? 0)}
                 </div>
                 <p className="text-xs sm:text-sm font-normal text-amber-700 dark:text-amber-300">Pendientes</p>
               </div>
               <div className="text-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
                 <div className="text-2xl sm:text-3xl font-medium text-blue-600 dark:text-blue-400 mb-2">
-                  {loading ? "..." : documents.filter((d) => d.status === "APPROVED").length}
+                  {summaryLoading ? "..." : (summary?.approved ?? 0)}
                 </div>
                 <p className="text-xs sm:text-sm font-normal text-blue-700 dark:text-blue-300">Aprobados</p>
               </div>
               <div className="text-center p-3 sm:p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
                 <div className="text-2xl sm:text-3xl font-medium text-green-600 dark:text-green-400 mb-2">
-                  {loading ? "..." : documents.filter((d) => d.status === "PAID").length}
+                  {summaryLoading ? "..." : (summary?.paid ?? 0)}
                 </div>
                 <p className="text-xs sm:text-sm font-normal text-green-700 dark:text-green-300">Pagados</p>
               </div>

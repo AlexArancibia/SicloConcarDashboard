@@ -32,61 +32,75 @@ export const useTaxSchemesStore = create<TaxSchemesState>((set, get) => ({
 
   // Actions
   loadTaxSchemes: async (filters = {}) => {
-    console.log("🔄 Cargando tax schemes...")
-    console.log("📋 Filtros:", filters)
+    console.log("🔄 [TaxSchemesStore] Cargando tax schemes...")
+    console.log("📋 [TaxSchemesStore] Filtros:", filters)
 
     set({ loading: true, error: null })
 
     try {
-      // El endpoint no tiene paginación, solo devuelve todos los registros
+      const startTime = performance.now()
       const response = await apiClient.get<TaxScheme[]>("/tax-schemes")
+      const endTime = performance.now()
       let taxSchemes = response.data
 
-      console.log("✅ Tax schemes recibidos del API:", taxSchemes.length)
+      console.log("✅ [TaxSchemesStore] Tax schemes recibidos del API:", {
+        count: taxSchemes.length,
+        tiempo: `${(endTime - startTime).toFixed(2)}ms`,
+      })
 
       // Aplicar filtros en el cliente ya que el API no los soporta
       if (filters.search) {
         const searchTerm = filters.search.toLowerCase()
+        const beforeCount = taxSchemes.length
         taxSchemes = taxSchemes.filter(
           (ts) =>
             ts.taxSchemeName.toLowerCase().includes(searchTerm) ||
             ts.taxSchemeId.toLowerCase().includes(searchTerm) ||
             (ts.description && ts.description.toLowerCase().includes(searchTerm)),
         )
-        console.log(`🔍 Filtrados por búsqueda "${filters.search}":`, taxSchemes.length)
+        console.log(`🔍 [TaxSchemesStore] Filtrados por búsqueda "${filters.search}": ${taxSchemes.length} de ${beforeCount}`)
       }
 
       if (filters.isActive !== undefined) {
+        const beforeCount = taxSchemes.length
         taxSchemes = taxSchemes.filter((ts) => ts.isActive === filters.isActive)
-        console.log(`✅ Filtrados por isActive ${filters.isActive}:`, taxSchemes.length)
+        console.log(`✅ [TaxSchemesStore] Filtrados por isActive ${filters.isActive}: ${taxSchemes.length} de ${beforeCount}`)
       }
 
       if (filters.taxTypeCode) {
+        const beforeCount = taxSchemes.length
         taxSchemes = taxSchemes.filter((ts) => ts.taxTypeCode === filters.taxTypeCode)
-        console.log(`🏷️ Filtrados por taxTypeCode "${filters.taxTypeCode}":`, taxSchemes.length)
+        console.log(`🏷️ [TaxSchemesStore] Filtrados por taxTypeCode "${filters.taxTypeCode}": ${taxSchemes.length} de ${beforeCount}`)
       }
 
-      // Log cada tax scheme individualmente
-      taxSchemes.forEach((ts, index) => {
-        console.log(`🏷️ Tax Scheme ${index + 1}:`, {
-          id: ts.id,
-          taxSchemeId: ts.taxSchemeId,
-          taxSchemeName: ts.taxSchemeName,
-          taxPercentage: ts.taxPercentage,
-          isActive: ts.isActive,
+      // Log detallado solo en desarrollo
+      if (process.env.NODE_ENV === "development" && taxSchemes.length <= 20) {
+        taxSchemes.forEach((ts, index) => {
+          console.log(`🏷️ [TaxSchemesStore] Tax Scheme ${index + 1}:`, {
+            id: ts.id,
+            taxSchemeId: ts.taxSchemeId,
+            taxSchemeName: ts.taxSchemeName,
+            taxPercentage: ts.taxPercentage,
+            isActive: ts.isActive,
+          })
         })
-      })
+      } else if (taxSchemes.length > 20) {
+        console.log(`📋 [TaxSchemesStore] ${taxSchemes.length} tax schemes cargados (logs detallados omitidos por cantidad)`)
+      }
 
       set({
         taxSchemes,
         loading: false,
       })
 
-      console.log("✅ Tax schemes guardados en store:", taxSchemes.length)
+      console.log("✅ [TaxSchemesStore] Tax schemes guardados en store:", taxSchemes.length)
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || "Error cargando tax schemes"
-      console.error("❌ Error cargando tax schemes:", error)
-      console.error("❌ Error response:", error.response?.data)
+      console.error("❌ [TaxSchemesStore] Error cargando tax schemes:", {
+        message: errorMessage,
+        status: error.response?.status,
+        data: error.response?.data,
+      })
 
       set({
         error: errorMessage,
@@ -252,7 +266,9 @@ export const useTaxSchemesStore = create<TaxSchemesState>((set, get) => ({
   },
 
   clearError: () => {
-    console.log("🧹 Limpiando error del store")
+    if (process.env.NODE_ENV === "development") {
+      console.log("🧹 [TaxSchemesStore] Limpiando error del store")
+    }
     set({ error: null })
   },
 

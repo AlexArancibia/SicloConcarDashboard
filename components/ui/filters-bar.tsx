@@ -99,6 +99,7 @@ export function FiltersBar({
   defaultExpanded = false 
 }: FiltersBarProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const [popoverOpen, setPopoverOpen] = useState<Record<string, boolean>>({})
 
   const handleReset = () => {
     filters.forEach((filter) => {
@@ -106,7 +107,7 @@ export function FiltersBar({
         onChange(filter.key, { from: undefined, to: undefined })
       } else if (filter.type === "multiselect") {
         onChange(filter.key, [])
-      } else if (filter.key === "type" || filter.key === "status" || filter.key === "currency" || filter.key === "hasRetention" || filter.key === "hasDetraction") {
+      } else if (filter.key === "type" || filter.key === "status" || filter.key === "currency" || filter.key === "hasRetention" || filter.key === "hasDetraction" || filter.key === "supplierId" || filter.key === "hasXmlData") {
         // Para filtros de selección, establecer "all" en lugar de string vacío
         onChange(filter.key, "all")
       } else {
@@ -218,17 +219,32 @@ export function FiltersBar({
 
       case "daterange":
         const dateWidth = variant === "extended" ? "w-72" : variant === "compact" ? "w-48" : "w-52"
+        const isPopoverOpen = popoverOpen[filter.key] || false
+        const hasDateRange = values[filter.key]?.from
+        
         return (
-          <div className={cn("flex-shrink-0", dateWidth)} key={filter.key}>
-            <Popover>
+          <div className={cn("flex-shrink-0 relative", dateWidth)} key={filter.key}>
+            <Popover open={isPopoverOpen} onOpenChange={(open) => setPopoverOpen(prev => ({ ...prev, [filter.key]: open }))}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   className={cn(
                     "justify-start text-left font-normal h-9 text-sm w-full transition-all duration-200",
+                    hasDateRange ? "pr-10" : "",
                     !values[filter.key]?.from && "text-muted-foreground",
                     isActive && "ring-2 ring-primary/20 border-primary/50"
                   )}
+                  onClick={(e) => {
+                    // Prevenir que se abra el popover si se hace click cerca del botón X
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                    const clickX = e.clientX - rect.left
+                    const buttonWidth = rect.width
+                    // Si el click está en los últimos 32px (donde está el botón X), no abrir
+                    if (hasDateRange && clickX > buttonWidth - 32) {
+                      e.preventDefault()
+                      e.stopPropagation()
+                    }
+                  }}
                 >
                   <CalendarIcon className="mr-3 h-4 w-4" />
                   <span className="truncate">
@@ -245,15 +261,6 @@ export function FiltersBar({
                       filter.placeholder
                     )}
                   </span>
-                  {values[filter.key]?.from && (
-                    <X 
-                      className="ml-auto h-3 w-3 hover:scale-110 transition-transform" 
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onChange(filter.key, { from: undefined, to: undefined })
-                      }}
-                    />
-                  )}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
@@ -265,12 +272,49 @@ export function FiltersBar({
                     from: values[filter.key]?.from,
                     to: values[filter.key]?.to,
                   }}
-                  onSelect={(range) => onChange(filter.key, range || { from: undefined, to: undefined })}
+                  onSelect={(range) => {
+                    onChange(filter.key, range || { from: undefined, to: undefined })
+                    if (range?.to) {
+                      setPopoverOpen(prev => ({ ...prev, [filter.key]: false }))
+                    }
+                  }}
                   numberOfMonths={2}
                   locale={es}
                 />
               </PopoverContent>
             </Popover>
+            {hasDateRange && (
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 p-0.5 hover:scale-110 transition-transform flex items-center justify-center rounded-sm hover:bg-accent opacity-70 hover:opacity-100 z-50"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (e.nativeEvent) {
+                    e.nativeEvent.stopImmediatePropagation()
+                  }
+                  setPopoverOpen(prev => ({ ...prev, [filter.key]: false }))
+                  onChange(filter.key, { from: undefined, to: undefined })
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (e.nativeEvent) {
+                    e.nativeEvent.stopImmediatePropagation()
+                  }
+                }}
+                onPointerDown={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (e.nativeEvent) {
+                    e.nativeEvent.stopImmediatePropagation()
+                  }
+                }}
+                aria-label="Limpiar filtro de fechas"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
           </div>
         )
 
@@ -359,7 +403,7 @@ export function FiltersBar({
                         onChange(filter.key, { from: undefined, to: undefined })
                       } else if (filter.type === "multiselect") {
                         onChange(filter.key, [])
-                      } else if (filter.key === "type" || filter.key === "status" || filter.key === "currency" || filter.key === "hasRetention" || filter.key === "hasDetraction") {
+                      } else if (filter.key === "type" || filter.key === "status" || filter.key === "currency" || filter.key === "hasRetention" || filter.key === "hasDetraction" || filter.key === "supplierId" || filter.key === "hasXmlData") {
                         // Para filtros de selección, establecer "all" en lugar de string vacío
                         onChange(filter.key, "all")
                       } else {

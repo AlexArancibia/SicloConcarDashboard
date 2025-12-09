@@ -489,27 +489,9 @@ export interface DocumentsResponseWithMatching extends PaginatedResponse<Documen
 
 export interface DocumentSummaryResponseDto {
   totalDocuments: number
-  statusCounts: Array<{
-    status: DocumentStatus
-    _count: { status: number }
-    _sum: { total: number | null }
-  }>
-  monthlyTotals: Array<{
-    month: string
-    totalAmount: number
-    documentCount: number
-  }>
-  currencySummary: Array<{
-    currency: string
-    totalAmount: number
-    documentCount: number
-  }>
-  supplierSummary: Array<{
-    supplierId: string
-    supplierName: string
-    totalAmount: number
-    documentCount: number
-  }>
+  pending: number
+  approved: number
+  paid: number
 }
 
 // DTOs para operaciones bulk

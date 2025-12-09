@@ -77,7 +77,11 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
   },
 
   fetchDocuments: async (companyId: string, query: DocumentQueryDto = {}) => {
+    console.log("🔄 [DocumentsStore] fetchDocuments iniciado")
+    console.log("📋 [DocumentsStore] Parámetros:", { companyId, query })
+
     set({ loading: true, error: null })
+
     try {
       const params = new URLSearchParams()
       Object.entries(query).forEach(([key, value]) => {
@@ -86,11 +90,23 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
         }
       })
 
-      const response = await apiClient.get<PaginatedResponse<Document>>(
-        `/documents/company/${companyId}?${params.toString()}`,
-      )
+      const url = `/documents/company/${companyId}?${params.toString()}`
+      console.log("🌐 [DocumentsStore] URL de petición:", url)
+
+      const startTime = performance.now()
+      const response = await apiClient.get<PaginatedResponse<Document>>(url)
+      const endTime = performance.now()
 
       const { data, page, limit, total, totalPages } = response.data
+
+      console.log("✅ [DocumentsStore] Documentos recibidos:", {
+        count: data.length,
+        page,
+        limit,
+        total,
+        totalPages,
+        tiempo: `${(endTime - startTime).toFixed(2)}ms`,
+      })
 
       set({
         documents: data,
@@ -102,9 +118,18 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
         },
         loading: false,
       })
+
+      console.log("✅ [DocumentsStore] Estado actualizado correctamente")
     } catch (error: any) {
+      const errorMessage = error.response?.data?.message || "Error fetching documents"
+      console.error("❌ [DocumentsStore] Error en fetchDocuments:", {
+        message: errorMessage,
+        status: error.response?.status,
+        data: error.response?.data,
+      })
+
       set({
-        error: error.response?.data?.message || "Error fetching documents",
+        error: errorMessage,
         loading: false,
       })
     }
@@ -292,16 +317,11 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
   },
 
   getDocumentSummary: async (companyId: string) => {
-    set({ loading: true, error: null })
     try {
       const response = await apiClient.get<DocumentSummaryResponseDto>(`/documents/company/${companyId}/summary`)
-      set({ loading: false })
       return response.data
     } catch (error: any) {
-      set({
-        error: error.response?.data?.message || "Error fetching document summary",
-        loading: false,
-      })
+      console.error("Error fetching document summary:", error)
       return null
     }
   },

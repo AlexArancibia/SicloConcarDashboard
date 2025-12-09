@@ -76,39 +76,42 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
 
   // Load tax schemes when modal opens
   useEffect(() => {
-    if (open) {
-      console.log("🚀 Modal abierto - Verificando tax schemes...")
-      console.log("📋 Tax schemes actuales en store:", taxSchemes.length)
-      console.log("🔄 Loading state:", taxSchemesLoading)
+    if (!open) return // Solo ejecutar cuando el modal está abierto
 
-      if (taxSchemes.length === 0 && !taxSchemesLoading) {
-        console.log("🔄 Cargando tax schemes para importación XML...")
-        loadTaxSchemes({ isActive: true })
-      } else if (taxSchemes.length > 0) {
-        console.log("✅ Tax schemes ya cargados:")
+    console.log("🚀 [XMLImportModal] Modal abierto - Verificando tax schemes...")
+    console.log("📋 [XMLImportModal] Tax schemes actuales en store:", taxSchemes.length)
+    console.log("🔄 [XMLImportModal] Loading state:", taxSchemesLoading)
+
+    if (taxSchemes.length === 0 && !taxSchemesLoading) {
+      console.log("🔄 [XMLImportModal] Cargando tax schemes para importación XML...")
+      loadTaxSchemes({ isActive: true })
+    } else if (taxSchemes.length > 0) {
+      console.log("✅ [XMLImportModal] Tax schemes ya cargados:", taxSchemes.length)
+      if (process.env.NODE_ENV === "development") {
         taxSchemes.forEach((ts, index) => {
-          console.log(`  ${index + 1}. ${ts.taxSchemeName} (${ts.taxSchemeId}) - ${(ts.taxPercentage || 0 )* 100}%`)
+          console.log(`  ${index + 1}. ${ts.taxSchemeName} (${ts.taxSchemeId}) - ${(ts.taxPercentage || 0) * 100}%`)
         })
       }
     }
   }, [open, taxSchemes.length, taxSchemesLoading, loadTaxSchemes])
 
-  // Debug tax schemes state
+  // Debug tax schemes state - solo cuando el modal está abierto
   useEffect(() => {
-    console.log("🔍 Tax Schemes State Update:")
+    if (!open) return // Solo ejecutar cuando el modal está abierto
+
+    console.log("🔍 [XMLImportModal] Tax Schemes State Update:")
     console.log("  - Count:", taxSchemes.length)
     console.log("  - Loading:", taxSchemesLoading)
-    console.log("  - Error:", taxSchemeError)
-    console.log(
-      "  - Schemes:",
-      taxSchemes.map((ts) => `${ts.taxSchemeName} (${ts.taxSchemeId})`),
-    )
-  }, [taxSchemes, taxSchemesLoading, taxSchemeError])
+    console.log("  - Error:", taxSchemeError || "null")
+    if (taxSchemes.length > 0 && process.env.NODE_ENV === "development") {
+      console.log("  - Schemes:", taxSchemes.map((ts) => `${ts.taxSchemeName} (${ts.taxSchemeId})`))
+    }
+  }, [open, taxSchemes, taxSchemesLoading, taxSchemeError])
 
   // Reset state when modal opens/closes
   useEffect(() => {
     if (!open) {
-      console.log("🔄 Modal cerrado - Limpiando estado")
+      console.log("🔄 [XMLImportModal] Modal cerrado - Limpiando estado")
       setFiles([])
       setOverallProgress(0)
       setProcessing(false)
@@ -118,8 +121,8 @@ export default function XMLImportModal({ open, onOpenChange, onImportComplete, c
       clearSupplierError()
       clearTaxSchemeError()
     } else {
-      console.log("🚀 Modal abierto - Iniciando importación XML")
-      console.log("📋 Company ID:", companyId)
+      console.log("🚀 [XMLImportModal] Modal abierto - Iniciando importación XML")
+      console.log("📋 [XMLImportModal] Company ID:", companyId)
     }
   }, [open, clearDocumentError, clearSupplierError, clearTaxSchemeError, companyId])
 
